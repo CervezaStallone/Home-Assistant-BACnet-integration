@@ -1,4 +1,4 @@
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=JOUW_GITHUB_NAAM&repository=JOUW_REPO_NAAM&category=integration)
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=CervezaStallone&repository=Home-Assistant-BACnet-intergration&category=integration)
 
 # BACnet IP Integration for Home Assistant
 
@@ -201,12 +201,13 @@ logger:
 
 ## License
 
-MIT — see [LICENSE](LICENSE) for details.
+GPL-3.0 — see [LICENSE](LICENSE) for details.
 
 ---
 
 ## Credits
 
+- Developed by **[BRDC](https://brdc.nl)**
 - [BACpypes3](https://github.com/JoelBender/BACpypes3) by Joel Bender — the Python BACnet stack powering this integration
 - [Home Assistant](https://www.home-assistant.io/) — the open-source home automation platform
 - ASHRAE Standard 135 — the BACnet protocol specification
