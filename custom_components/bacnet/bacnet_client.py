@@ -169,7 +169,7 @@ class BACnetClient:
         else:
             _LOGGER.debug("Creating Normal BACnet application on %s", local_addr)
             self._app = NormalApplication(device_object, local_addr)
-            _LOGGER.info("BACnet client connected on %s", local_addr)
+            _LOGGER.info("BACnet client connected on %s (type=%s)", local_addr, type(self._app).__name__)
 
     async def disconnect(self) -> None:
         """Shut down the BACpypes3 application and release the UDP socket."""
@@ -289,14 +289,23 @@ class BACnetClient:
             raise RuntimeError("Client not connected")
 
         addr = Address(device_address)
+        _LOGGER.debug(
+            "read_device_info: address=%s (parsed=%r), known_id=%s, app=%s",
+            device_address,
+            addr,
+            known_device_id,
+            type(self._app).__name__,
+        )
 
         # Strategy 1: directed Who-Is → I-Am
         try:
-            who_is_kwargs: dict[str, Any] = {"address": addr, "timeout": 3}
+            who_is_kwargs: dict[str, Any] = {"address": addr, "timeout": 5}
             if known_device_id is not None:
                 who_is_kwargs["low_limit"] = known_device_id
                 who_is_kwargs["high_limit"] = known_device_id
+            _LOGGER.debug("Strategy 1: Sending directed Who-Is %s", who_is_kwargs)
             i_am_list = await self._app.who_is(**who_is_kwargs)
+            _LOGGER.debug("Who-Is returned %d I-Am(s)", len(i_am_list) if i_am_list else 0)
             if i_am_list:
                 i_am = i_am_list[0]
                 device_id = i_am.iAmDeviceIdentifier[1]
@@ -313,51 +322,68 @@ class BACnetClient:
                     if name:
                         device_name = str(name)
                 except (asyncio.TimeoutError, Exception):  # noqa: BLE001
-                    pass
+                    _LOGGER.debug("Could not read objectName, using default")
                 return {
                     "device_id": device_id,
                     "device_name": device_name,
                     "address": device_address,
                 }
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             _LOGGER.debug(
-                "Directed Who-Is failed for %s, trying Device object read",
+                "Strategy 1 (Who-Is) failed for %s: %s (%s)",
                 device_address,
+                exc,
+                type(exc).__name__,
             )
 
-        # Strategy 2: read the Device object directly
-        # If user provided a device ID, try that first; otherwise guess common IDs
+        # Strategy 2: read the Device object directly via ReadProperty (unicast)
         ids_to_try: list[int]
         if known_device_id is not None:
             ids_to_try = [known_device_id]
         else:
             ids_to_try = [1, 0, 2, 100, 1000]
 
+        _LOGGER.debug("Strategy 2: Trying ReadProperty for device IDs %s", ids_to_try)
         for test_id in ids_to_try:
             try:
                 oid = ObjectIdentifier(("device", test_id))
+                _LOGGER.debug(
+                    "  Trying ReadProperty %s objectIdentifier from %s ...",
+                    oid,
+                    device_address,
+                )
                 obj_id = await asyncio.wait_for(
                     self._app.read_property(addr, oid, "objectIdentifier"),
-                    timeout=2,
+                    timeout=3,
                 )
+                _LOGGER.debug("  ReadProperty returned: %s", obj_id)
                 if obj_id is not None:
                     device_id = obj_id[1]
                     device_name = f"Device {device_id}"
                     try:
                         name = await asyncio.wait_for(
                             self._app.read_property(addr, oid, "objectName"),
-                            timeout=2,
+                            timeout=3,
                         )
                         if name:
                             device_name = str(name)
                     except (asyncio.TimeoutError, Exception):  # noqa: BLE001
-                        pass
+                        _LOGGER.debug("  Could not read objectName")
                     return {
                         "device_id": device_id,
                         "device_name": device_name,
                         "address": device_address,
                     }
-            except (asyncio.TimeoutError, Exception):  # noqa: BLE001
+            except asyncio.TimeoutError:
+                _LOGGER.debug("  ReadProperty timeout for device,%d", test_id)
+                continue
+            except Exception as exc:  # noqa: BLE001
+                _LOGGER.debug(
+                    "  ReadProperty error for device,%d: %s (%s)",
+                    test_id,
+                    exc,
+                    type(exc).__name__,
+                )
                 continue
 
         _LOGGER.warning("Could not identify device at %s", device_address)
