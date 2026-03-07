@@ -1,0 +1,84 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "BACnet IP Network Configuration",
+        "description": "Configure the local BACnet/IP network interface. If your BACnet devices are on a different subnet or VLAN, enable BBMD / Foreign Device Registration below.",
+        "data": {
+          "local_ip": "Local IP address",
+          "local_port": "BACnet/IP port",
+          "use_bbmd": "Enable BBMD / Foreign Device Registration",
+          "bbmd_address": "BBMD address (IP:port)",
+          "bbmd_ttl": "Foreign Device TTL (seconds)"
+        },
+        "data_description": {
+          "local_ip": "The IP address of the network interface to bind to (e.g. 192.168.1.100). Leave empty for auto-detect.",
+          "local_port": "Default BACnet/IP port is 47808 (0xBAC0).",
+          "use_bbmd": "Enable this if BACnet devices are on another subnet/VLAN and a BBMD is available.",
+          "bbmd_address": "IP address and port of the BBMD (e.g. 192.168.2.1:47808).",
+          "bbmd_ttl": "Time-to-live for the Foreign Device Registration in seconds."
+        }
+      },
+      "discovery": {
+        "title": "Device Discovery",
+        "description": "Searching for BACnet devices on the network. This may take a few seconds...",
+        "data": {
+          "device_id": "Select a BACnet device"
+        },
+        "data_description": {
+          "device_id": "Choose the device you want to add to Home Assistant."
+        }
+      },
+      "select_objects": {
+        "title": "Select BACnet Objects",
+        "description": "Select the BACnet objects you want to import as Home Assistant entities. Use 'Select All' to toggle all objects at once.",
+        "data": {
+          "select_all": "Select all objects",
+          "selected_objects": "BACnet objects"
+        },
+        "data_description": {
+          "selected_objects": "Check the objects you want to monitor or control in Home Assistant."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to the BACnet network. Verify your network settings.",
+      "no_devices_found": "No BACnet devices were discovered on the network.",
+      "no_objects_found": "No readable BACnet objects were found on this device.",
+      "bbmd_registration_failed": "Foreign Device Registration with the BBMD failed. Verify the BBMD address.",
+      "invalid_ip": "The provided IP address is not valid.",
+      "timeout": "The operation timed out. The device may be unreachable.",
+      "unknown": "An unexpected error occurred."
+    },
+    "abort": {
+      "already_configured": "This BACnet device is already configured.",
+      "reconfigure_successful": "Reconfiguration was successful."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "BACnet Integration Options",
+        "description": "Configure update behaviour, entity naming, and domain mapping for this device.",
+        "data": {
+          "enable_cov": "Enable COV (Change of Value) subscriptions",
+          "polling_interval": "Polling fallback interval (seconds)",
+          "use_description": "Use description (property id 28) instead of name"
+        },
+        "data_description": {
+          "enable_cov": "When enabled, the integration subscribes to COV notifications. If the device does not support COV or subscription fails, polling is used as fallback.",
+          "polling_interval": "Interval in seconds for polling when COV is unavailable or disabled.",
+          "use_description": "When checked, entities will be named using the BACnet 'description' property (ID 28) instead of 'objectName' (ID 77)."
+        }
+      },
+      "domain_mapping": {
+        "title": "Domain Mapping",
+        "description": "Override the default Home Assistant domain for individual BACnet objects. For example, map an Analog Value to 'number' instead of 'sensor' if you need write access. Select the desired domain for each object below."
+      }
+    },
+    "error": {
+      "invalid_polling_interval": "Polling interval must be a positive integer.",
+      "unknown": "An unexpected error occurred."
+    }
+  }
+}
