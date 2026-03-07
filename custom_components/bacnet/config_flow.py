@@ -206,24 +206,18 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 local_port=self._network_config[CONF_LOCAL_PORT],
             )
             try:
-                # NormalApplication uses asyncio UDP transport internally,
-                # so it must be created on the running event loop.
-                await client.connect()
-
-                # Register as Foreign Device if BBMD is configured
+                # connect() creates Normal or ForeignApplication depending
+                # on whether a BBMD address is provided.
+                bbmd_addr = None
                 if self._network_config[CONF_USE_BBMD]:
-                    try:
-                        await client.register_foreign_device(
-                            self._network_config[CONF_BBMD_ADDRESS],
-                            self._network_config[CONF_BBMD_TTL],
-                        )
-                    except Exception:  # noqa: BLE001
-                        _LOGGER.warning("BBMD registration failed during config flow")
-                        errors["base"] = "bbmd_registration_failed"
+                    bbmd_addr = self._network_config[CONF_BBMD_ADDRESS]
+                await client.connect(
+                    bbmd_address=bbmd_addr,
+                    bbmd_ttl=self._network_config.get(CONF_BBMD_TTL, 900),
+                )
 
                 # Send Who-Is and collect I-Am responses
-                if not errors:
-                    self._discovered_devices = await client.discover_devices(timeout=5)
+                self._discovered_devices = await client.discover_devices(timeout=5)
             except Exception as exc:  # noqa: BLE001
                 _LOGGER.error(
                     "Discovery failed: %s (%s)", exc, type(exc).__name__

@@ -14,9 +14,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Callable
+from typing import Any, Callable, Union
 
-from bacpypes3.ipv4.app import NormalApplication
+from bacpypes3.ipv4.app import ForeignApplication, NormalApplication
 from bacpypes3.local.device import DeviceObject
 from bacpypes3.pdu import Address, IPv4Address
 from bacpypes3.primitivedata import (
@@ -82,13 +82,17 @@ POTENTIALLY_WRITABLE_TYPES: set[int] = {
     OBJECT_TYPE_MULTI_STATE_VALUE,
 }
 
+# Type alias for the application — either Normal or Foreign
+_AppType = Union[NormalApplication, ForeignApplication]
+
 
 class BACnetClient:
     """Wrapper around BACpypes3 providing a clean async API for HA.
 
     Usage:
         client = BACnetClient(local_ip="192.168.1.100", local_port=47808)
-        await client.connect()
+        await client.connect()                       # NormalApplication
+        await client.connect(bbmd_address="x.x.x.x") # ForeignApplication
         devices = await client.discover_devices(timeout=5)
         objects = await client.read_object_list(device_address, device_id)
         value = await client.read_property(address, obj_type, instance, prop_id)
@@ -103,15 +107,14 @@ class BACnetClient:
     ) -> None:
         self._local_ip = local_ip
         self._local_port = local_port
-        self._app: NormalApplication | None = None
-        self._cov_callbacks: dict[str, Callable] = {}
-        self._cov_contexts: dict[str, Any] = {}
+        self._app: _AppType | None = None
+        self._cov_tasks: dict[str, asyncio.Task] = {}
 
     # ------------------------------------------------------------------
     # Connection lifecycle
     # ------------------------------------------------------------------
 
-    def _build_app_args(self) -> tuple:
+    def _build_app_args(self) -> tuple[DeviceObject, IPv4Address]:
         """Prepare IPv4Address and device object for app construction."""
         if self._local_ip:
             local_addr = IPv4Address(f"{self._local_ip}:{self._local_port}")
@@ -127,56 +130,65 @@ class BACnetClient:
         )
         return device_object, local_addr
 
-    async def connect(self) -> None:
+    async def connect(
+        self,
+        bbmd_address: str | None = None,
+        bbmd_ttl: int = 900,
+    ) -> None:
         """Create the BACpypes3 application and bind to the network.
 
-        BACpypes3 uses asyncio UDP transport internally, so the
-        NormalApplication constructor MUST be called from an async
-        context with a running event loop.  Do NOT run this in an
-        executor thread.
+        BACpypes3 uses asyncio UDP transport internally, so the application
+        constructor MUST be called from an async context with a running
+        event loop.
+
+        If bbmd_address is provided, a ForeignApplication is created and
+        registered with the BBMD automatically.  Otherwise a
+        NormalApplication is created for local-subnet communication.
+
+        Args:
+            bbmd_address: IP:port of the BBMD for cross-subnet communication.
+                          If None, no BBMD registration is performed.
+            bbmd_ttl: Time-to-live for foreign device registration (seconds).
         """
         device_object, local_addr = self._build_app_args()
-        _LOGGER.debug("Creating BACnet application on %s", local_addr)
-        self._app = NormalApplication(device_object, local_addr)
-        _LOGGER.info("BACnet client connected on %s", local_addr)
+
+        if bbmd_address:
+            _LOGGER.debug(
+                "Creating Foreign BACnet application on %s (BBMD=%s)",
+                local_addr,
+                bbmd_address,
+            )
+            self._app = ForeignApplication(device_object, local_addr)
+            bbmd_addr = IPv4Address(bbmd_address)
+            self._app.register(bbmd_addr, bbmd_ttl)
+            _LOGGER.info(
+                "BACnet Foreign Device registered with BBMD at %s (TTL=%ds)",
+                bbmd_address,
+                bbmd_ttl,
+            )
+        else:
+            _LOGGER.debug("Creating Normal BACnet application on %s", local_addr)
+            self._app = NormalApplication(device_object, local_addr)
+            _LOGGER.info("BACnet client connected on %s", local_addr)
 
     async def disconnect(self) -> None:
         """Shut down the BACpypes3 application and release the UDP socket."""
+        # Cancel all COV tasks
+        for task in self._cov_tasks.values():
+            task.cancel()
+        self._cov_tasks.clear()
+
         if self._app is not None:
             try:
-                await self._app.close()
+                # close() is synchronous in BACpypes3
+                self._app.close()
             except Exception:  # noqa: BLE001
                 _LOGGER.debug("Exception during app close (ignored)")
             self._app = None
             _LOGGER.info("BACnet client disconnected")
 
     # ------------------------------------------------------------------
-    # Foreign Device Registration (BBMD)
-    # ------------------------------------------------------------------
-
-    async def register_foreign_device(
-        self, bbmd_address: str, ttl: int = 900
-    ) -> None:
-        """Register this application as a Foreign Device with a BBMD.
-
-        This is required when BACnet devices reside on a different subnet/VLAN.
-        The BBMD will forward broadcast messages (Who-Is, I-Am, etc.) across
-        network boundaries.
-
-        Args:
-            bbmd_address: IP:port of the BBMD (e.g. "192.168.2.1:47808").
-            ttl: Time-to-live for the registration in seconds (re-registration
-                 happens automatically by BACpypes3).
-        """
-        if self._app is None:
-            raise RuntimeError("Client not connected")
-
-        addr = Address(bbmd_address)
-        _LOGGER.info("Registering as Foreign Device with BBMD at %s (TTL=%ds)", bbmd_address, ttl)
-        await self._app.register_as_foreign_device(addr, ttl)
-
-    # ------------------------------------------------------------------
-    # Device discovery – Who-Is / I-Am
+    # Device discovery - Who-Is / I-Am
     # ------------------------------------------------------------------
 
     async def discover_devices(self, timeout: float = 5.0) -> list[dict[str, Any]]:
@@ -193,8 +205,10 @@ class BACnetClient:
         _LOGGER.debug("Sending Who-Is broadcast (timeout=%.1fs)", timeout)
 
         try:
-            # who_is returns an async iterator of I-Am responses
-            async for i_am in self._app.who_is(timeout=timeout):
+            # who_is() returns a Future that resolves to a list of I-Am APDUs
+            i_am_list = await self._app.who_is(timeout=timeout)
+
+            for i_am in i_am_list:
                 device_id = i_am.iAmDeviceIdentifier[1]
                 if device_id in seen_ids:
                     continue
@@ -220,9 +234,14 @@ class BACnetClient:
                         "address": str(i_am.pduSource),
                     }
                 )
-                _LOGGER.debug("Discovered device: %s (%d) at %s", device_name, device_id, i_am.pduSource)
+                _LOGGER.debug(
+                    "Discovered device: %s (%d) at %s",
+                    device_name,
+                    device_id,
+                    i_am.pduSource,
+                )
         except asyncio.TimeoutError:
-            pass  # normal — discovery just timed out
+            pass  # normal - discovery just timed out
         except Exception as exc:  # noqa: BLE001
             _LOGGER.error("Error during Who-Is discovery: %s", exc)
 
@@ -303,7 +322,7 @@ class BACnetClient:
             # Determine if this object is commandable (has a Priority Array)
             commandable = obj_type in COMMANDABLE_TYPES
             if obj_type in POTENTIALLY_WRITABLE_TYPES:
-                # Try to read priority array — if it exists the object is commandable
+                # Try to read priority array - if it exists the object is commandable
                 pa = await self._safe_read(addr, oid, "priorityArray")
                 if pa is not None:
                     commandable = True
@@ -319,7 +338,7 @@ class BACnetClient:
             }
         except Exception as exc:  # noqa: BLE001
             _LOGGER.warning(
-                "Failed to read metadata for %s:%d — %s", oid, instance, exc
+                "Failed to read metadata for %s:%d - %s", oid, instance, exc
             )
             return None
 
@@ -399,7 +418,7 @@ class BACnetClient:
         BACnet Standard compliance:
         - For commandable objects, writes go through the Priority Array at the
           specified priority level (default 16 = lowest).
-        - To "relinquish" a commanded value (release the override), write Null
+        - To relinquish a commanded value (release the override), write Null
           at the previously written priority level.
         - For non-commandable/writable objects, priority is not used.
 
@@ -422,11 +441,9 @@ class BACnetClient:
         oid = ObjectIdentifier((type_str, instance))
 
         # Determine if this is a commandable object that needs priority
-        # NOTE: must parenthesise the set union — without parens, | is bitwise
-        # OR on the integer values, not set union.
         is_commandable = object_type in (COMMANDABLE_TYPES | POTENTIALLY_WRITABLE_TYPES)
 
-        # Convert None → Null for relinquish
+        # Convert None -> Null for relinquish
         if value is None:
             bacnet_value = Null()
         else:
@@ -496,10 +513,15 @@ class BACnetClient:
         device_address: str,
         object_type: int,
         instance: int,
-        callback: Callable[[dict[str, Any]], None],
+        callback: Callable[[str, dict[str, Any]], None],
         lifetime: int = 300,
     ) -> str | None:
         """Subscribe to Change of Value notifications for one object.
+
+        BACpypes3 COV uses an async context manager (change_of_value)
+        that keeps a queue of incoming property-value notifications.  We
+        start a long-running task that reads from the queue and invokes
+        callback for each notification.
 
         If the device does not support COV or the subscription fails,
         returns None so the caller can fall back to polling.
@@ -508,9 +530,11 @@ class BACnetClient:
             device_address: Target device address.
             object_type: Object type integer.
             instance: Object instance number.
-            callback: Callable invoked with {"property": value, …} on notification.
-            lifetime: COV subscription lifetime in seconds. The subscription
-                      needs to be renewed before it expires.
+            callback: callback(obj_key, {"presentValue": v, ...})
+                      invoked on each COV notification.
+            lifetime: COV subscription lifetime in seconds.  BACpypes3
+                      automatically renews the subscription before it
+                      expires when using the context manager.
 
         Returns:
             A subscription key string on success, or None on failure.
@@ -518,29 +542,38 @@ class BACnetClient:
         if self._app is None:
             raise RuntimeError("Client not connected")
 
-        addr = Address(device_address)
+        addr = IPv4Address(device_address)
         type_str = self._int_to_object_type_str(object_type)
         oid = ObjectIdentifier((type_str, instance))
         sub_key = f"{device_address}:{object_type}:{instance}"
+        obj_key = f"{object_type}:{instance}"
 
         try:
-            _LOGGER.debug("Subscribing to COV for %s:%d at %s", type_str, instance, device_address)
-
-            cov_context = await self._app.subscribe_cov(
-                addr,
-                oid,
-                confirmed=True,
-                lifetime=lifetime,
+            _LOGGER.debug(
+                "Subscribing to COV for %s:%d at %s", type_str, instance, device_address
             )
 
-            # Store callback and context for notification routing and renewal
-            self._cov_callbacks[sub_key] = callback
-            self._cov_contexts[sub_key] = {
-                "address": addr,
-                "oid": oid,
-                "lifetime": lifetime,
-                "context": cov_context,
-            }
+            # change_of_value() returns a SubscriptionContextManager.
+            # We run it inside a long-lived task so the context stays open
+            # and the subscription is automatically renewed by BACpypes3.
+            task = asyncio.create_task(
+                self._cov_reader_task(
+                    addr, oid, lifetime, sub_key, obj_key, callback
+                )
+            )
+            self._cov_tasks[sub_key] = task
+
+            # Give the task a moment to start and send the SubscribeCOV request.
+            # If the device rejects instantly we will know.
+            await asyncio.sleep(0.5)
+            if task.done():
+                exc = task.exception()
+                if exc:
+                    raise exc  # noqa: TRY301
+                # Task finished immediately without error - unlikely but handle it
+                _LOGGER.warning("COV task for %s ended immediately", sub_key)
+                self._cov_tasks.pop(sub_key, None)
+                return None
 
             _LOGGER.info("COV subscription active for %s:%d", type_str, instance)
             return sub_key
@@ -554,47 +587,66 @@ class BACnetClient:
                 device_address,
                 exc,
             )
+            self._cov_tasks.pop(sub_key, None)
             return None
 
-    async def unsubscribe_cov(self, sub_key: str) -> None:
-        """Cancel a COV subscription."""
-        ctx = self._cov_contexts.pop(sub_key, None)
-        self._cov_callbacks.pop(sub_key, None)
-
-        if ctx is not None and self._app is not None:
-            try:
-                await self._app.unsubscribe_cov(ctx["context"])
-                _LOGGER.debug("COV unsubscribed: %s", sub_key)
-            except Exception:  # noqa: BLE001
-                _LOGGER.debug("COV unsubscribe failed (ignored): %s", sub_key)
-
-    async def renew_cov_subscriptions(self) -> None:
-        """Renew all active COV subscriptions before they expire."""
-        for sub_key, ctx in list(self._cov_contexts.items()):
-            try:
-                new_context = await self._app.subscribe_cov(
-                    ctx["address"],
-                    ctx["oid"],
-                    confirmed=True,
-                    lifetime=ctx["lifetime"],
-                )
-                ctx["context"] = new_context
-                _LOGGER.debug("COV subscription renewed: %s", sub_key)
-            except Exception:  # noqa: BLE001
-                _LOGGER.warning("COV renewal failed for %s", sub_key)
-
-    def handle_cov_notification(
-        self, subscription_key: str, changed_values: dict[str, Any]
+    async def _cov_reader_task(
+        self,
+        addr: IPv4Address,
+        oid: ObjectIdentifier,
+        lifetime: int,
+        sub_key: str,
+        obj_key: str,
+        callback: Callable[[str, dict[str, Any]], None],
     ) -> None:
-        """Route an incoming COV notification to the registered callback.
+        """Long-running task that reads from a COV subscription queue.
 
-        Called by the coordinator when BACpypes3 delivers a notification.
+        Uses the BACpypes3 change_of_value() async context manager.
+        The context manager handles subscription, renewal, and
+        unsubscription automatically.
         """
-        callback = self._cov_callbacks.get(subscription_key)
-        if callback is not None:
-            callback(changed_values)
-        else:
-            _LOGGER.debug("No callback for COV key %s", subscription_key)
+        try:
+            scm = self._app.change_of_value(
+                addr,
+                oid,
+                lifetime=lifetime,
+            )
+            async with scm:
+                while True:
+                    prop_id, value = await scm.get_value()
+                    prop_name = str(prop_id)
+                    coerced = self._coerce_value(value)
+                    _LOGGER.debug(
+                        "COV notification %s: %s = %s", sub_key, prop_name, coerced
+                    )
+                    try:
+                        callback(obj_key, {prop_name: coerced})
+                    except Exception:  # noqa: BLE001
+                        _LOGGER.exception("Error in COV callback for %s", sub_key)
+        except asyncio.CancelledError:
+            _LOGGER.debug("COV task cancelled for %s", sub_key)
+        except Exception:  # noqa: BLE001
+            _LOGGER.warning("COV task ended for %s", sub_key, exc_info=True)
+
+    async def unsubscribe_cov(self, sub_key: str) -> None:
+        """Cancel a COV subscription by cancelling its reader task.
+
+        The async-with context manager will send the unsubscribe
+        request when the task is cancelled.
+        """
+        task = self._cov_tasks.pop(sub_key, None)
+        if task is not None and not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            _LOGGER.debug("COV unsubscribed: %s", sub_key)
+
+    async def unsubscribe_all_cov(self) -> None:
+        """Cancel all COV subscriptions."""
+        for sub_key in list(self._cov_tasks):
+            await self.unsubscribe_cov(sub_key)
 
     # ------------------------------------------------------------------
     # Value conversion helpers
@@ -621,9 +673,9 @@ class BACnetClient:
         """Convert a Python value to the appropriate BACpypes3 type.
 
         The correct BACnet type depends on the object type:
-        - Analog types → Real (float)
-        - Binary types → Unsigned or enumeration
-        - Multi-state types → Unsigned
+        - Analog types -> Real (float)
+        - Binary types -> Unsigned or enumeration
+        - Multi-state types -> Unsigned
         """
         if value is None:
             return Null()
@@ -641,7 +693,7 @@ class BACnetClient:
             OBJECT_TYPE_BINARY_VALUE,
         }:
             # BACnet binary PV is an Enumerated type: 0=inactive, 1=active
-            # Using Enumerated (not Unsigned) per ASHRAE 135 — strict devices
+            # Using Enumerated (not Unsigned) per ASHRAE 135 - strict devices
             # will reject Unsigned for BinaryPV properties.
             return Enumerated(int(bool(value)))
 
@@ -656,7 +708,7 @@ class BACnetClient:
         return Real(float(value))
 
     # ------------------------------------------------------------------
-    # Object type string ↔ integer mapping
+    # Object type string - integer mapping
     # ------------------------------------------------------------------
 
     _TYPE_STR_TO_INT: dict[str, int] = {

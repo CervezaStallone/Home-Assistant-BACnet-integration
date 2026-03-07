@@ -118,24 +118,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         local_port=local_port,
     )
     try:
-        # NormalApplication uses asyncio UDP transport internally,
-        # so it must be created on the running event loop.
-        await client.connect()
+        # connect() creates a NormalApplication or ForeignApplication
+        # depending on whether a BBMD address is provided.  It must run
+        # on the event loop (BACpypes3 uses asyncio UDP transport).
+        await client.connect(
+            bbmd_address=bbmd_address if use_bbmd else None,
+            bbmd_ttl=bbmd_ttl,
+        )
     except Exception as exc:  # noqa: BLE001
         _LOGGER.error("Failed to start BACnet client: %s", exc)
         raise ConfigEntryNotReady(f"Cannot connect to BACnet network: {exc}") from exc
-
-    # ---- 3. Register as Foreign Device with BBMD if configured ----
-    if use_bbmd and bbmd_address:
-        try:
-            await client.register_foreign_device(bbmd_address, bbmd_ttl)
-            _LOGGER.info("Registered as Foreign Device with BBMD at %s", bbmd_address)
-        except Exception as exc:  # noqa: BLE001
-            _LOGGER.warning(
-                "BBMD Foreign Device Registration failed (%s). "
-                "Falling back to local broadcast.",
-                exc,
-            )
 
     # ---- 4. Build coordinator ----
     coordinator = BACnetCoordinator(

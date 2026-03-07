@@ -13,7 +13,6 @@ The coordinator also handles:
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import timedelta
 from typing import Any
@@ -37,9 +36,9 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-# COV subscriptions are renewed at 80% of their lifetime to avoid expiry gaps
+# COV subscription lifetime.  BACpypes3's change_of_value() context manager
+# automatically renews the subscription before it expires.
 COV_LIFETIME_SECONDS = 300
-COV_RENEWAL_FACTOR = 0.8
 
 
 class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -88,9 +87,6 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Track which objects have active COV and which need polling
         self._cov_subscriptions: dict[str, str] = {}  # obj_key → sub_key
         self._polled_objects: list[dict[str, Any]] = []
-
-        # COV renewal task handle
-        self._cov_renewal_task: asyncio.Task | None = None
 
         # Device address for reads/writes (from config entry data)
         self.device_address: str = ""
@@ -184,62 +180,40 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._polled_objects.append(obj)
             _LOGGER.debug("Polling fallback for %s", obj_key)
 
-        # Start COV renewal background task if we have subscriptions
-        if self._cov_subscriptions and self._cov_renewal_task is None:
-            self._cov_renewal_task = asyncio.create_task(self._cov_renewal_loop())
+        # BACpypes3 change_of_value() context manager handles renewal
+        # automatically — no background renewal task needed.
 
     @callback
-    def _handle_cov_notification(self, changed_values: dict[str, Any]) -> None:
+    def _handle_cov_notification(self, obj_key: str, changed_values: dict[str, Any]) -> None:
         """Process an incoming COV notification and push update to entities.
 
-        This is called from the BACnetClient when BACpypes3 delivers a COV
-        notification. We merge the changed values into our data dict and
-        tell HA to update affected entities.
+        Called by the BACnetClient COV reader task whenever a property
+        change is received.  We merge the changed properties into our
+        data dict and tell HA to update affected entities.
+
+        Args:
+            obj_key: Object identifier string ("object_type:instance").
+            changed_values: Dict of changed property names → new values,
+                            e.g. {"presentValue": 23.5}.
         """
         if self.data is None:
             return
 
-        # changed_values should contain the object key and updated properties
         data = dict(self.data)
-        for obj_key, values in changed_values.items():
-            if obj_key in data:
-                data[obj_key].update(values)
-            else:
-                data[obj_key] = values
+        if obj_key in data:
+            data[obj_key].update(changed_values)
+        else:
+            data[obj_key] = changed_values
 
         self.async_set_updated_data(data)
-
-    async def _cov_renewal_loop(self) -> None:
-        """Periodically renew COV subscriptions before they expire."""
-        renewal_interval = COV_LIFETIME_SECONDS * COV_RENEWAL_FACTOR
-        while True:
-            try:
-                await asyncio.sleep(renewal_interval)
-                _LOGGER.debug("Renewing %d COV subscriptions", len(self._cov_subscriptions))
-                await self.client.renew_cov_subscriptions()
-            except asyncio.CancelledError:
-                break
-            except Exception:  # noqa: BLE001
-                _LOGGER.warning("COV renewal loop error (will retry)")
 
     # ------------------------------------------------------------------
     # Shutdown
     # ------------------------------------------------------------------
 
     async def async_shutdown(self) -> None:
-        """Cancel COV subscriptions and background tasks."""
-        # Cancel renewal task
-        if self._cov_renewal_task is not None:
-            self._cov_renewal_task.cancel()
-            try:
-                await self._cov_renewal_task
-            except asyncio.CancelledError:
-                pass
-            self._cov_renewal_task = None
-
-        # Unsubscribe all COV
-        for obj_key, sub_key in list(self._cov_subscriptions.items()):
-            await self.client.unsubscribe_cov(sub_key)
+        """Cancel all COV subscriptions and clean up."""
+        await self.client.unsubscribe_all_cov()
         self._cov_subscriptions.clear()
         self._polled_objects.clear()
 
