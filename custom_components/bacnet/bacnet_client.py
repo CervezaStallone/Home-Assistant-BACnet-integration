@@ -18,7 +18,7 @@ from typing import Any, Callable
 
 from bacpypes3.ipv4.app import NormalApplication
 from bacpypes3.local.device import DeviceObject
-from bacpypes3.pdu import Address
+from bacpypes3.pdu import Address, IPv4Address
 from bacpypes3.primitivedata import (
     CharacterString,
     Enumerated,
@@ -112,11 +112,11 @@ class BACnetClient:
     # ------------------------------------------------------------------
 
     def _build_app_args(self) -> tuple:
-        """Prepare Address object and device object for app construction."""
+        """Prepare IPv4Address and device object for app construction."""
         if self._local_ip:
-            local_addr = Address(f"{self._local_ip}:{self._local_port}")
+            local_addr = IPv4Address(f"{self._local_ip}:{self._local_port}")
         else:
-            local_addr = Address(f"0.0.0.0:{self._local_port}")
+            local_addr = IPv4Address(f"0.0.0.0:{self._local_port}")
 
         device_object = DeviceObject(
             objectIdentifier=("device", 999999),
