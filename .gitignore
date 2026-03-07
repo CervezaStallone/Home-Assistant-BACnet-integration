@@ -20,6 +20,7 @@ build/
 venv/
 env/
 
+
 # pytest
 .pytest_cache/
 .coverage
@@ -31,7 +32,9 @@ htmlcov/
 *.swp
 *.swo
 *~
+brands/
 
 # OS
 .DS_Store
 Thumbs.db
+brands/
