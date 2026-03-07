@@ -2,6 +2,9 @@
 tests/
 TESTING.md
 
+# Release notes
+rl_*
+
 # Python
 __pycache__/
 *.py[cod]
