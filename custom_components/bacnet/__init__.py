@@ -118,8 +118,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         local_port=local_port,
     )
     try:
-        # NormalApplication binds a UDP socket (blocking I/O) — run in executor
-        await hass.async_add_executor_job(client.connect_sync)
+        # NormalApplication uses asyncio UDP transport internally,
+        # so it must be created on the running event loop.
+        await client.connect()
     except Exception as exc:  # noqa: BLE001
         _LOGGER.error("Failed to start BACnet client: %s", exc)
         raise ConfigEntryNotReady(f"Cannot connect to BACnet network: {exc}") from exc

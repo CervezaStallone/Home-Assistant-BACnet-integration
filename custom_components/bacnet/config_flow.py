@@ -206,9 +206,9 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 local_port=self._network_config[CONF_LOCAL_PORT],
             )
             try:
-                # NormalApplication binds a UDP socket (blocking I/O)
-                # — run in executor to avoid blocking the event loop
-                await self.hass.async_add_executor_job(client.connect_sync)
+                # NormalApplication uses asyncio UDP transport internally,
+                # so it must be created on the running event loop.
+                await client.connect()
 
                 # Register as Foreign Device if BBMD is configured
                 if self._network_config[CONF_USE_BBMD]:

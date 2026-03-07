@@ -127,38 +127,17 @@ class BACnetClient:
         )
         return device_object, local_addr
 
-    def connect_sync(self) -> None:
-        """Create the BACpypes3 application (BLOCKING — binds UDP socket).
-
-        This must be called from an executor thread when running inside HA
-        to avoid blocking the event loop.  Use:
-            await hass.async_add_executor_job(client.connect_sync)
-        """
-        device_object, local_addr = self._build_app_args()
-        _LOGGER.debug("Creating BACnet application on %s (sync)", local_addr)
-        self._app = NormalApplication(device_object, local_addr)
-        _LOGGER.info("BACnet client connected on %s", local_addr)
-
     async def connect(self) -> None:
         """Create the BACpypes3 application and bind to the network.
 
-        If local_ip is empty the OS default interface is used.
-        NOTE: When running inside Home Assistant, prefer connect_sync() via
-        hass.async_add_executor_job to avoid blocking the event loop.
-        This async version is kept for use in the config flow where we
-        have direct access to the event loop.
+        BACpypes3 uses asyncio UDP transport internally, so the
+        NormalApplication constructor MUST be called from an async
+        context with a running event loop.  Do NOT run this in an
+        executor thread.
         """
         device_object, local_addr = self._build_app_args()
         _LOGGER.debug("Creating BACnet application on %s", local_addr)
-
-        # NormalApplication constructor binds a UDP socket — this is
-        # synchronous I/O and must not block the HA event loop.  When called
-        # from within HA, the caller (async_setup_entry / config_flow) should
-        # wrap this in hass.async_add_executor_job.  We store the constructor
-        # args and create the app here; the caller is responsible for the
-        # executor context.
         self._app = NormalApplication(device_object, local_addr)
-
         _LOGGER.info("BACnet client connected on %s", local_addr)
 
     async def disconnect(self) -> None:
