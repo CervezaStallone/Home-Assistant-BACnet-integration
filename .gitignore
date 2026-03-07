@@ -32,9 +32,7 @@ htmlcov/
 *.swp
 *.swo
 *~
-brands/
 
 # OS
 .DS_Store
 Thumbs.db
-brands/
