@@ -33,6 +33,7 @@ from .const import (
     CONF_TARGET_ADDRESS,
     CONF_TARGET_DEVICE_ID,
     CONF_USE_BBMD,
+    DATA_CLIENT,
     DEFAULT_BBMD_TTL,
     DEFAULT_PORT,
     DOMAIN,
@@ -103,6 +104,7 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._selected_device: dict[str, Any] = {}
         self._discovered_objects: list[dict[str, Any]] = []
         self._client: Any | None = None  # BACnetClient instance during flow
+        self._borrowed_client: bool = False  # True when reusing an existing entry's client
 
     async def async_step_unignore(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         """Handle flow cancellation / cleanup.
@@ -114,13 +116,42 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_abort(reason="already_configured")
 
     async def _cleanup_client(self) -> None:
-        """Disconnect the BACnet client if it was created during the flow."""
+        """Disconnect the BACnet client if it was created during the flow.
+
+        Borrowed clients (reused from an existing config entry) are NOT
+        disconnected — they belong to the running entry's coordinator.
+        """
         if self._client is not None:
-            try:
-                await self._client.disconnect()
-            except Exception:  # noqa: BLE001
-                _LOGGER.debug("Client cleanup error (ignored)")
+            if not self._borrowed_client:
+                try:
+                    await self._client.disconnect()
+                except Exception:  # noqa: BLE001
+                    _LOGGER.debug("Client cleanup error (ignored)")
+            else:
+                _LOGGER.debug("Releasing borrowed client (not disconnecting)")
             self._client = None
+            self._borrowed_client = False
+
+    def _find_existing_client(self, local_port: int):
+        """Return an already-connected BACnetClient bound to *local_port*, if any.
+
+        When a config entry is already loaded for the same BACnet/IP network
+        its client is stored in ``hass.data[DOMAIN][entry_id][DATA_CLIENT]``.
+        We can safely reuse it for discovery / object reads, avoiding a
+        duplicate UDP bind on the same port.
+        """
+        domain_data = self.hass.data.get(DOMAIN, {})
+        for entry_id, entry_data in domain_data.items():
+            client = entry_data.get(DATA_CLIENT)
+            if client is not None and getattr(client, "_local_port", None) == local_port:
+                if getattr(client, "_app", None) is not None:
+                    _LOGGER.debug(
+                        "Reusing existing BACnet client from entry %s (port %d)",
+                        entry_id,
+                        local_port,
+                    )
+                    return client
+        return None
 
     # ------------------------------------------------------------------
     # Step 1: Network / BBMD configuration
@@ -215,22 +246,38 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             # port is released before we try to bind it again.
             await self._cleanup_client()
 
-            from .bacnet_client import BACnetClient  # noqa: WPS433
+            # Try to borrow an already-connected client on the same port
+            # to avoid a duplicate UDP bind error.
+            local_port = self._network_config[CONF_LOCAL_PORT]
+            existing = self._find_existing_client(local_port)
 
-            client = BACnetClient(
-                local_ip=self._network_config[CONF_LOCAL_IP],
-                local_port=self._network_config[CONF_LOCAL_PORT],
-            )
-            try:
-                # connect() creates Normal or ForeignApplication depending
-                # on whether a BBMD address is provided.
-                bbmd_addr = None
-                if self._network_config[CONF_USE_BBMD]:
-                    bbmd_addr = self._network_config[CONF_BBMD_ADDRESS]
-                await client.connect(
-                    bbmd_address=bbmd_addr,
-                    bbmd_ttl=self._network_config.get(CONF_BBMD_TTL, 900),
+            if existing is not None:
+                client = existing
+                borrowed = True
+                _LOGGER.debug(
+                    "Borrowed existing BACnet client for discovery (port %d)",
+                    local_port,
                 )
+            else:
+                from .bacnet_client import BACnetClient  # noqa: WPS433
+
+                client = BACnetClient(
+                    local_ip=self._network_config[CONF_LOCAL_IP],
+                    local_port=local_port,
+                )
+                borrowed = False
+
+            try:
+                if not borrowed:
+                    # connect() creates Normal or ForeignApplication depending
+                    # on whether a BBMD address is provided.
+                    bbmd_addr = None
+                    if self._network_config[CONF_USE_BBMD]:
+                        bbmd_addr = self._network_config[CONF_BBMD_ADDRESS]
+                    await client.connect(
+                        bbmd_address=bbmd_addr,
+                        bbmd_ttl=self._network_config.get(CONF_BBMD_TTL, 900),
+                    )
 
                 # Check if user specified a target address (manual entry)
                 target = self._network_config.get(CONF_TARGET_ADDRESS, "")
@@ -256,11 +303,14 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
                 errors["base"] = "cannot_connect"
                 # Connection failed — disconnect immediately so the port
-                # is released for the next retry.
-                await client.disconnect()
+                # is released for the next retry (only own clients).
+                if not borrowed:
+                    await client.disconnect()
                 client = None
+                borrowed = False
             finally:
                 self._client = client  # keep for object reads (may be None)
+                self._borrowed_client = borrowed
                 # Client stays open until flow ends or we close it
 
         if not errors and not self._discovered_devices:
@@ -358,9 +408,7 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         selected_objects.append(obj)
 
                 # Clean up the client used during flow
-                if self._client is not None:
-                    await self._client.disconnect()
-                    self._client = None
+                await self._cleanup_client()
 
                 # --- Create the config entry ---
                 return self.async_create_entry(
