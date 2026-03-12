@@ -17,7 +17,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, MANUFACTURER, OBJECT_TYPE_NAMES
+from .const import DOMAIN, OBJECT_TYPE_NAMES
 from .coordinator import BACnetCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -57,13 +57,26 @@ class BACnetEntity(CoordinatorEntity[BACnetCoordinator]):
         # Device info for HA device registry — groups all entities under one device
         device_id = entry.data.get("device_id", "unknown")
         device_name = entry.data.get("device_name", "BACnet Device")
+        vendor_name = entry.data.get("vendor_name", "BACnet")
+        model_name = entry.data.get("model_name", "")
+        sw_version = entry.data.get("software_version", "")
+        fw_version = entry.data.get("firmware_version", "")
 
-        self._attr_device_info = DeviceInfo(
+        device_info = DeviceInfo(
             identifiers={(DOMAIN, str(device_id))},
             name=device_name,
-            manufacturer=MANUFACTURER,
-            model=f"BACnet Device {device_id}",
+            manufacturer=vendor_name,
         )
+        if model_name:
+            device_info["model"] = model_name
+        else:
+            device_info["model"] = f"BACnet Device {device_id}"
+        if sw_version:
+            device_info["sw_version"] = sw_version
+        if fw_version:
+            device_info["hw_version"] = fw_version
+
+        self._attr_device_info = device_info
 
         # Unique ID: combination of config entry + object type + instance
         self._attr_unique_id = f"{entry.entry_id}_{self._object_type}_{self._instance}"

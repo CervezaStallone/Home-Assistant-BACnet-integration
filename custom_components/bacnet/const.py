@@ -22,6 +22,10 @@ CONF_DEVICE_NAME = "device_name"
 CONF_DEVICE_ADDRESS = "device_address"
 CONF_TARGET_ADDRESS = "target_address"
 CONF_TARGET_DEVICE_ID = "target_device_id"
+CONF_VENDOR_NAME = "vendor_name"
+CONF_MODEL_NAME = "model_name"
+CONF_FIRMWARE_VERSION = "firmware_version"
+CONF_SOFTWARE_VERSION = "software_version"
 
 # Object selection
 CONF_SELECTED_OBJECTS = "selected_objects"

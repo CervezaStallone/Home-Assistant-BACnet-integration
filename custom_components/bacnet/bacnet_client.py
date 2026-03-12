@@ -325,11 +325,17 @@ class BACnetClient:
                 except Exception:  # noqa: BLE001
                     pass  # use default name
 
+                # Read vendor, model, firmware, software version
+                extras = await self._read_device_extras(
+                    Address(str(i_am.pduSource)), device_id
+                )
+
                 devices.append(
                     {
                         "device_id": device_id,
                         "device_name": device_name,
                         "address": str(i_am.pduSource),
+                        **extras,
                     }
                 )
                 _LOGGER.debug(
@@ -349,6 +355,41 @@ class BACnetClient:
     # ------------------------------------------------------------------
     # Manual device identification (unicast)
     # ------------------------------------------------------------------
+
+    async def _read_device_extras(
+        self, addr: Address, device_id: int
+    ) -> dict[str, str]:
+        """Read optional device identity properties (vendor, model, versions).
+
+        Returns a dict with keys: vendor_name, model_name, firmware_version,
+        software_version.  Values default to empty string if unreadable.
+        """
+        oid = ObjectIdentifier(("device", device_id))
+        extras: dict[str, str] = {
+            "vendor_name": "",
+            "model_name": "",
+            "firmware_version": "",
+            "software_version": "",
+        }
+        prop_map = {
+            "vendorName": "vendor_name",
+            "modelName": "model_name",
+            "firmwareRevision": "firmware_version",
+            "applicationSoftwareVersion": "software_version",
+        }
+        for bacnet_prop, key in prop_map.items():
+            val = await self._safe_read(addr, oid, bacnet_prop)
+            if val is not None:
+                extras[key] = str(val)
+        _LOGGER.debug(
+            "Device %d extras: vendor=%s, model=%s, fw=%s, sw=%s",
+            device_id,
+            extras["vendor_name"],
+            extras["model_name"],
+            extras["firmware_version"],
+            extras["software_version"],
+        )
+        return extras
 
     async def read_device_info(
         self,
@@ -438,10 +479,12 @@ class BACnetClient:
                         device_name = str(name)
                 except (asyncio.TimeoutError, ErrorRejectAbortNack, Exception):  # noqa: BLE001
                     _LOGGER.debug("Could not read objectName, using default")
+                extras = await self._read_device_extras(addr, device_id)
                 return {
                     "device_id": device_id,
                     "device_name": device_name,
                     "address": device_address,
+                    **extras,
                 }
         except (ErrorRejectAbortNack, Exception) as exc:  # noqa: BLE001
             _LOGGER.debug(
@@ -484,10 +527,12 @@ class BACnetClient:
                             device_name = str(name)
                     except (asyncio.TimeoutError, ErrorRejectAbortNack, Exception):  # noqa: BLE001
                         _LOGGER.debug("  Could not read objectName")
+                    extras = await self._read_device_extras(addr, device_id)
                     return {
                         "device_id": device_id,
                         "device_name": device_name,
                         "address": device_address,
+                        **extras,
                     }
             except asyncio.TimeoutError:
                 _LOGGER.debug("  ReadProperty timeout for device,%d", test_id)
