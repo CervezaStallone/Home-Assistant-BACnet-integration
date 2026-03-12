@@ -37,10 +37,12 @@
         "title": "Select BACnet Objects",
         "description": "Select the BACnet objects you want to import as Home Assistant entities. Use 'Select All' to toggle all objects at once.",
         "data": {
+          "device_name": "Device name",
           "select_all": "Select all objects",
           "selected_objects": "BACnet objects"
         },
         "data_description": {
+          "device_name": "Name for this device in Home Assistant. Pre-filled with the BACnet objectName.",
           "selected_objects": "Check the objects you want to monitor or control in Home Assistant."
         }
       }

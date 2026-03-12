@@ -444,6 +444,11 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             # --- Process selection ---
+            # Use user-provided name or fall back to discovered name
+            device_name = (
+                user_input.get(CONF_DEVICE_NAME)
+                or self._selected_device.get("device_name", "BACnet Device")
+            )
             select_all = user_input.get(CONF_SELECT_ALL, False)
             if select_all:
                 selected_keys = [_object_key(obj) for obj in self._discovered_objects]
@@ -464,11 +469,11 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
                 # --- Create the config entry ---
                 return self.async_create_entry(
-                    title=self._selected_device.get("device_name", "BACnet Device"),
+                    title=device_name,
                     data={
                         **self._network_config,
                         CONF_DEVICE_ID: self._selected_device["device_id"],
-                        CONF_DEVICE_NAME: self._selected_device.get("device_name", "BACnet Device"),
+                        CONF_DEVICE_NAME: device_name,
                         CONF_DEVICE_ADDRESS: self._selected_device.get("address", ""),
                         CONF_VENDOR_NAME: self._selected_device.get("vendor_name", ""),
                         CONF_MODEL_NAME: self._selected_device.get("model_name", ""),
@@ -539,8 +544,11 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 list(object_options.keys()),
             )
 
+            default_name = self._selected_device.get("device_name", "BACnet Device")
+
             schema = vol.Schema(
                 {
+                    vol.Optional(CONF_DEVICE_NAME, default=default_name): str,
                     vol.Optional(CONF_SELECT_ALL, default=False): bool,
                     vol.Optional(
                         CONF_SELECTED_OBJECTS, default=list(object_options.keys())
