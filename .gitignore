@@ -5,6 +5,9 @@ TESTING.md
 # Release notes
 rl_*
 
+# Virtual BACnet device (test tool, not part of the integration)
+BACnet virtual device/
+
 # Python
 __pycache__/
 *.py[cod]
