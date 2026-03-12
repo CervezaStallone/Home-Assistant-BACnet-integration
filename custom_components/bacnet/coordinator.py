@@ -289,3 +289,22 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self.use_description and obj.get("description"):
             return obj["description"]
         return obj.get("object_name", f"BACnet {obj['object_type']}:{obj['instance']}")
+
+    def is_cov_subscribed(self, obj_key: str) -> bool:
+        """Return True if this object has an active COV subscription."""
+        return obj_key in self._cov_subscriptions
+
+    def get_update_method(self, obj_key: str) -> str:
+        """Return 'COV' or 'polling' for how this object is updated."""
+        return "COV" if self.is_cov_subscribed(obj_key) else "polling"
+
+    def get_cov_increment_for(self, obj_key: str) -> float | None:
+        """Return the configured COV increment for analog objects, None for binary."""
+        if not self.is_cov_subscribed(obj_key):
+            return None
+        parts = obj_key.split(":")
+        if len(parts) == 2:
+            obj_type = int(parts[0])
+            if obj_type in self._ANALOG_TYPES:
+                return self.cov_increment if self.cov_increment > 0 else None
+        return None

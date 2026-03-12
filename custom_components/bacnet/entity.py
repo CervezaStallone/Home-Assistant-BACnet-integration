@@ -150,4 +150,10 @@ class BACnetEntity(CoordinatorEntity[BACnetCoordinator]):
         if status_flags is not None:
             attrs["bacnet_status_flags"] = status_flags
 
+        # Update method & COV details
+        attrs["bacnet_update_method"] = self.coordinator.get_update_method(self._obj_key)
+        cov_inc = self.coordinator.get_cov_increment_for(self._obj_key)
+        if cov_inc is not None:
+            attrs["bacnet_cov_increment"] = cov_inc
+
         return attrs
