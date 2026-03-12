@@ -1,0 +1,33 @@
+# Virtueel BACnet Apparaat — VOLTTRON Configuratiebestand
+#
+# Dit CSV-bestand kan worden gebruikt met VOLTTRON's BACnet driver
+# om het virtuele apparaat te monitoren.
+#
+# Kolommen:
+#   Point Name          : Naam van het punt in VOLTTRON
+#   Volttron Point Name : Naam voor gebruik in VOLTTRON topics
+#   Units               : Eenheid van het punt
+#   Unit Details        : Extra eenheidsinfo
+#   BACnet Object Type  : BACnet objecttype
+#   Property            : BACnet eigenschap
+#   Writable            : Beschrijfbaar (TRUE/FALSE)
+#   Index               : BACnet object instance nummer
+#   Notes               : Opmerkingen
+#
+Point Name,Volttron Point Name,Units,Unit Details,BACnet Object Type,Property,Writable,Index,Notes
+ZoneTemperatuur,devices/thermostaat/zone_temp,degreesCelsius,°C,analogInput,presentValue,FALSE,0,Ruimtetemperatuur zone 1
+Luchtvochtigheid,devices/thermostaat/luchtvochtigheid,percentRelativeHumidity,%RH,analogInput,presentValue,FALSE,1,Relatieve luchtvochtigheid
+CO2Concentratie,devices/thermostaat/co2,partsPerMillion,ppm,analogInput,presentValue,FALSE,2,CO2 concentratie
+BuitenTemperatuur,devices/thermostaat/buiten_temp,degreesCelsius,°C,analogInput,presentValue,FALSE,3,Buitentemperatuur
+Luchtdruk,devices/thermostaat/luchtdruk,hectopascals,hPa,analogInput,presentValue,FALSE,4,Atmosferische druk
+TemperatuurSetpoint,devices/thermostaat/setpoint,degreesCelsius,°C,analogOutput,presentValue,TRUE,0,Gewenste temperatuur
+VentilatorSnelheid,devices/thermostaat/ventilator,percent,%,analogOutput,presentValue,TRUE,1,Ventilator snelheid
+EnergieTotaal,devices/thermostaat/energie,kilowattHours,kWh,analogValue,presentValue,FALSE,0,Totaal energieverbruik
+PIDOutput,devices/thermostaat/pid_output,percent,%,analogValue,presentValue,FALSE,1,PID regelaar output
+Bezettingssensor,devices/thermostaat/bezetting,noUnits,on/off,binaryInput,presentValue,FALSE,0,Ruimte bezettingssensor
+Deursensor,devices/thermostaat/deur,noUnits,on/off,binaryInput,presentValue,FALSE,1,Deur open/dicht
+Raamcontact,devices/thermostaat/raam,noUnits,on/off,binaryInput,presentValue,FALSE,2,Raam open/dicht
+Verlichting,devices/thermostaat/verlichting,noUnits,on/off,binaryOutput,presentValue,TRUE,0,Verlichting aan/uit
+AlarmRelais,devices/thermostaat/alarm,noUnits,on/off,binaryOutput,presentValue,TRUE,1,Alarm relais
+Nachtmodus,devices/thermostaat/nachtmodus,noUnits,on/off,binaryValue,presentValue,TRUE,0,Nachtmodus actief
+Onderhoudsmodus,devices/thermostaat/onderhoud,noUnits,on/off,binaryValue,presentValue,TRUE,1,Onderhoudsmodus actief

@@ -115,6 +115,17 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         await self._cleanup_client()
         return self.async_abort(reason="already_configured")
 
+    async def async_remove(self) -> None:
+        """Clean up resources when the flow is removed/aborted.
+
+        Called by HA when the user closes the config flow dialog,
+        navigates away, or the flow is otherwise garbage-collected.
+        Without this, the UDP socket stays bound for the lifetime of
+        the HA process, blocking any subsequent config flow attempt.
+        """
+        _LOGGER.debug("Config flow removed — cleaning up BACnet client")
+        await self._cleanup_client()
+
     async def _cleanup_client(self) -> None:
         """Disconnect the BACnet client if it was created during the flow.
 
