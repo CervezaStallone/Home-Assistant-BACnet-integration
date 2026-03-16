@@ -40,18 +40,6 @@ from .const import (
     OBJECT_TYPE_MULTI_STATE_INPUT,
     OBJECT_TYPE_MULTI_STATE_OUTPUT,
     OBJECT_TYPE_MULTI_STATE_VALUE,
-    OBJECT_TYPE_NAMES,
-    PROP_DESCRIPTION,
-    PROP_OBJECT_IDENTIFIER,
-    PROP_OBJECT_LIST,
-    PROP_OBJECT_NAME,
-    PROP_OBJECT_TYPE,
-    PROP_OUT_OF_SERVICE,
-    PROP_PRESENT_VALUE,
-    PROP_PRIORITY_ARRAY,
-    PROP_RELINQUISH_DEFAULT,
-    PROP_STATUS_FLAGS,
-    PROP_UNITS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -170,7 +158,11 @@ class BACnetClient:
         else:
             _LOGGER.debug("Creating Normal BACnet application on %s", local_addr)
             self._app = NormalApplication(device_object, local_addr)
-            _LOGGER.info("BACnet client connected on %s (type=%s)", local_addr, type(self._app).__name__)
+            _LOGGER.info(
+                "BACnet client connected on %s (type=%s)",
+                local_addr,
+                type(self._app).__name__,
+            )
 
         # Wait for the UDP transport to be ready.  The NormalApplication
         # constructor schedules UDP endpoint creation as background tasks.
@@ -211,7 +203,9 @@ class BACnetClient:
         """
         server = self._get_datagram_server()
         if server is None:
-            _LOGGER.warning("Cannot locate IPv4DatagramServer — skipping transport check")
+            _LOGGER.warning(
+                "Cannot locate IPv4DatagramServer — skipping transport check"
+            )
             return
 
         tasks = getattr(server, "_transport_tasks", [])
@@ -461,7 +455,9 @@ class BACnetClient:
                 who_is_kwargs["high_limit"] = known_device_id
             _LOGGER.debug("Strategy 1: Sending directed Who-Is %s", who_is_kwargs)
             i_am_list = await self._app.who_is(**who_is_kwargs)
-            _LOGGER.debug("Who-Is returned %d I-Am(s)", len(i_am_list) if i_am_list else 0)
+            _LOGGER.debug(
+                "Who-Is returned %d I-Am(s)", len(i_am_list) if i_am_list else 0
+            )
             if i_am_list:
                 i_am = i_am_list[0]
                 device_id = i_am.iAmDeviceIdentifier[1]
@@ -538,9 +534,7 @@ class BACnetClient:
                 _LOGGER.debug("  ReadProperty timeout for device,%d", test_id)
                 continue
             except ErrorRejectAbortNack as exc:
-                _LOGGER.debug(
-                    "  BACnet error for device,%d: %s", test_id, exc
-                )
+                _LOGGER.debug("  BACnet error for device,%d: %s", test_id, exc)
                 continue
             except Exception as exc:  # noqa: BLE001
                 _LOGGER.debug(
@@ -595,7 +589,8 @@ class BACnetClient:
             if isinstance(object_list, ErrorRejectAbortNack):
                 _LOGGER.error(
                     "Device %s returned BACnet error for objectList: %s",
-                    device_address, object_list,
+                    device_address,
+                    object_list,
                 )
                 return objects
         except asyncio.TimeoutError:
@@ -607,13 +602,16 @@ class BACnetClient:
         except ErrorRejectAbortNack as exc:
             _LOGGER.error(
                 "BACnet error reading objectList from %s: %s",
-                device_address, exc,
+                device_address,
+                exc,
             )
             return objects
         except Exception as exc:
             _LOGGER.error(
                 "Failed to read objectList from %s: %s (%s)",
-                device_address, exc, type(exc).__name__,
+                device_address,
+                exc,
+                type(exc).__name__,
                 exc_info=True,
             )
             raise
@@ -623,20 +621,22 @@ class BACnetClient:
             return objects
 
         # Validate the response is iterable (not a single value)
-        if not hasattr(object_list, '__iter__'):
+        if not hasattr(object_list, "__iter__"):
             _LOGGER.error(
                 "objectList response is not iterable: %s (%s)",
-                object_list, type(object_list).__name__,
+                object_list,
+                type(object_list).__name__,
             )
             return objects
 
         try:
-            list_len = len(object_list) if hasattr(object_list, '__len__') else -1
+            list_len = len(object_list) if hasattr(object_list, "__len__") else -1
         except Exception:  # noqa: BLE001
             list_len = -1
         _LOGGER.debug(
             "objectList returned %d entries (type: %s)",
-            list_len, type(object_list).__name__,
+            list_len,
+            type(object_list).__name__,
         )
 
         # 2. Iterate and read metadata for each supported object type
@@ -652,21 +652,33 @@ class BACnetClient:
             # Convert to plain int — ObjectType is an int subclass with
             # a custom __str__ that returns hyphenated names, which would
             # create inconsistent keys after JSON round-tripping.
-            obj_type_int = int(obj_type_str) if isinstance(obj_type_str, int) else self._object_type_str_to_int(obj_type_str)
+            obj_type_int = (
+                int(obj_type_str)
+                if isinstance(obj_type_str, int)
+                else self._object_type_str_to_int(obj_type_str)
+            )
             if obj_type_int is None or obj_type_int not in SUPPORTED_OBJECT_TYPES:
-                _LOGGER.debug("Skipping unsupported object type: %s (int=%s)", oid, obj_type_int)
+                _LOGGER.debug(
+                    "Skipping unsupported object type: %s (int=%s)", oid, obj_type_int
+                )
                 continue
 
             try:
-                obj_info = await self._read_object_metadata(addr, oid, obj_type_int, instance)
+                obj_info = await self._read_object_metadata(
+                    addr, oid, obj_type_int, instance
+                )
                 if obj_info is not None:
                     objects.append(obj_info)
                     _LOGGER.debug(
                         "Read metadata for %s:%d — name=%s",
-                        oid, instance, obj_info.get("object_name", "?"),
+                        oid,
+                        instance,
+                        obj_info.get("object_name", "?"),
                     )
                 else:
-                    _LOGGER.warning("Metadata read returned None for %s:%d", oid, instance)
+                    _LOGGER.warning(
+                        "Metadata read returned None for %s:%d", oid, instance
+                    )
             except asyncio.CancelledError:
                 _LOGGER.warning("Metadata read cancelled for %s:%d", oid, instance)
                 # Return whatever we have so far rather than losing everything
@@ -674,7 +686,10 @@ class BACnetClient:
             except (ErrorRejectAbortNack, Exception) as exc:  # noqa: BLE001
                 _LOGGER.warning(
                     "Unexpected error reading metadata for %s:%d — %s (%s)",
-                    oid, instance, exc, type(exc).__name__,
+                    oid,
+                    instance,
+                    exc,
+                    type(exc).__name__,
                 )
                 continue
 
@@ -700,14 +715,21 @@ class BACnetClient:
         try:
             # Read commonly needed properties individually (safer than RPM for
             # devices that don't support ReadPropertyMultiple)
-            object_name = await self._safe_read(addr, oid, "objectName") or f"Object {instance}"
+            object_name = (
+                await self._safe_read(addr, oid, "objectName") or f"Object {instance}"
+            )
             description = await self._safe_read(addr, oid, "description") or ""
             units = await self._safe_read(addr, oid, "units")
             present_value = await self._safe_read(addr, oid, "presentValue")
 
             _LOGGER.debug(
                 "Raw values for %s:%d — name=%r, desc=%r, units=%r, pv=%r (type=%s)",
-                oid, instance, object_name, description, units, present_value,
+                oid,
+                instance,
+                object_name,
+                description,
+                units,
+                present_value,
                 type(present_value).__name__ if present_value is not None else "None",
             )
 
@@ -734,7 +756,10 @@ class BACnetClient:
         except (ErrorRejectAbortNack, Exception) as exc:  # noqa: BLE001
             _LOGGER.warning(
                 "Failed to read metadata for %s:%d - %s (%s)",
-                oid, instance, exc, type(exc).__name__,
+                oid,
+                instance,
+                exc,
+                type(exc).__name__,
                 exc_info=True,
             )
             return None
@@ -815,7 +840,9 @@ class BACnetClient:
 
         result: dict[str, Any] = {}
         for prop in property_names:
-            value = await self.read_property(device_address, object_type, instance, prop)
+            value = await self.read_property(
+                device_address, object_type, instance, prop
+            )
             result[prop] = self._coerce_value(value)
         return result
 
@@ -893,7 +920,11 @@ class BACnetClient:
             if isinstance(result, ErrorRejectAbortNack):
                 _LOGGER.error(
                     "Write rejected by device for %s:%d.%s = %s: %s",
-                    type_str, instance, property_name, value, result,
+                    type_str,
+                    instance,
+                    property_name,
+                    value,
+                    result,
                 )
                 return False
 
@@ -985,9 +1016,7 @@ class BACnetClient:
             # We run it inside a long-lived task so the context stays open
             # and the subscription is automatically renewed by BACpypes3.
             task = asyncio.create_task(
-                self._cov_reader_task(
-                    addr, oid, lifetime, sub_key, obj_key, callback
-                )
+                self._cov_reader_task(addr, oid, lifetime, sub_key, obj_key, callback)
             )
             self._cov_tasks[sub_key] = task
 
@@ -1008,8 +1037,7 @@ class BACnetClient:
 
         except (ErrorRejectAbortNack, Exception) as exc:  # noqa: BLE001
             _LOGGER.warning(
-                "COV subscription failed for %s:%d at %s: %s. "
-                "Falling back to polling.",
+                "COV subscription failed for %s:%d at %s: %s. Falling back to polling.",
                 type_str,
                 instance,
                 device_address,
