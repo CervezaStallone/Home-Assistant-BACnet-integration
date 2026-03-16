@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: README & Troubleshooting
+    url: https://github.com/CervezaStallone/Home-Assistant-BACnet-integration#troubleshooting
+    about: Check the README troubleshooting section before opening a bug report.
+  - name: Home Assistant Community Forum
+    url: https://community.home-assistant.io/
+    about: For general Home Assistant questions, the HA Community Forum is the best place to ask.
