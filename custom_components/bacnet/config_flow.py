@@ -52,6 +52,7 @@ _LOGGER = logging.getLogger(__name__)
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _validate_ip(ip_string: str) -> bool:
     """Return True if *ip_string* is a valid IPv4 address (or empty for auto)."""
     if not ip_string:
@@ -97,6 +98,7 @@ def _object_label(obj: dict[str, Any]) -> str:
 # Config Flow
 # ---------------------------------------------------------------------------
 
+
 class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle the BACnet IP config flow."""
 
@@ -109,9 +111,13 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._selected_device: dict[str, Any] = {}
         self._discovered_objects: list[dict[str, Any]] = []
         self._client: Any | None = None  # BACnetClient instance during flow
-        self._borrowed_client: bool = False  # True when reusing an existing entry's client
+        self._borrowed_client: bool = (
+            False  # True when reusing an existing entry's client
+        )
 
-    async def async_step_unignore(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+    async def async_step_unignore(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
         """Handle flow cancellation / cleanup.
 
         Ensures the BACnet client is disconnected if the user abandons
@@ -163,7 +169,10 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         domain_data = self.hass.data.get(DOMAIN, {})
         for entry_id, entry_data in domain_data.items():
             client = entry_data.get(DATA_CLIENT)
-            if client is not None and getattr(client, "_local_port", None) == local_port:
+            if (
+                client is not None
+                and getattr(client, "_local_port", None) == local_port
+            ):
                 if getattr(client, "_app", None) is not None:
                     _LOGGER.debug(
                         "Reusing existing BACnet client from entry %s (port %d)",
@@ -206,7 +215,8 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_LOCAL_IP: local_ip,
                     CONF_LOCAL_PORT: user_input.get(CONF_LOCAL_PORT, DEFAULT_PORT),
                     CONF_TARGET_ADDRESS: target_address,
-                    CONF_TARGET_DEVICE_ID: user_input.get(CONF_TARGET_DEVICE_ID, 0) or 0,
+                    CONF_TARGET_DEVICE_ID: user_input.get(CONF_TARGET_DEVICE_ID, 0)
+                    or 0,
                     CONF_USE_BBMD: use_bbmd,
                     CONF_BBMD_ADDRESS: bbmd_address if use_bbmd else "",
                     CONF_BBMD_TTL: user_input.get(CONF_BBMD_TTL, DEFAULT_BBMD_TTL)
@@ -309,7 +319,8 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     target_dev_id = self._network_config.get(CONF_TARGET_DEVICE_ID, 0)
                     _LOGGER.debug(
                         "Manual device entry: target=%s, device_id=%s",
-                        target, target_dev_id,
+                        target,
+                        target_dev_id,
                     )
                     device_info = await client.read_device_info(
                         target, device_id=target_dev_id or None
@@ -325,7 +336,8 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     else:
                         _LOGGER.warning(
                             "Device unreachable at %s (device_id=%s)",
-                            target, target_dev_id,
+                            target,
+                            target_dev_id,
                         )
                         errors["base"] = "device_unreachable"
                 else:
@@ -350,7 +362,9 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 borrowed = False
             except Exception as exc:  # noqa: BLE001
                 _LOGGER.error(
-                    "Discovery failed: %s (%s)", exc, type(exc).__name__,
+                    "Discovery failed: %s (%s)",
+                    exc,
+                    type(exc).__name__,
                     exc_info=True,
                 )
                 errors["base"] = "cannot_connect"
@@ -380,7 +394,9 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         ): str,
                         vol.Optional(
                             CONF_LOCAL_PORT,
-                            default=self._network_config.get(CONF_LOCAL_PORT, DEFAULT_PORT),
+                            default=self._network_config.get(
+                                CONF_LOCAL_PORT, DEFAULT_PORT
+                            ),
                         ): vol.Coerce(int),
                         vol.Optional(
                             CONF_TARGET_ADDRESS,
@@ -400,7 +416,9 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         ): str,
                         vol.Optional(
                             CONF_BBMD_TTL,
-                            default=self._network_config.get(CONF_BBMD_TTL, DEFAULT_BBMD_TTL),
+                            default=self._network_config.get(
+                                CONF_BBMD_TTL, DEFAULT_BBMD_TTL
+                            ),
                         ): vol.Coerce(int),
                     }
                 ),
@@ -416,7 +434,9 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         # --- Build device selection dropdown ---
         device_options = {
-            str(dev["device_id"]): f"{dev.get('device_name', 'Device')} (ID {dev['device_id']}, {dev.get('address', '?')})"
+            str(
+                dev["device_id"]
+            ): f"{dev.get('device_name', 'Device')} (ID {dev['device_id']}, {dev.get('address', '?')})"
             for dev in self._discovered_devices
         }
 
@@ -445,9 +465,8 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             # --- Process selection ---
             # Use user-provided name or fall back to discovered name
-            device_name = (
-                user_input.get(CONF_DEVICE_NAME)
-                or self._selected_device.get("device_name", "BACnet Device")
+            device_name = user_input.get(CONF_DEVICE_NAME) or self._selected_device.get(
+                "device_name", "BACnet Device"
             )
             select_all = user_input.get(CONF_SELECT_ALL, False)
             if select_all:
@@ -477,8 +496,12 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_DEVICE_ADDRESS: self._selected_device.get("address", ""),
                         CONF_VENDOR_NAME: self._selected_device.get("vendor_name", ""),
                         CONF_MODEL_NAME: self._selected_device.get("model_name", ""),
-                        CONF_FIRMWARE_VERSION: self._selected_device.get("firmware_version", ""),
-                        CONF_SOFTWARE_VERSION: self._selected_device.get("software_version", ""),
+                        CONF_FIRMWARE_VERSION: self._selected_device.get(
+                            "firmware_version", ""
+                        ),
+                        CONF_SOFTWARE_VERSION: self._selected_device.get(
+                            "software_version", ""
+                        ),
                         CONF_SELECTED_OBJECTS: selected_objects,
                     },
                 )
@@ -558,7 +581,8 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         except Exception as exc:  # noqa: BLE001
             _LOGGER.error(
                 "Failed to build object selection form: %s (%s)",
-                exc, type(exc).__name__,
+                exc,
+                type(exc).__name__,
                 exc_info=True,
             )
             errors["base"] = "unknown"
