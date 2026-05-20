@@ -1,6 +1,8 @@
-# Tests
+# Tests and dev tooling
 tests/
 TESTING.md
+pyproject.toml
+uv.lock
 
 # Release notes
 rl_*
