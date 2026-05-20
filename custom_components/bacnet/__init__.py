@@ -48,6 +48,9 @@ from .const import (
     DEFAULT_POLLING_INTERVAL,
     DEFAULT_USE_DESCRIPTION,
     DOMAIN,
+    OBJECT_TYPE_ANALOG_VALUE,
+    OBJECT_TYPE_BINARY_VALUE,
+    OBJECT_TYPE_MULTI_STATE_VALUE,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -67,6 +70,34 @@ PLATFORMS: list[Platform] = [
 # ---------------------------------------------------------------------------
 
 
+# Value-type objects that need commandability check before assigning domain
+_VALUE_TYPES = {
+    OBJECT_TYPE_ANALOG_VALUE,
+    OBJECT_TYPE_BINARY_VALUE,
+    OBJECT_TYPE_MULTI_STATE_VALUE,
+}
+
+
+def _domain_for_object(obj: dict, domain_overrides: dict[str, str]) -> str:
+    """Return the HA domain for a BACnet object, applying commandable-aware defaults.
+
+    Mirrors coordinator._default_domain_for() so that _get_platforms_in_use()
+    and the coordinator always agree on which domain an object belongs to.
+    Must stay in sync with BACnetCoordinator._default_domain_for().
+    """
+    obj_key = f"{obj['object_type']}:{obj['instance']}"
+    if obj_key in domain_overrides:
+        return domain_overrides[obj_key]
+    obj_type = obj["object_type"]
+    if obj_type in _VALUE_TYPES:
+        commandable = obj.get("commandable", False)
+        if obj_type == OBJECT_TYPE_BINARY_VALUE:
+            return "switch" if commandable else "binary_sensor"
+        # AV and MSV
+        return "number" if commandable else "sensor"
+    return DEFAULT_DOMAIN_MAP.get(obj_type, "sensor")
+
+
 def _get_platforms_in_use(
     objects: list[dict], domain_overrides: dict[str, str]
 ) -> list[Platform]:
@@ -77,12 +108,7 @@ def _get_platforms_in_use(
     """
     domains_needed: set[str] = set()
     for obj in objects:
-        obj_key = f"{obj['object_type']}:{obj['instance']}"
-        # Check user overrides first, then fall back to default mapping
-        domain = domain_overrides.get(
-            obj_key, DEFAULT_DOMAIN_MAP.get(obj["object_type"], "sensor")
-        )
-        domains_needed.add(domain)
+        domains_needed.add(_domain_for_object(obj, domain_overrides))
     return [Platform(d) for d in domains_needed if d in {p.value for p in PLATFORMS}]
 
 

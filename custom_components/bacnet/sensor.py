@@ -35,11 +35,12 @@ from .entity import BACnetEntity
 
 _LOGGER = logging.getLogger(__name__)
 
-# BACnet engineering units → HA sensor device class mapping (subset)
+# BACnet engineering units → HA sensor device class mapping (subset).
+# "percent" (BACnet unit 17) is a generic percentage — do NOT map it to HUMIDITY.
+# Only "percentRelativeHumidity" (unit 29) explicitly denotes relative humidity.
 _UNIT_DEVICE_CLASS: dict[str, SensorDeviceClass] = {
     "degreesCelsius": SensorDeviceClass.TEMPERATURE,
     "degreesFahrenheit": SensorDeviceClass.TEMPERATURE,
-    "percent": SensorDeviceClass.HUMIDITY,
     "percentRelativeHumidity": SensorDeviceClass.HUMIDITY,
     "pascals": SensorDeviceClass.PRESSURE,
     "hectopascals": SensorDeviceClass.PRESSURE,

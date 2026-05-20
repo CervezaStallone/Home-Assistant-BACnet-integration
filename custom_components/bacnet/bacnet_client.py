@@ -1386,8 +1386,17 @@ class BACnetClient:
         # Convert to a plain list of booleans so callers get [False,False,False,False].
         if isinstance(value, list):
             return [bool(x) for x in value]
-        if isinstance(value, (int, float, str, bool)):
-            return value
+        # BACpypes3 Enumerated (used for binary PV) is an int subclass — convert to
+        # a plain Python int so coordinator data stays JSON-serializable and
+        # never leaks BACpypes3 objects into HA state.
+        if isinstance(value, bool):
+            return bool(value)
+        if isinstance(value, int):
+            return int(value)
+        if isinstance(value, float):
+            return float(value)
+        if isinstance(value, str):
+            return str(value)
         # Generic fallback
         return str(value)
 
