@@ -35,18 +35,23 @@ from .entity import BACnetEntity
 
 _LOGGER = logging.getLogger(__name__)
 
-# BACnet units → HA native unit string (for number entities)
+# BACnet units → HA native unit string (for number entities).
+# Keys are hyphenated strings as returned by BACpypes3's EngineeringUnits.__str__().
 _UNIT_NATIVE: dict[str, str] = {
-    "degreesCelsius": "°C",
-    "degreesFahrenheit": "°F",
+    "degrees-celsius": "°C",
+    "degrees-fahrenheit": "°F",
     "percent": "%",
-    "percentRelativeHumidity": "%",
+    "percent-relative-humidity": "%",
     "pascals": "Pa",
+    "hectopascals": "hPa",
+    "kilopascals": "kPa",
     "watts": "W",
     "kilowatts": "kW",
+    "kilowatt-hours": "kWh",
     "amperes": "A",
     "volts": "V",
     "hertz": "Hz",
+    "liters-per-second": "L/s",
 }
 
 
