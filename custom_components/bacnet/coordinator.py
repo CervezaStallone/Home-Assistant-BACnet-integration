@@ -32,6 +32,8 @@ from .const import (
     OBJECT_TYPE_ANALOG_INPUT,
     OBJECT_TYPE_ANALOG_OUTPUT,
     OBJECT_TYPE_ANALOG_VALUE,
+    OBJECT_TYPE_BINARY_VALUE,
+    OBJECT_TYPE_MULTI_STATE_VALUE,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -133,23 +135,20 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Always poll ALL objects — COV is supplementary, polling is the
         # reliable baseline.  This ensures values update even when COV
         # subscriptions are accepted but notifications never arrive.
-        for obj in self.objects:
-            obj_key = f"{obj['object_type']}:{obj['instance']}"
-            try:
-                values = await self.client.read_multiple_properties(
-                    device_address=self.device_address,
-                    object_type=obj["object_type"],
-                    instance=obj["instance"],
-                    property_names=["presentValue", "statusFlags"],
-                )
-                data[obj_key] = values
-            except Exception as exc:  # noqa: BLE001
-                _LOGGER.warning(
-                    "Polling failed for %s: %s",
-                    obj_key,
-                    exc,
-                )
-                # Keep stale data rather than failing everything
+        # poll_objects() batches all objects into one ReadPropertyMultiple
+        # request (single round-trip) and falls back to individual reads for
+        # devices that reject RPM.
+        try:
+            polled = await self.client.poll_objects(
+                device_address=self.device_address,
+                objects=self.objects,
+                property_names=["presentValue", "statusFlags"],
+            )
+            data.update(polled)
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.warning("Batch poll failed: %s — keeping stale data", exc)
+            for obj in self.objects:
+                obj_key = f"{obj['object_type']}:{obj['instance']}"
                 if obj_key not in data:
                     data[obj_key] = {"presentValue": None, "statusFlags": None}
 
@@ -261,8 +260,14 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     # ------------------------------------------------------------------
 
     async def async_shutdown(self) -> None:
-        """Cancel all COV subscriptions and clean up."""
-        await self.client.unsubscribe_all_cov()
+        """Cancel this coordinator's COV subscriptions and clean up.
+
+        Only unsubscribes subscriptions owned by this coordinator so that a
+        shared BACnetClient (used by multiple coordinators on the same port)
+        is not disrupted when one config entry is unloaded.
+        """
+        for sub_key in list(self._cov_subscriptions.values()):
+            await self.client.unsubscribe_cov(sub_key)
         self._cov_subscriptions.clear()
         self._polled_objects.clear()
 
@@ -279,12 +284,36 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         obj_data = self.data.get(obj_key, {})
         return obj_data.get(prop)
 
+    # Value-type objects that may or may not have a Priority Array
+    _VALUE_TYPES = {
+        OBJECT_TYPE_ANALOG_VALUE,
+        OBJECT_TYPE_BINARY_VALUE,
+        OBJECT_TYPE_MULTI_STATE_VALUE,
+    }
+
     def get_domain_for_object(self, obj: dict[str, Any]) -> str:
-        """Determine the HA domain for a BACnet object, respecting user overrides."""
+        """Determine the HA domain for a BACnet object, respecting user overrides.
+
+        For Value-type objects (AV, BV, MSV) the default domain depends on
+        whether the object is commandable (has a Priority Array).  Non-commandable
+        Value objects must not be mapped to writable domains (switch/number)
+        because the device will reject writes or behave incorrectly.
+        """
         obj_key = f"{obj['object_type']}:{obj['instance']}"
-        return self.domain_overrides.get(
-            obj_key, DEFAULT_DOMAIN_MAP.get(obj["object_type"], "sensor")
-        )
+        if obj_key in self.domain_overrides:
+            return self.domain_overrides[obj_key]
+        return self._default_domain_for(obj)
+
+    def _default_domain_for(self, obj: dict[str, Any]) -> str:
+        """Return the default HA domain for a BACnet object based on type + commandability."""
+        obj_type = obj["object_type"]
+        if obj_type in self._VALUE_TYPES:
+            commandable = obj.get("commandable", False)
+            if obj_type == OBJECT_TYPE_BINARY_VALUE:
+                return "switch" if commandable else "binary_sensor"
+            if obj_type in {OBJECT_TYPE_ANALOG_VALUE, OBJECT_TYPE_MULTI_STATE_VALUE}:
+                return "number" if commandable else "sensor"
+        return DEFAULT_DOMAIN_MAP.get(obj_type, "sensor")
 
     def get_entity_name(self, obj: dict[str, Any]) -> str:
         """Return the entity display name, respecting the use_description option."""
