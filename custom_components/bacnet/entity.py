@@ -71,10 +71,16 @@ class BACnetEntity(CoordinatorEntity[BACnetCoordinator]):
             device_info["model"] = model_name
         else:
             device_info["model"] = f"BACnet Device {device_id}"
-        if sw_version:
+        # BACnet firmwareRevision (Property 44) is the device firmware version.
+        # applicationSoftwareVersion (Property 12) is the app layer version.
+        # HA's sw_version field is the right place for firmware; there is no
+        # BACnet property for hardware revision so hw_version is left unset.
+        if fw_version and sw_version:
+            device_info["sw_version"] = f"{fw_version} / {sw_version}"
+        elif fw_version:
+            device_info["sw_version"] = fw_version
+        elif sw_version:
             device_info["sw_version"] = sw_version
-        if fw_version:
-            device_info["hw_version"] = fw_version
 
         self._attr_device_info = device_info
 
