@@ -36,40 +36,41 @@ from .entity import BACnetEntity
 _LOGGER = logging.getLogger(__name__)
 
 # BACnet engineering units → HA sensor device class mapping (subset).
-# "percent" (BACnet unit 17) is a generic percentage — do NOT map it to HUMIDITY.
-# Only "percentRelativeHumidity" (unit 29) explicitly denotes relative humidity.
+# Keys are the hyphenated strings returned by BACpypes3's EngineeringUnits.__str__().
+# "percent" (BACnet unit 98) is a generic percentage — do NOT map it to HUMIDITY.
+# Only "percent-relative-humidity" (unit 29) explicitly denotes relative humidity.
 _UNIT_DEVICE_CLASS: dict[str, SensorDeviceClass] = {
-    "degreesCelsius": SensorDeviceClass.TEMPERATURE,
-    "degreesFahrenheit": SensorDeviceClass.TEMPERATURE,
-    "percentRelativeHumidity": SensorDeviceClass.HUMIDITY,
+    "degrees-celsius": SensorDeviceClass.TEMPERATURE,
+    "degrees-fahrenheit": SensorDeviceClass.TEMPERATURE,
+    "percent-relative-humidity": SensorDeviceClass.HUMIDITY,
     "pascals": SensorDeviceClass.PRESSURE,
     "hectopascals": SensorDeviceClass.PRESSURE,
-    "kiloPascals": SensorDeviceClass.PRESSURE,
+    "kilopascals": SensorDeviceClass.PRESSURE,
     "watts": SensorDeviceClass.POWER,
     "kilowatts": SensorDeviceClass.POWER,
-    "kilowattHours": SensorDeviceClass.ENERGY,
+    "kilowatt-hours": SensorDeviceClass.ENERGY,
     "amperes": SensorDeviceClass.CURRENT,
     "volts": SensorDeviceClass.VOLTAGE,
     "hertz": SensorDeviceClass.FREQUENCY,
-    "litersPerSecond": SensorDeviceClass.VOLUME_FLOW_RATE,
+    "liters-per-second": SensorDeviceClass.VOLUME_FLOW_RATE,
 }
 
 # BACnet units → HA native unit string
 _UNIT_NATIVE: dict[str, str] = {
-    "degreesCelsius": "°C",
-    "degreesFahrenheit": "°F",
+    "degrees-celsius": "°C",
+    "degrees-fahrenheit": "°F",
     "percent": "%",
-    "percentRelativeHumidity": "%",
+    "percent-relative-humidity": "%",
     "pascals": "Pa",
     "hectopascals": "hPa",
-    "kiloPascals": "kPa",
+    "kilopascals": "kPa",
     "watts": "W",
     "kilowatts": "kW",
-    "kilowattHours": "kWh",
+    "kilowatt-hours": "kWh",
     "amperes": "A",
     "volts": "V",
     "hertz": "Hz",
-    "litersPerSecond": "L/s",
+    "liters-per-second": "L/s",
 }
 
 
