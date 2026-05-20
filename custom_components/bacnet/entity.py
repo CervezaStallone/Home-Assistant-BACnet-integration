@@ -78,8 +78,13 @@ class BACnetEntity(CoordinatorEntity[BACnetCoordinator]):
 
         self._attr_device_info = device_info
 
-        # Unique ID: combination of config entry + object type + instance
-        self._attr_unique_id = f"{entry.entry_id}_{self._object_type}_{self._instance}"
+        # Unique ID: BACnet device instance + object type + instance.
+        # Using the BACnet device_id (not entry_id) makes the unique_id stable
+        # across config entry recreation — entity history and automations survive
+        # a remove-and-re-add of the integration.
+        self._attr_unique_id = (
+            f"{DOMAIN}_{device_id}_{self._object_type}_{self._instance}"
+        )
 
         # Entity name — respects the "use description" option
         self._attr_name = coordinator.get_entity_name(obj)
