@@ -59,9 +59,10 @@ class BACnetSwitch(BACnetEntity, SwitchEntity):
 
     Write strategy (BACnet standard compliant):
       - turn_on:  Write presentValue = 1 (active) at priority level
-      - turn_off: Write presentValue = Null (relinquish) at same priority level
-                  This releases the override and lets lower-priority commands
-                  or the Relinquish Default take effect.
+      - turn_off: Write presentValue = 0 (inactive) at same priority level
+                  This explicitly commands the output off.  To fully release
+                  HA's override and let lower-priority sources or the
+                  Relinquish Default take effect, use client.relinquish().
     """
 
     def __init__(

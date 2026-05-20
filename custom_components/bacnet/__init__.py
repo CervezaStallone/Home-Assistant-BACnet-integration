@@ -129,22 +129,39 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     domain_overrides: dict[str, str] = entry.options.get(CONF_DOMAIN_MAPPING, {})
     cov_increment: float = entry.options.get(CONF_COV_INCREMENT, DEFAULT_COV_INCREMENT)
 
-    # ---- 2. Create & connect the BACnet client ----
-    client = BACnetClient(
-        local_ip=local_ip,
-        local_port=local_port,
-    )
-    try:
-        # connect() creates a NormalApplication or ForeignApplication
-        # depending on whether a BBMD address is provided.  It must run
-        # on the event loop (BACpypes3 uses asyncio UDP transport).
-        await client.connect(
-            bbmd_address=bbmd_address if use_bbmd else None,
-            bbmd_ttl=bbmd_ttl,
+    # ---- 2. Get or create a shared BACnet client for this port ----
+    # A single UDP socket (one BACnetClient) can communicate with any number
+    # of remote BACnet devices — there is no protocol reason to have one socket
+    # per target device.  We key shared clients by local_port so that a second
+    # config entry on the same port reuses the already-bound socket rather than
+    # trying to bind the same port a second time (which would fail at the OS level).
+    port_clients: dict = hass.data[DOMAIN].setdefault("_port_clients", {})
+
+    if local_port in port_clients:
+        client = port_clients[local_port]["client"]
+        port_clients[local_port]["ref_count"] += 1
+        _LOGGER.info(
+            "Reusing shared BACnet client on port %d (ref_count=%d)",
+            local_port,
+            port_clients[local_port]["ref_count"],
         )
-    except Exception as exc:  # noqa: BLE001
-        _LOGGER.error("Failed to start BACnet client: %s", exc)
-        raise ConfigEntryNotReady(f"Cannot connect to BACnet network: {exc}") from exc
+    else:
+        client = BACnetClient(
+            local_ip=local_ip,
+            local_port=local_port,
+        )
+        try:
+            await client.connect(
+                bbmd_address=bbmd_address if use_bbmd else None,
+                bbmd_ttl=bbmd_ttl,
+            )
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.error("Failed to start BACnet client: %s", exc)
+            raise ConfigEntryNotReady(
+                f"Cannot connect to BACnet network: {exc}"
+            ) from exc
+        port_clients[local_port] = {"client": client, "ref_count": 1}
+        _LOGGER.info("Created shared BACnet client on port %d", local_port)
 
     # ---- 4. Build coordinator ----
     coordinator = BACnetCoordinator(
@@ -224,15 +241,34 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         for unsub in entry_data.get(DATA_UNSUB, []):
             unsub()
 
-        # Shut down coordinator (cancels COV subs & polling tasks)
+        # Shut down coordinator — cancels only this entry's COV subscriptions
         coordinator = entry_data.get(DATA_COORDINATOR)
         if coordinator is not None:
             await coordinator.async_shutdown()
 
-        # Disconnect the BACnet client
+        # Release the shared client reference.  Only disconnect the underlying
+        # UDP socket when the last config entry using this port is unloaded.
         client = entry_data.get(DATA_CLIENT)
         if client is not None:
-            await client.disconnect()
+            local_port = entry.data.get(CONF_LOCAL_PORT, 47808)
+            port_clients = hass.data[DOMAIN].get("_port_clients", {})
+            if local_port in port_clients:
+                port_clients[local_port]["ref_count"] -= 1
+                if port_clients[local_port]["ref_count"] <= 0:
+                    port_clients.pop(local_port)
+                    await client.disconnect()
+                    _LOGGER.debug(
+                        "Disconnected shared BACnet client on port %d", local_port
+                    )
+                else:
+                    _LOGGER.debug(
+                        "Released client reference for port %d (ref_count=%d remaining)",
+                        local_port,
+                        port_clients[local_port]["ref_count"],
+                    )
+            else:
+                # Fallback for entries created before shared-client support
+                await client.disconnect()
 
         hass.data[DOMAIN].pop(entry.entry_id)
         _LOGGER.info("BACnet integration unloaded for entry %s", entry.entry_id)

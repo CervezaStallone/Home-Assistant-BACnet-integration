@@ -39,3 +39,8 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
+
+docs/
+.claude
+CLAUDE.md
+.ruff_cache

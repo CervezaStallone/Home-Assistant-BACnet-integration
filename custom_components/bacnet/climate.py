@@ -107,8 +107,6 @@ class BACnetClimate(BACnetEntity, ClimateEntity):
         else:
             self._attr_temperature_unit = UnitOfTemperature.CELSIUS
 
-        self._is_active = True  # Tracks whether we have an active setpoint
-
     # ------------------------------------------------------------------
     # State properties
     # ------------------------------------------------------------------
@@ -138,14 +136,13 @@ class BACnetClimate(BACnetEntity, ClimateEntity):
     def hvac_mode(self) -> HVACMode:
         """Return the current HVAC mode.
 
-        HEAT = setpoint is actively commanded
-        OFF  = setpoint has been relinquished (Null written)
+        HEAT = coordinator has a non-None presentValue for this object
+        OFF  = presentValue is None (setpoint relinquished or device offline)
+
+        Derived entirely from coordinator data so the mode is correct after
+        HA restarts without needing any in-memory flag.
         """
-        if not self._is_active:
-            return HVACMode.OFF
-        if self.get_present_value() is not None:
-            return HVACMode.HEAT
-        return HVACMode.OFF
+        return HVACMode.HEAT if self.get_present_value() is not None else HVACMode.OFF
 
     # ------------------------------------------------------------------
     # Commands
@@ -170,7 +167,6 @@ class BACnetClimate(BACnetEntity, ClimateEntity):
             priority=self._write_priority,
         )
         if success:
-            self._is_active = True
             await self.coordinator.async_request_refresh()
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
@@ -191,7 +187,6 @@ class BACnetClimate(BACnetEntity, ClimateEntity):
                 priority=self._write_priority,
             )
             if success:
-                self._is_active = False
                 await self.coordinator.async_request_refresh()
 
         elif hvac_mode == HVACMode.HEAT:
@@ -199,4 +194,3 @@ class BACnetClimate(BACnetEntity, ClimateEntity):
             current = self.target_temperature
             if current is not None:
                 await self.async_set_temperature(temperature=current)
-            self._is_active = True
