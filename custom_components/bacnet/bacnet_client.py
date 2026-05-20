@@ -13,6 +13,7 @@ Responsibilities:
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 from typing import Any, Callable, Union
 
@@ -41,27 +42,9 @@ from .const import (
     OBJECT_TYPE_MULTI_STATE_OUTPUT,
     OBJECT_TYPE_MULTI_STATE_VALUE,
 )
+from .helpers import mask_address as _mask_address
 
 _LOGGER = logging.getLogger(__name__)
-
-
-def _mask_address(addr: str | object) -> str:
-    """Partially mask a network address for safe logging.
-
-    Replaces the middle octets of an IPv4 address with 'x' to avoid
-    logging full network addresses while retaining enough detail for
-    debugging (first and last octet plus port).
-    """
-    addr_str = str(addr)
-    if not addr_str:
-        return "<none>"
-    parts = addr_str.rsplit(":", 1)
-    ip_part = parts[0]
-    port_suffix = f":{parts[1]}" if len(parts) == 2 else ""
-    octets = ip_part.split(".")
-    if len(octets) == 4:
-        return f"{octets[0]}.x.x.{octets[3]}{port_suffix}"
-    return addr_str
 
 
 # BACnet object types we support importing as HA entities
@@ -113,11 +96,38 @@ class BACnetClient:
         self,
         local_ip: str = "",
         local_port: int = 47808,
+        device_instance: int | None = None,
     ) -> None:
         self._local_ip = local_ip
         self._local_port = local_port
+        # Use caller-supplied instance or derive one from the port.
+        # Range 3900000–4194302 is the high end of the BACnet instance space —
+        # unlikely to collide with real building automation devices.
+        self._device_instance = (
+            device_instance
+            if device_instance is not None
+            else self._derive_device_instance(local_ip, local_port)
+        )
         self._app: _AppType | None = None
         self._cov_tasks: dict[str, asyncio.Task] = {}
+        # Per-device RPM support cache: True = supported (or untested), False = rejected
+        self._rpm_supported: dict[str, bool] = {}
+
+    @staticmethod
+    def _derive_device_instance(local_ip: str, local_port: int) -> int:
+        """Derive a stable, unique device instance from the local address.
+
+        Uses SHA-256 (not Python's hash()) so the result is identical across
+        every process restart — Python's built-in hash() is randomised by
+        PYTHONHASHSEED and changes every time HA restarts.
+
+        Maps into 3900000–4194302, the high end of the BACnet instance space
+        that is unlikely to be used by real building automation devices.
+        """
+        seed = f"{local_ip}:{local_port}".encode()
+        digest = hashlib.sha256(seed).digest()
+        raw = int.from_bytes(digest[:4], "big")
+        return 3900000 + (raw % 294303)  # 3900000–4194302
 
     # ------------------------------------------------------------------
     # Connection lifecycle
@@ -131,7 +141,7 @@ class BACnetClient:
             local_addr = IPv4Address(f"0.0.0.0:{self._local_port}")
 
         device_object = DeviceObject(
-            objectIdentifier=("device", 999999),
+            objectIdentifier=("device", self._device_instance),
             objectName="HomeAssistant-BACnet",
             vendorIdentifier=0,
             maxApduLengthAccepted=1476,
@@ -628,9 +638,7 @@ class BACnetClient:
         # --- Strategy 2: array indexing (BACnet Clause 12.19) ----------------
         try:
             count_raw = await asyncio.wait_for(
-                self._app.read_property(
-                    addr, device_oid, "objectList", array_index=0
-                ),
+                self._app.read_property(addr, device_oid, "objectList", array_index=0),
                 timeout=10,
             )
             if isinstance(count_raw, ErrorRejectAbortNack):
@@ -929,28 +937,128 @@ class BACnetClient:
         oid = ObjectIdentifier((self._int_to_object_type_str(object_type), instance))
         return await self._safe_read(addr, oid, property_name)
 
-    async def read_multiple_properties(
+    async def poll_objects(
         self,
         device_address: str,
-        object_type: int,
-        instance: int,
+        objects: list[dict[str, Any]],
         property_names: list[str] | None = None,
-    ) -> dict[str, Any]:
-        """Read multiple properties from one object.
+    ) -> dict[str, dict[str, Any]]:
+        """Read properties for a batch of objects in one network round-trip.
 
-        Falls back to individual reads if ReadPropertyMultiple is not supported.
-        Values are coerced from BACpypes3 types to plain Python types.
+        Attempts ReadPropertyMultiple (RPM) first so all objects are fetched
+        in a single request.  Falls back to per-object reads if the device
+        rejects RPM (once rejected, individual reads are used for all future
+        polls of that device).
+
+        Returns dict keyed by "object_type:instance" → {property: value}.
         """
+        if self._app is None:
+            raise RuntimeError("Client not connected")
+
         if property_names is None:
             property_names = ["presentValue", "statusFlags"]
 
-        result: dict[str, Any] = {}
-        for prop in property_names:
-            value = await self.read_property(
-                device_address, object_type, instance, prop
+        if self._rpm_supported.get(device_address, True):
+            result = await self._try_rpm_poll(device_address, objects, property_names)
+            if result is not None:
+                return result
+
+        return await self._fallback_poll(device_address, objects, property_names)
+
+    async def _try_rpm_poll(
+        self,
+        device_address: str,
+        objects: list[dict[str, Any]],
+        property_names: list[str],
+    ) -> dict[str, dict[str, Any]] | None:
+        """Attempt one ReadPropertyMultiple request for all objects.
+
+        Returns the parsed result dict on success, or None if RPM failed so
+        the caller can fall back to individual reads.
+
+        Permanently marks the device as not supporting RPM when the device
+        sends an ``ErrorRejectAbortNack`` (service-not-supported).  Transient
+        failures (timeout, unexpected exceptions) return None without updating
+        the cache so the next poll retries RPM.
+        """
+        rpm_props = [self._CAMEL_TO_HYPHEN.get(p, p) for p in property_names]
+
+        # Build flat alternating list: [oid_str, [props], oid_str, [props], ...]
+        param_list: list = []
+        for obj in objects:
+            type_str = self._INT_TO_TYPE_STR.get(obj["object_type"])
+            if type_str is None:
+                continue
+            param_list.append(f"{type_str},{obj['instance']}")
+            param_list.append(rpm_props)
+
+        if not param_list:
+            return {}
+
+        addr = Address(device_address)
+        try:
+            results = await asyncio.wait_for(
+                self._app.read_property_multiple(addr, param_list),
+                timeout=30.0,
             )
-            result[prop] = self._coerce_value(value)
-        return result
+
+            data: dict[str, dict[str, Any]] = {}
+            for obj_id, prop_id, _arr_idx, value in results:
+                obj_type_int = self._object_type_str_to_int(str(obj_id[0]))
+                instance = int(obj_id[1])
+                if obj_type_int is None:
+                    continue
+                obj_key = f"{obj_type_int}:{instance}"
+                prop_camel = self._HYPHEN_TO_CAMEL.get(str(prop_id), str(prop_id))
+                # Per-property errors arrive as exception-like objects in the tuple
+                coerced = (
+                    None
+                    if isinstance(value, BaseException)
+                    else self._coerce_value(value)
+                )
+                data.setdefault(obj_key, {})[prop_camel] = coerced
+
+            _LOGGER.debug(
+                "RPM poll: %d objects from %s", len(data), _mask_address(device_address)
+            )
+            return data
+
+        except asyncio.TimeoutError:
+            _LOGGER.debug("RPM poll timed out for %s", _mask_address(device_address))
+            return None
+        except ErrorRejectAbortNack as exc:
+            _LOGGER.info(
+                "Device %s rejected ReadPropertyMultiple (%s) — "
+                "switching to individual reads for all future polls",
+                _mask_address(device_address),
+                exc,
+            )
+            self._rpm_supported[device_address] = False
+            return None
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.debug(
+                "RPM poll error for %s: %s", _mask_address(device_address), exc
+            )
+            return None
+
+    async def _fallback_poll(
+        self,
+        device_address: str,
+        objects: list[dict[str, Any]],
+        property_names: list[str],
+    ) -> dict[str, dict[str, Any]]:
+        """Read each object's properties individually (fallback when RPM is unavailable)."""
+        data: dict[str, dict[str, Any]] = {}
+        for obj in objects:
+            obj_key = f"{obj['object_type']}:{obj['instance']}"
+            obj_data: dict[str, Any] = {}
+            for prop in property_names:
+                value = await self.read_property(
+                    device_address, obj["object_type"], obj["instance"], prop
+                )
+                obj_data[prop] = self._coerce_value(value)
+            data[obj_key] = obj_data
+        return data
 
     # ------------------------------------------------------------------
     # Property write with Priority Array support
@@ -1113,28 +1221,53 @@ class BACnetClient:
         sub_key = f"{device_address}:{object_type}:{instance}"
         obj_key = f"{object_type}:{instance}"
 
+        # Event set by _cov_reader_task once the subscription context manager
+        # has entered (i.e. the device acknowledged the SubscribeCOV request).
+        # Also set on failure so subscribe_cov() is never left waiting forever.
+        ready_event: asyncio.Event = asyncio.Event()
+
         try:
             _LOGGER.debug(
                 "Subscribing to COV for %s:%d at %s", type_str, instance, device_address
             )
 
-            # change_of_value() returns a SubscriptionContextManager.
-            # We run it inside a long-lived task so the context stays open
-            # and the subscription is automatically renewed by BACpypes3.
             task = asyncio.create_task(
-                self._cov_reader_task(addr, oid, lifetime, sub_key, obj_key, callback)
+                self._cov_reader_task(
+                    addr, oid, lifetime, sub_key, obj_key, callback, ready_event
+                )
             )
             self._cov_tasks[sub_key] = task
 
-            # Give the task a moment to start and send the SubscribeCOV request.
-            # If the device rejects instantly we will know.
-            await asyncio.sleep(0.5)
+            # Wait for the subscription to be confirmed (or to fail) rather
+            # than sleeping a fixed 0.5 s.  BACpypes3 enters the async-with
+            # block only after the SubscribeCOV is acknowledged by the device,
+            # so ready_event being set means the subscription is truly active.
+            try:
+                await asyncio.wait_for(ready_event.wait(), timeout=10.0)
+            except asyncio.TimeoutError:
+                _LOGGER.warning(
+                    "COV subscription timed out for %s:%d at %s. Falling back to polling.",
+                    type_str,
+                    instance,
+                    device_address,
+                )
+                if not task.done():
+                    task.cancel()
+                    try:
+                        await task
+                    except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                        pass
+                self._cov_tasks.pop(sub_key, None)
+                return None
+
             if task.done():
-                exc = task.exception()
-                if exc:
-                    raise exc  # noqa: TRY301
-                # Task finished immediately without error - unlikely but handle it
-                _LOGGER.warning("COV task for %s ended immediately", sub_key)
+                # Task exited before or immediately after setting the event — failure
+                _LOGGER.warning(
+                    "COV subscription rejected for %s:%d at %s. Falling back to polling.",
+                    type_str,
+                    instance,
+                    device_address,
+                )
                 self._cov_tasks.pop(sub_key, None)
                 return None
 
@@ -1160,34 +1293,53 @@ class BACnetClient:
         sub_key: str,
         obj_key: str,
         callback: Callable[[str, dict[str, Any]], None],
+        ready_event: asyncio.Event,
     ) -> None:
         """Long-running task that reads from a COV subscription queue.
 
         Uses the BACpypes3 change_of_value() async context manager.
         The context manager handles subscription, renewal, and
         unsubscription automatically.
+
+        Sets *ready_event* as soon as the subscription context is entered
+        (device acknowledged) so subscribe_cov() can stop waiting.
+        Also sets it on failure so the caller is never left blocked.
+
+        Batches all property changes queued from a single notification
+        into one callback call by yielding briefly after the first value
+        and draining any immediately-available follow-up properties.
         """
         try:
-            scm = self._app.change_of_value(
-                addr,
-                oid,
-                lifetime=lifetime,
-            )
+            scm = self._app.change_of_value(addr, oid, lifetime=lifetime)
             async with scm:
+                ready_event.set()  # Subscription confirmed — unblock subscribe_cov()
                 while True:
+                    # Wait for the first property change from this notification
                     prop_id, value = await scm.get_value()
-                    prop_name = str(prop_id)
-                    coerced = self._coerce_value(value)
-                    _LOGGER.debug(
-                        "COV notification %s: %s = %s", sub_key, prop_name, coerced
-                    )
+                    changes: dict[str, Any] = {str(prop_id): self._coerce_value(value)}
+                    # Yield so the event loop can deliver any other properties
+                    # queued from the same ConfirmedCOVNotification, then drain
+                    # them — this produces one callback call per notification
+                    # instead of one per property.
+                    await asyncio.sleep(0)
                     try:
-                        callback(obj_key, {prop_name: coerced})
+                        while True:
+                            extra_id, extra_val = await asyncio.wait_for(
+                                scm.get_value(), timeout=0.05
+                            )
+                            changes[str(extra_id)] = self._coerce_value(extra_val)
+                    except asyncio.TimeoutError:
+                        pass
+                    _LOGGER.debug("COV notification %s: %s", sub_key, changes)
+                    try:
+                        callback(obj_key, changes)
                     except Exception:  # noqa: BLE001
                         _LOGGER.exception("Error in COV callback for %s", sub_key)
         except asyncio.CancelledError:
             _LOGGER.debug("COV task cancelled for %s", sub_key)
         except (ErrorRejectAbortNack, Exception):  # noqa: BLE001
+            if not ready_event.is_set():
+                ready_event.set()  # Unblock subscribe_cov() on failure
             _LOGGER.warning("COV task ended for %s", sub_key, exc_info=True)
 
     async def unsubscribe_cov(self, sub_key: str) -> None:
@@ -1216,18 +1368,27 @@ class BACnetClient:
 
     @staticmethod
     def _coerce_value(value: Any) -> Any:
-        """Convert a BACpypes3 value to a plain Python type for JSON storage."""
+        """Convert a BACpypes3 value to a plain Python type for JSON storage.
+
+        Order matters: check specific BACpypes3 types before falling back to
+        Python builtins, because some BACpypes3 types subclass list or int.
+        """
         if value is None:
             return None
-        if isinstance(value, (int, float, str, bool)):
-            return value
         if isinstance(value, Real):
             return float(value)
         if isinstance(value, Unsigned):
             return int(value)
         if isinstance(value, CharacterString):
             return str(value)
-        # Fallback
+        # BitString subclasses (e.g. StatusFlags) are list subclasses.
+        # str(StatusFlags([False,False,False,False])) returns '' — useless.
+        # Convert to a plain list of booleans so callers get [False,False,False,False].
+        if isinstance(value, list):
+            return [bool(x) for x in value]
+        if isinstance(value, (int, float, str, bool)):
+            return value
+        # Generic fallback
         return str(value)
 
     @staticmethod
@@ -1295,6 +1456,16 @@ class BACnetClient:
         "multi-state-output": OBJECT_TYPE_MULTI_STATE_OUTPUT,
         "multi-state-value": OBJECT_TYPE_MULTI_STATE_VALUE,
     }
+
+    # Property name conversions for ReadPropertyMultiple (RPM uses hyphenated names)
+    _CAMEL_TO_HYPHEN: dict[str, str] = {
+        "presentValue": "present-value",
+        "statusFlags": "status-flags",
+        "outOfService": "out-of-service",
+        "priorityArray": "priority-array",
+        "covIncrement": "cov-increment",
+    }
+    _HYPHEN_TO_CAMEL: dict[str, str] = {v: k for k, v in _CAMEL_TO_HYPHEN.items()}
 
     # Use hyphenated names for BACpypes3 ObjectIdentifier construction
     # (matching ASHRAE 135 and BACpypes3's native convention)
