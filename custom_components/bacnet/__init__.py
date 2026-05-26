@@ -20,6 +20,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers import entity_registry as er
 
 from .const import (
     CONF_BBMD_ADDRESS,
@@ -110,6 +111,93 @@ def _get_platforms_in_use(
     for obj in objects:
         domains_needed.add(_domain_for_object(obj, domain_overrides))
     return [Platform(d) for d in domains_needed if d in {p.value for p in PLATFORMS}]
+
+
+# ---------------------------------------------------------------------------
+# Entity registry migration
+# ---------------------------------------------------------------------------
+
+
+def _migrate_unique_ids(
+    hass: HomeAssistant, entry: ConfigEntry, device_id: int | None
+) -> None:
+    """Migrate entity unique_ids from the 1.0.17 format to the 1.0.18+ format.
+
+    In ≤1.0.17 the unique_id was:
+        ``{entry.entry_id}_{object_type}_{instance}``
+
+    In ≥1.0.18 it is:
+        ``{DOMAIN}_{device_id}_{object_type}_{instance}``
+
+    Using the BACnet device_id instead of the config-entry id makes unique_ids
+    survive a remove-and-re-add of the integration.  However the format change
+    itself was a regression: users who renamed entity IDs lost those names on
+    update.  This migration repairs that.
+
+    Two cases are handled:
+
+    Case A — user is upgrading from 1.0.17 (old entry, no new entry yet):
+        Rename the old unique_id → new unique_id so that when the platform
+        creates the entity with the new unique_id it finds the existing entry
+        and preserves the customised entity_id.
+
+    Case B — user already updated to 1.0.18 (both old orphaned entry AND new
+        active entry exist):
+        If the orphaned entry had a different entity_id (i.e. the user had
+        renamed it), apply that entity_id to the active new entry then remove
+        the orphaned entry.
+    """
+    if device_id is None:
+        return
+
+    ent_reg = er.async_get(hass)
+    old_prefix = f"{entry.entry_id}_"
+    new_prefix = f"{DOMAIN}_{device_id}_"
+
+    for entity_entry in er.async_entries_for_config_entry(ent_reg, entry.entry_id):
+        uid = entity_entry.unique_id
+        if not uid.startswith(old_prefix):
+            continue
+
+        suffix = uid[len(old_prefix):]
+        new_uid = f"{new_prefix}{suffix}"
+
+        # Does a new-format entry already exist?
+        existing_entity_id = ent_reg.async_get_entity_id(
+            entity_entry.domain, DOMAIN, new_uid
+        )
+
+        if existing_entity_id is None:
+            # Case A: no new-format entry yet — just rename.
+            ent_reg.async_update_entity(
+                entity_entry.entity_id, new_unique_id=new_uid
+            )
+            _LOGGER.debug(
+                "Migrated entity unique_id %s → %s", uid, new_uid
+            )
+        else:
+            # Case B: new-format entry already exists.
+            # If the old entry had a customised entity_id, apply it to the
+            # new entry (remove old first to free the entity_id name).
+            old_entity_id = entity_entry.entity_id
+            ent_reg.async_remove(old_entity_id)
+
+            if old_entity_id != existing_entity_id:
+                try:
+                    ent_reg.async_update_entity(
+                        existing_entity_id, new_entity_id=old_entity_id
+                    )
+                    _LOGGER.debug(
+                        "Restored custom entity_id %s on %s (migration)",
+                        old_entity_id,
+                        new_uid,
+                    )
+                except Exception:  # noqa: BLE001
+                    _LOGGER.debug(
+                        "Could not restore entity_id %s → %s (skipping)",
+                        old_entity_id,
+                        new_uid,
+                    )
 
 
 # ---------------------------------------------------------------------------
@@ -222,11 +310,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         DATA_UNSUB: [],
     }
 
-    # ---- 6. Forward to platforms ----
+    # ---- 6. Migrate legacy unique_ids (1.0.17 → 1.0.18+ format) ----
+    # Must run before platforms load so entities find the migrated registry entries.
+    _migrate_unique_ids(hass, entry, entry.data.get("device_id"))
+
+    # ---- 7. Forward to platforms ----
     needed_platforms = _get_platforms_in_use(selected_objects, domain_overrides)
     await hass.config_entries.async_forward_entry_setups(entry, needed_platforms)
 
-    # ---- 7. Listen for option changes ----
+    # ---- 8. Listen for option changes ----
     unsub = entry.add_update_listener(_async_options_updated)
     hass.data[DOMAIN][entry.entry_id][DATA_UNSUB].append(unsub)
 
