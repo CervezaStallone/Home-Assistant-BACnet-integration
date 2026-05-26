@@ -159,7 +159,7 @@ def _migrate_unique_ids(
         if not uid.startswith(old_prefix):
             continue
 
-        suffix = uid[len(old_prefix):]
+        suffix = uid[len(old_prefix) :]
         new_uid = f"{new_prefix}{suffix}"
 
         # Does a new-format entry already exist?
@@ -169,12 +169,8 @@ def _migrate_unique_ids(
 
         if existing_entity_id is None:
             # Case A: no new-format entry yet — just rename.
-            ent_reg.async_update_entity(
-                entity_entry.entity_id, new_unique_id=new_uid
-            )
-            _LOGGER.debug(
-                "Migrated entity unique_id %s → %s", uid, new_uid
-            )
+            ent_reg.async_update_entity(entity_entry.entity_id, new_unique_id=new_uid)
+            _LOGGER.debug("Migrated entity unique_id %s → %s", uid, new_uid)
         else:
             # Case B: new-format entry already exists.
             # If the old entry had a customised entity_id, apply it to the
