@@ -1358,7 +1358,9 @@ class BACnetClient:
                     exc,
                 )
             else:
-                _LOGGER.warning("COV task ended unexpectedly for %s", sub_key, exc_info=True)
+                _LOGGER.warning(
+                    "COV task ended unexpectedly for %s", sub_key, exc_info=True
+                )
 
     async def unsubscribe_cov(self, sub_key: str) -> None:
         """Cancel a COV subscription by cancelling its reader task.
