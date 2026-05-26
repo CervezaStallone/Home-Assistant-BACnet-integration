@@ -1337,10 +1337,28 @@ class BACnetClient:
                         _LOGGER.exception("Error in COV callback for %s", sub_key)
         except asyncio.CancelledError:
             _LOGGER.debug("COV task cancelled for %s", sub_key)
-        except (ErrorRejectAbortNack, Exception):  # noqa: BLE001
+        except (ErrorRejectAbortNack, Exception) as exc:  # noqa: BLE001
             if not ready_event.is_set():
                 ready_event.set()  # Unblock subscribe_cov() on failure
-            _LOGGER.warning("COV task ended for %s", sub_key, exc_info=True)
+            # Clean up stale task reference (handles mid-run / renewal failures)
+            self._cov_tasks.pop(sub_key, None)
+            # Known device-capability rejections are expected — log quietly.
+            # Full tracebacks are only useful for unexpected errors.
+            _KNOWN_COV_REJECTIONS = (
+                "optional-functionality-not-supported",
+                "object-unknown",
+                "no-space-to-add-list-element",
+                "inconsistent-parameters",
+            )
+            exc_str = str(exc).lower()
+            if any(r in exc_str for r in _KNOWN_COV_REJECTIONS):
+                _LOGGER.debug(
+                    "COV not supported by device for %s (falling back to polling): %s",
+                    sub_key,
+                    exc,
+                )
+            else:
+                _LOGGER.warning("COV task ended unexpectedly for %s", sub_key, exc_info=True)
 
     async def unsubscribe_cov(self, sub_key: str) -> None:
         """Cancel a COV subscription by cancelling its reader task.
