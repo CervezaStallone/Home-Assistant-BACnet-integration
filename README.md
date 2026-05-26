@@ -1,4 +1,4 @@
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=CervezaStallone&repository=Home-Assistant-BACnet-intergration&category=integration)
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=CervezaStallone&repository=Home-Assistant-BACnet-integration&category=integration)
 
 <p align="center">
   <img src="img/logo.png" alt="BACnet IP Integration" width="256">
@@ -132,7 +132,7 @@ Every entity exposes additional BACnet metadata as state attributes:
 | `bacnet_object_type` | BACnet object type name (e.g. "Analog Input") |
 | `bacnet_instance` | BACnet object instance number |
 | `bacnet_commandable` | Whether this object supports writes |
-| `bacnet_units` | Engineering units (e.g. "degreesCelsius") |
+| `bacnet_units` | Engineering units (e.g. "degrees-celsius") |
 | `bacnet_description` | BACnet description property |
 | `bacnet_status_flags` | BACnet status flags array |
 | `bacnet_update_method` | How this entity is updated: `COV` or `polling` |
