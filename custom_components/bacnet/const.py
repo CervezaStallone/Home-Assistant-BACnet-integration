@@ -42,6 +42,10 @@ CONF_COV_INCREMENT = "cov_increment"
 # Domain mapping
 CONF_DOMAIN_MAPPING = "domain_mapping"
 
+# Per-object COV override (obj_key -> bool). Objects with no entry fall back
+# to the device-wide CONF_ENABLE_COV value.
+CONF_COV_OVERRIDES = "cov_overrides"
+
 # ---------------------------------------------------------------------------
 # Defaults
 # ---------------------------------------------------------------------------
