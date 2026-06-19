@@ -4,6 +4,7 @@ Options flow for BACnet IP integration.
 Provides two configuration steps accessible from the integration's "Configure" button:
   Step 1 (init)           – COV toggle, polling fallback interval, naming toggle
   Step 2 (domain_mapping) – Per-object HA domain override (sensor/switch/number/climate/…)
+                             and per-object COV enable/disable override
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from homeassistant.data_entry_flow import FlowResult
 
 from .const import (
     CONF_COV_INCREMENT,
+    CONF_COV_OVERRIDES,
     CONF_DOMAIN_MAPPING,
     CONF_ENABLE_COV,
     CONF_POLLING_INTERVAL,
@@ -121,22 +123,35 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
         if user_input is not None:
             # Build the domain mapping dict from form values
             domain_mapping: dict[str, str] = {}
+            cov_overrides: dict[str, bool] = {}
             for obj in selected_objects:
                 obj_key = f"{obj['object_type']}:{obj['instance']}"
-                field_key = f"domain_{obj_key}"
-                if field_key in user_input:
-                    domain_mapping[obj_key] = user_input[field_key]
+                domain_field_key = f"domain_{obj_key}"
+                if domain_field_key in user_input:
+                    domain_mapping[obj_key] = user_input[domain_field_key]
+
+                cov_field_key = f"cov_{obj_key}"
+                if cov_field_key in user_input:
+                    cov_overrides[obj_key] = user_input[cov_field_key]
 
             # Store in options and create entry
             final_options = {
                 **self._options_so_far,
                 CONF_DOMAIN_MAPPING: domain_mapping,
+                CONF_COV_OVERRIDES: cov_overrides,
             }
             return self.async_create_entry(title="", data=final_options)
 
-        # --- Build the form: one dropdown per BACnet object ---
+        # --- Build the form: one dropdown + one COV checkbox per BACnet object ---
         current_mapping: dict[str, str] = self._config_entry.options.get(
             CONF_DOMAIN_MAPPING, {}
+        )
+        current_cov_overrides: dict[str, bool] = self._config_entry.options.get(
+            CONF_COV_OVERRIDES, {}
+        )
+        global_cov_default = self._options_so_far.get(
+            CONF_ENABLE_COV,
+            self._config_entry.options.get(CONF_ENABLE_COV, DEFAULT_ENABLE_COV),
         )
 
         schema_fields: dict[Any, Any] = {}
@@ -148,14 +163,20 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
                 obj_key, DEFAULT_DOMAIN_MAP.get(obj["object_type"], "sensor")
             )
 
-            field_key = f"domain_{obj_key}"
+            domain_field_key = f"domain_{obj_key}"
             schema_fields[
                 vol.Optional(
-                    field_key,
+                    domain_field_key,
                     default=current_domain,
                     description={"suggested_value": current_domain},
                 )
             ] = vol.In({d: d for d in SUPPORTED_DOMAINS})
+
+            # Current COV state: per-object override → device-wide default
+            current_cov = current_cov_overrides.get(obj_key, global_cov_default)
+
+            cov_field_key = f"cov_{obj_key}"
+            schema_fields[vol.Optional(cov_field_key, default=current_cov)] = bool
 
         schema = vol.Schema(schema_fields)
 
