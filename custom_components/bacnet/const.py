@@ -52,6 +52,15 @@ DEFAULT_ENABLE_COV = True
 DEFAULT_USE_DESCRIPTION = False
 DEFAULT_COV_INCREMENT = 0.1  # default COV increment for analog objects
 
+# Resilience thresholds for outage recovery (issue #18).
+# After MAX_SILENT_FAILURES consecutive failed polls, raise UpdateFailed so HA
+# surfaces the outage and applies its native backoff.  After RECONNECT_THRESHOLD
+# consecutive failures, the underlying BACnetClient is reconnected (re-binds the
+# UDP socket and re-registers with the BBMD, which is needed when the foreign
+# device registration TTL has expired during a network outage).
+MAX_SILENT_FAILURES = 3
+RECONNECT_THRESHOLD = 10
+
 # ---------------------------------------------------------------------------
 # BACnet object type IDs  (from ASHRAE 135)
 # ---------------------------------------------------------------------------

@@ -19,7 +19,7 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .bacnet_client import BACnetClient
 from .const import (
@@ -29,11 +29,13 @@ from .const import (
     DEFAULT_POLLING_INTERVAL,
     DEFAULT_USE_DESCRIPTION,
     DOMAIN,
+    MAX_SILENT_FAILURES,
     OBJECT_TYPE_ANALOG_INPUT,
     OBJECT_TYPE_ANALOG_OUTPUT,
     OBJECT_TYPE_ANALOG_VALUE,
     OBJECT_TYPE_BINARY_VALUE,
     OBJECT_TYPE_MULTI_STATE_VALUE,
+    RECONNECT_THRESHOLD,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -93,6 +95,16 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._cov_subscriptions: dict[str, str] = {}  # obj_key → sub_key
         self._polled_objects: list[dict[str, Any]] = []
 
+        # Outage-recovery state (issue #18).
+        # _consecutive_failures counts polls in a row that returned no usable
+        # data.  At MAX_SILENT_FAILURES we raise UpdateFailed so HA surfaces
+        # the outage + applies native backoff.  At RECONNECT_THRESHOLD we
+        # additionally reconnect the underlying BACnetClient once (re-registers
+        # with the BBMD whose TTL has expired).  _needs_resubscribe is set
+        # after a reconnect so the next successful poll re-creates COV subs.
+        self._consecutive_failures: int = 0
+        self._needs_resubscribe: bool = False
+
         # Device address for reads/writes (from config entry data)
         self.device_address: str = ""
         if entry is not None:
@@ -121,8 +133,20 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         always refreshed — even when a device accepts a COV subscription
         but never actually sends notifications.
 
+        Outage recovery (issue #18): if every object fails to return a real
+        presentValue for MAX_SILENT_FAILURES polls in a row, raise
+        UpdateFailed so HA surfaces the outage and applies native backoff.
+        At RECONNECT_THRESHOLD consecutive failures, additionally reconnect
+        the underlying BACnetClient once (re-registers with the BBMD whose
+        TTL has expired).  After a successful poll following a reconnect,
+        COV subscriptions are re-created.
+
         Returns:
             Dict keyed by "object_type:instance" → {property: value}.
+
+        Raises:
+            UpdateFailed: when the device has been unreachable for
+                          MAX_SILENT_FAILURES consecutive polls.
         """
         # Use existing data as base (COV may have already pushed updates)
         data: dict[str, Any] = dict(self.data) if self.data else {}
@@ -147,12 +171,93 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             data.update(polled)
         except Exception as exc:  # noqa: BLE001
             _LOGGER.warning("Batch poll failed: %s — keeping stale data", exc)
+            polled = None
             for obj in self.objects:
                 obj_key = f"{obj['object_type']}:{obj['instance']}"
                 if obj_key not in data:
                     data[obj_key] = {"presentValue": None, "statusFlags": None}
 
+        # --- Outage detection -------------------------------------------------
+        # A poll is "successful" if at least one object returned a non-None
+        # presentValue.  Empty / all-None results mean the device is not
+        # responding — even when poll_objects() returned without raising,
+        # BACpypes3 timeouts surface as None values rather than exceptions.
+        if self._poll_yielded_data(polled):
+            self._consecutive_failures = 0
+            # After a reconnect, rebuild COV subscriptions once the device is
+            # confirmed reachable again.
+            if self._needs_resubscribe:
+                await self._restore_subscriptions()
+        else:
+            await self._handle_poll_failure()
+
         return data
+
+    @staticmethod
+    def _poll_yielded_data(
+        polled: dict[str, dict[str, Any]] | None,
+    ) -> bool:
+        """Return True if at least one object returned a real presentValue."""
+        if not polled:
+            return False
+        for obj_data in polled.values():
+            if obj_data.get("presentValue") is not None:
+                return True
+        return False
+
+    async def _handle_poll_failure(self) -> None:
+        """Account for one failed poll and trigger recovery if needed.
+
+        - Below MAX_SILENT_FAILURES: keep stale data (avoids flapping on
+          brief network blips) and return normally.
+        - At/above MAX_SILENT_FAILURES: raise UpdateFailed so HA surfaces
+          the outage and applies native backoff.
+        - At exactly RECONNECT_THRESHOLD: reconnect the BACnetClient once
+          (re-registers with the BBMD after TTL expiry).
+        """
+        self._consecutive_failures += 1
+        failures = self._consecutive_failures
+        _LOGGER.warning(
+            "BACnet device %s unresponsive (%d consecutive failed polls)",
+            self.device_address or "(no address)",
+            failures,
+        )
+
+        if failures == RECONNECT_THRESHOLD:
+            _LOGGER.warning(
+                "Attempting BACnet client reconnect after %d failed polls",
+                failures,
+            )
+            try:
+                await self.client.reconnect()
+                self._needs_resubscribe = True
+                _LOGGER.info(
+                    "BACnet client reconnected — next poll will resubscribe COV"
+                )
+            except Exception as exc:  # noqa: BLE001
+                _LOGGER.error("BACnet client reconnect failed: %s", exc)
+
+        if failures >= MAX_SILENT_FAILURES:
+            raise UpdateFailed(
+                f"BACnet device {self.device_address or '(no address)'} not "
+                f"responding ({failures} consecutive failed polls)"
+            )
+
+    async def _restore_subscriptions(self) -> None:
+        """Re-create COV subscriptions after a reconnect.
+
+        The previous _cov_subscriptions mapping references sub_keys whose
+        reader tasks died during the outage, so we clear both bookkeeping
+        dicts and re-run _setup_subscriptions() which re-subscribes COV
+        where possible and rebuilds the polling fallback list.
+        """
+        _LOGGER.info("Restoring COV subscriptions after reconnect")
+        # Cancel any lingering sub keys (tasks are already dead post-reconnect
+        # but clearing the mapping ensures a clean rebuild).
+        self._cov_subscriptions.clear()
+        self._polled_objects.clear()
+        await self._setup_subscriptions()
+        self._needs_resubscribe = False
 
     # ------------------------------------------------------------------
     # COV subscription management
