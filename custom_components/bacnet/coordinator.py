@@ -66,6 +66,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         polling_interval: int = DEFAULT_POLLING_INTERVAL,
         use_description: bool = DEFAULT_USE_DESCRIPTION,
         domain_overrides: dict[str, str] | None = None,
+        cov_overrides: dict[str, bool] | None = None,
         entry: ConfigEntry | None = None,
         cov_increment: float = DEFAULT_COV_INCREMENT,
     ) -> None:
@@ -79,6 +80,8 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             polling_interval: Fallback polling interval in seconds.
             use_description: If True, use description (prop 28) for entity names.
             domain_overrides: Per-object HA domain overrides from options flow.
+            cov_overrides: Per-object COV enable/disable overrides from options
+                flow. Objects with no entry fall back to `enable_cov`.
             entry: The ConfigEntry for accessing device addressing info.
             cov_increment: COV increment for analog objects (0.0 = device default).
         """
@@ -88,6 +91,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.polling_interval = polling_interval
         self.use_description = use_description
         self.domain_overrides = domain_overrides or {}
+        self.cov_overrides = cov_overrides or {}
         self.entry = entry
         self.cov_increment = cov_increment
 
@@ -276,8 +280,9 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         for obj in self.objects:
             obj_key = f"{obj['object_type']}:{obj['instance']}"
+            cov_for_object = self.cov_overrides.get(obj_key, self.enable_cov)
 
-            if self.enable_cov:
+            if cov_for_object:
                 # For analog objects, write the covIncrement to the device
                 # before subscribing so the device uses the user's threshold.
                 if self.cov_increment > 0 and obj["object_type"] in self._ANALOG_TYPES:
@@ -313,7 +318,8 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     _LOGGER.debug("COV active for %s", obj_key)
                     continue
 
-            # COV disabled or failed — add to polling list
+            # COV disabled (globally or via per-object override) or failed —
+            # add to polling list
             self._polled_objects.append(obj)
             _LOGGER.debug("Polling fallback for %s", obj_key)
 
