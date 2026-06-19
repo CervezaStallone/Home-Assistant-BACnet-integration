@@ -112,6 +112,13 @@ class BACnetClient:
         self._cov_tasks: dict[str, asyncio.Task] = {}
         # Per-device RPM support cache: True = supported (or untested), False = rejected
         self._rpm_supported: dict[str, bool] = {}
+        # Last successful connect() parameters — used by reconnect() to
+        # re-register with the BBMD after a network outage (issue #18).
+        # BBMD foreign device registration has a TTL (default 900s); once it
+        # expires during an outage, the BBMD stops forwarding packets to us
+        # until we re-register with the same parameters.
+        self._last_bbmd_address: str | None = None
+        self._last_bbmd_ttl: int = 900
 
     @staticmethod
     def _derive_device_instance(local_ip: str, local_port: int) -> int:
@@ -171,6 +178,11 @@ class BACnetClient:
             bbmd_ttl: Time-to-live for foreign device registration (seconds).
         """
         device_object, local_addr = self._build_app_args()
+
+        # Persist connect parameters so reconnect() can re-register with the
+        # BBMD using identical settings after an outage (issue #18).
+        self._last_bbmd_address = bbmd_address
+        self._last_bbmd_ttl = bbmd_ttl
 
         if bbmd_address:
             _LOGGER.debug(
@@ -273,6 +285,29 @@ class BACnetClient:
                 "UDP transport is None after awaiting tasks — "
                 "network communication will likely fail"
             )
+
+    async def reconnect(self) -> None:
+        """Tear down and re-establish the network connection.
+
+        Reuses the parameters from the last successful ``connect()`` call so
+        the BBMD foreign-device registration is re-issued with the same
+        address and TTL.  This is required after a network outage longer
+        than the BBMD TTL (default 900 s), because the BBMD drops the
+        registration once it expires and stops forwarding packets until we
+        re-register (issue #18).
+
+        Safe to call even when already disconnected — ``disconnect()``
+        tolerates a missing ``_app``.
+        """
+        bbmd_address = self._last_bbmd_address
+        bbmd_ttl = self._last_bbmd_ttl
+        _LOGGER.info(
+            "Reconnecting BACnet client (bbmd=%s, ttl=%s)",
+            _mask_address(bbmd_address) if bbmd_address else "none",
+            bbmd_ttl,
+        )
+        await self.disconnect()
+        await self.connect(bbmd_address=bbmd_address, bbmd_ttl=bbmd_ttl)
 
     async def disconnect(self) -> None:
         """Shut down the BACpypes3 application and release the UDP socket."""

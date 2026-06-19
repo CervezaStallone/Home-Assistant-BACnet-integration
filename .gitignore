@@ -1,21 +1,10 @@
-# Tests and dev tooling
-tests/
-TESTING.md
-pyproject.toml
-uv.lock
-
-# Release notes
-rl_*
-
-# Virtual BACnet device (test tool, not part of the integration)
-BACnet virtual device/
-
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.egg-info/
 *.egg
+*.so
 dist/
 build/
 .eggs/
@@ -25,24 +14,81 @@ build/
 venv/
 env/
 
-
-# pytest
+# Test / coverage / type-check artifacts
 .pytest_cache/
 .coverage
+.coverage.*
 htmlcov/
+coverage.xml
+.tox/
+.mypy_cache/
+.dmypy.json
+dmypy.json
 
-# IDE
+# Tooling caches
+.ruff_cache/
+
+# uv lock — kept local (near-empty, not used by CI)
+uv.lock
+
+# Local-only reference material (large PDFs, internal notes)
+docs/
+
+# AI tools & agent instruction files (local-only, never ship)
+# Instruction / memory files
+AGENTS.md
+AGENT.md
+CLAUDE.md
+CLAUDE.local.md
+GEMINI.md
+gemini.md
+.cursorrules
+.cursorignore
+# Tool local configs and directories
+.claude/
+.opencode/
+opencode.json
+opencode.jsonc
+.cursor/
+.github/copilot-instructions.md
+.github/copilot/
+.aider
+.aider.*
+.aider/
+.continue/
+.continueconfig
+.codeium*
+.tabnine*
+.gemini/
+.anthropic/
+.openai/
+.gpteng/
+.sourcegraph/
+.sourcery/
+.llm/
+
+# IDE / editors
 .idea/
 .vscode/
 *.swp
 *.swo
 *~
 
-# OS
+# OS junk
 .DS_Store
 Thumbs.db
+desktop.ini
 
-docs/
-.claude
-CLAUDE.md
-.ruff_cache
+# Logs / temp / backups
+*.log
+*.bak
+*.tmp
+*.orig
+
+# Environment / secrets
+.env
+.env.*
+
+# MemPalace per-project files (issue #185)
+mempalace.yaml
+entities.json
