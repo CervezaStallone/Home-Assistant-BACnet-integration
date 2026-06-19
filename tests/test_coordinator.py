@@ -18,7 +18,9 @@ from custom_components.bacnet.const import (
 from custom_components.bacnet.coordinator import BACnetCoordinator
 
 
-def _make_coordinator(objects=None, domain_overrides=None):
+def _make_coordinator(
+    objects=None, domain_overrides=None, cov_overrides=None, enable_cov=True
+):
     """Return a BACnetCoordinator with mocked dependencies."""
     from unittest.mock import MagicMock
 
@@ -32,6 +34,8 @@ def _make_coordinator(objects=None, domain_overrides=None):
         client=client,
         objects=objects or [],
         domain_overrides=domain_overrides or {},
+        cov_overrides=cov_overrides or {},
+        enable_cov=enable_cov,
         entry=entry,
     )
     return coord
@@ -405,3 +409,80 @@ class TestRestoreSubscriptions:
 
         # first_run triggers setup exactly once; restore path did not.
         assert called["count"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Per-object COV override
+# ---------------------------------------------------------------------------
+
+
+class TestCovOverrides:
+    def test_override_false_skips_subscribe_even_if_global_enabled(self):
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        coord = _make_coordinator(
+            objects=[{"object_type": 0, "instance": 1}],
+            enable_cov=True,
+            cov_overrides={"0:1": False},
+        )
+        coord.client.subscribe_cov = AsyncMock(return_value="sub_key")
+
+        asyncio.run(coord._setup_subscriptions())
+
+        coord.client.subscribe_cov.assert_not_awaited()
+        assert "0:1" not in coord._cov_subscriptions
+        assert coord._polled_objects == [{"object_type": 0, "instance": 1}]
+
+    def test_override_true_subscribes_even_if_global_disabled(self):
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        coord = _make_coordinator(
+            objects=[{"object_type": 0, "instance": 1}],
+            enable_cov=False,
+            cov_overrides={"0:1": True},
+        )
+        coord.client.subscribe_cov = AsyncMock(return_value="sub_key")
+
+        asyncio.run(coord._setup_subscriptions())
+
+        coord.client.subscribe_cov.assert_awaited_once()
+        assert coord._cov_subscriptions["0:1"] == "sub_key"
+
+    def test_no_override_falls_back_to_global_flag(self):
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        coord = _make_coordinator(
+            objects=[{"object_type": 0, "instance": 1}],
+            enable_cov=False,
+            cov_overrides={},
+        )
+        coord.client.subscribe_cov = AsyncMock(return_value="sub_key")
+
+        asyncio.run(coord._setup_subscriptions())
+
+        coord.client.subscribe_cov.assert_not_awaited()
+        assert coord._polled_objects == [{"object_type": 0, "instance": 1}]
+
+    def test_mixed_overrides_per_object(self):
+        """Two objects, opposite overrides, both diverging from the global flag."""
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        coord = _make_coordinator(
+            objects=[
+                {"object_type": 0, "instance": 1},
+                {"object_type": 0, "instance": 2},
+            ],
+            enable_cov=True,
+            cov_overrides={"0:1": False, "0:2": True},
+        )
+        coord.client.subscribe_cov = AsyncMock(return_value="sub_key")
+
+        asyncio.run(coord._setup_subscriptions())
+
+        assert "0:1" not in coord._cov_subscriptions
+        assert coord._cov_subscriptions["0:2"] == "sub_key"
+        assert coord._polled_objects == [{"object_type": 0, "instance": 1}]
