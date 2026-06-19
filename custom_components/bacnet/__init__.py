@@ -26,6 +26,7 @@ from .const import (
     CONF_BBMD_ADDRESS,
     CONF_BBMD_TTL,
     CONF_COV_INCREMENT,
+    CONF_COV_OVERRIDES,
     CONF_DOMAIN_MAPPING,
     CONF_ENABLE_COV,
     CONF_FIRMWARE_VERSION,
@@ -237,6 +238,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         CONF_USE_DESCRIPTION, DEFAULT_USE_DESCRIPTION
     )
     domain_overrides: dict[str, str] = entry.options.get(CONF_DOMAIN_MAPPING, {})
+    cov_overrides: dict[str, bool] = entry.options.get(CONF_COV_OVERRIDES, {})
     cov_increment: float = entry.options.get(CONF_COV_INCREMENT, DEFAULT_COV_INCREMENT)
 
     # ---- 2. Get or create a shared BACnet client for this port ----
@@ -282,6 +284,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         polling_interval=polling_interval,
         use_description=use_description,
         domain_overrides=domain_overrides,
+        cov_overrides=cov_overrides,
         entry=entry,
         cov_increment=cov_increment,
     )
