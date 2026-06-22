@@ -4,10 +4,10 @@
   "codeowners": [],
   "config_flow": true,
   "dependencies": [],
-  "documentation": "https://github.com/CervezaStallone/Home-Assistant-BACnet-intergration",
+  "documentation": "https://github.com/CervezaStallone/Home-Assistant-BACnet-integration",
   "integration_type": "hub",
   "iot_class": "local_polling",
-  "issue_tracker": "https://github.com/CervezaStallone/Home-Assistant-BACnet-intergration/issues",
+  "issue_tracker": "https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/issues",
   "requirements": ["BACpypes3==0.0.99"],
   "version": "1.0.20"
 }
