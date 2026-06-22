@@ -118,6 +118,7 @@ After setup, click **Configure** on the integration card to adjust:
 | **Polling interval** | How often to poll objects without COV support (in seconds) | `30` |
 | **Use description** | Show BACnet `description` (property 28) instead of `objectName` as entity name | Off |
 | **Domain mapping** | Change the HA entity type per object (e.g. sensor → number, switch → binary_sensor) | Auto |
+| **Per-object COV override** | Override **Enable COV** for an individual object — shown as a checkbox next to its domain mapping. Objects with no override use the device-wide **Enable COV** setting. | Follows **Enable COV** |
 
 Changes take effect immediately — the integration reloads automatically.
 
