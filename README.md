@@ -1,8 +1,5 @@
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=CervezaStallone&repository=Home-Assistant-BACnet-integration&category=integration)
-
 <p align="center">
   <img src="img/logo.png" alt="BACnet IP Integration" width="256">
-</p>
 
 <h1 align="center">BACnet IP Integration for Home Assistant</h1>
 
@@ -20,6 +17,12 @@
 <a href="buymeacoffee.com/Cervezastalone" target="_blank" title="buymeacoffee">
   <img src="https://iili.io/JoQ1MeS.md.png"  alt="buymeacoffee-yellow-badge" style="width: 208px;">
 </a>
+
+<br>
+<br>
+
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=CervezaStallone&repository=Home-Assistant-BACnet-integration&category=integration)
+</p>
 
 ## What does this integration do?
 
