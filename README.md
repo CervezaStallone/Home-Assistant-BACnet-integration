@@ -17,6 +17,10 @@
 
 ---
 
+<a href="buymeacoffee.com/Cervezastalone" target="_blank" title="buymeacoffee">
+  <img src="https://iili.io/JoQ1MeS.md.png"  alt="buymeacoffee-yellow-badge" style="width: 208px;">
+</a>
+
 ## What does this integration do?
 
 This custom integration lets Home Assistant talk to **BACnet/IP** devices — the protocol used in professional building automation for HVAC, lighting, access control, and energy management.
