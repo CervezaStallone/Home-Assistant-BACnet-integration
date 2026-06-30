@@ -8,7 +8,6 @@ When enabled, the user can change the BACnet write priority used by all writable
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
