@@ -36,7 +36,6 @@ from .const import (
     DATA_CLIENT,
     DATA_COORDINATOR,
     DATA_OBJECTS,
-    DEFAULT_WRITE_PRIORITY,
     DOMAIN,
 )
 from .bacnet_client import BACnetClient
@@ -96,7 +95,6 @@ class BACnetClimate(BACnetEntity, ClimateEntity):
         obj: dict[str, Any],
     ) -> None:
         super().__init__(coordinator, entry, obj)
-        self._write_priority = DEFAULT_WRITE_PRIORITY
 
         # Determine temperature unit from BACnet engineering units
         units = obj.get("units", "")
@@ -164,7 +162,7 @@ class BACnetClimate(BACnetEntity, ClimateEntity):
             instance=self._instance,
             property_name="presentValue",
             value=float(temperature),
-            priority=self._write_priority,
+            priority=self.coordinator.write_priority,
         )
         if success:
             await self.coordinator.async_request_refresh()
@@ -184,7 +182,7 @@ class BACnetClimate(BACnetEntity, ClimateEntity):
                 device_address=self.coordinator.device_address,
                 object_type=self._object_type,
                 instance=self._instance,
-                priority=self._write_priority,
+                priority=self.coordinator.write_priority,
             )
             if success:
                 await self.coordinator.async_request_refresh()

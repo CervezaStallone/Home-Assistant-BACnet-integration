@@ -62,6 +62,23 @@
       "reconfigure_successful": "Reconfiguration was successful."
     }
   },
+  "entity": {
+    "select": {
+      "write_priority": {
+        "name": "Write Priority",
+        "state": {
+          "8": "8 – Manual Operator",
+          "9": "9",
+          "12": "12",
+          "13": "13",
+          "14": "14",
+          "15": "15",
+          "16": "16 – Default (Lowest)",
+          "17": "17"
+        }
+      }
+    }
+  },
   "options": {
     "step": {
       "init": {

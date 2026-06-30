@@ -135,6 +135,8 @@ PROP_POLARITY = 84
 # Priority levels for BACnet writes (1-16, lower = higher priority)
 # ---------------------------------------------------------------------------
 DEFAULT_WRITE_PRIORITY = 16  # Lowest priority — safe default
+CONF_WRITE_PRIORITY = "write_priority"
+WRITE_PRIORITY_OPTIONS: list[int] = [8, 9, 12, 13, 14, 15, 16, 17]
 
 # ---------------------------------------------------------------------------
 # Data keys stored in hass.data[DOMAIN][entry_id]
