@@ -47,6 +47,8 @@ In plain terms: if your building has BACnet controllers, thermostats, sensors, o
 - **Flexible entity naming** — use BACnet `objectName` or `description` for display names
 - **Domain mapping** — override default entity types per object (e.g. make a sensor into a number)
 - **Selective import** — only import the objects you actually need
+- **Configurable write priority** — per-device select entity to change the BACnet write priority (disabled by default)
+- **Automatic outage recovery** — detects network outages and reconnects the BACnet client automatically
 
 ---
 
@@ -129,6 +131,19 @@ After setup, click **Configure** on the integration card to adjust:
 
 Changes take effect immediately — the integration reloads automatically.
 
+### Write Priority entity
+
+A **Write Priority** select entity is added to every BACnet device. It is **disabled by default** to keep dashboards clean.
+
+To use it:
+1. Go to **Settings → Devices & Services → BACnet** → your device
+2. Find the **Write Priority** entity and enable it
+3. Use the dropdown to select your desired priority level
+
+Available levels: `8` (Manual Operator), `9`, `12`, `13`, `14`, `15`, `16` (default — lowest), `17`
+
+> BACnet Priority Array levels run 1–16. Priority 16 is the safest default. Use level 8 if your BAS requires Manual Operator override. The selected priority persists across HA restarts.
+
 ---
 
 ## Entity attributes
@@ -167,8 +182,10 @@ This information appears in the Home Assistant device registry, so you can see e
 
 All writes to commandable objects use the BACnet **Priority Array** (ASHRAE 135):
 
-- **Turn ON / Set value** → writes at priority level 16 (safe default)
-- **Turn OFF** → writes `inactive` (0) at priority 16
+- **Turn ON / Set value** → writes at the configured priority level (default: 16)
+- **Turn OFF** → writes `inactive` (0) at the same priority level
+
+The priority level is controlled by the **Write Priority** select entity on the device (disabled by default — see [Configuration options](#configuration-options) above).
 
 Binary outputs use the `Enumerated` BACnet type (`0 = inactive`, `1 = active`), compliant with ASHRAE 135.
 
@@ -184,6 +201,8 @@ Binary outputs use the `Enumerated` BACnet type (`0 = inactive`, `1 = active`), 
 | COV not working | Device doesn't support COV | This is normal — polling activates as fallback |
 | Write has no effect | Object is not commandable | Check the `bacnet_commandable` attribute |
 | Values don't update | COV increment too high, or polling interval too long | Lower the COV increment or reduce the polling interval |
+| Entities go unavailable after network blip | Expected — the integration detects outages and reconnects automatically. Entities recover once the device is reachable again. | No action needed |
+| Write has no effect at expected priority | Device requires a specific priority level | Enable the **Write Priority** entity and select the correct level |
 
 ### Debug logging
 
