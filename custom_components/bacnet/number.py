@@ -23,7 +23,6 @@ from .const import (
     DATA_CLIENT,
     DATA_COORDINATOR,
     DATA_OBJECTS,
-    DEFAULT_WRITE_PRIORITY,
     DOMAIN,
     OBJECT_TYPE_MULTI_STATE_INPUT,
     OBJECT_TYPE_MULTI_STATE_OUTPUT,
@@ -94,7 +93,6 @@ class BACnetNumber(BACnetEntity, NumberEntity):
         obj: dict[str, Any],
     ) -> None:
         super().__init__(coordinator, entry, obj)
-        self._write_priority = DEFAULT_WRITE_PRIORITY
 
         # Set native unit from BACnet units
         units = obj.get("units")
@@ -142,7 +140,7 @@ class BACnetNumber(BACnetEntity, NumberEntity):
             instance=self._instance,
             property_name="presentValue",
             value=value,
-            priority=self._write_priority,
+            priority=self.coordinator.write_priority,
         )
         if success:
             await self.coordinator.async_request_refresh()

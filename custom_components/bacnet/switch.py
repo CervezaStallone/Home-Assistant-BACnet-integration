@@ -23,7 +23,6 @@ from .const import (
     DATA_CLIENT,
     DATA_COORDINATOR,
     DATA_OBJECTS,
-    DEFAULT_WRITE_PRIORITY,
     DOMAIN,
 )
 from .bacnet_client import BACnetClient
@@ -72,7 +71,6 @@ class BACnetSwitch(BACnetEntity, SwitchEntity):
         obj: dict[str, Any],
     ) -> None:
         super().__init__(coordinator, entry, obj)
-        self._write_priority = DEFAULT_WRITE_PRIORITY
 
     @property
     def is_on(self) -> bool | None:
@@ -97,7 +95,7 @@ class BACnetSwitch(BACnetEntity, SwitchEntity):
             instance=self._instance,
             property_name="presentValue",
             value=1,  # active
-            priority=self._write_priority,
+            priority=self.coordinator.write_priority,
         )
         if success:
             # Optimistic update: immediately reflect in HA
@@ -117,7 +115,7 @@ class BACnetSwitch(BACnetEntity, SwitchEntity):
             instance=self._instance,
             property_name="presentValue",
             value=0,  # inactive
-            priority=self._write_priority,
+            priority=self.coordinator.write_priority,
         )
         if success:
             await self.coordinator.async_request_refresh()

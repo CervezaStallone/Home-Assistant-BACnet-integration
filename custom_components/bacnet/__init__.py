@@ -64,6 +64,7 @@ PLATFORMS: list[Platform] = [
     Platform.SWITCH,
     Platform.NUMBER,
     Platform.CLIMATE,
+    Platform.SELECT,
 ]
 
 
@@ -315,6 +316,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # ---- 7. Forward to platforms ----
     needed_platforms = _get_platforms_in_use(selected_objects, domain_overrides)
+    # SELECT is device-level (write priority selector), not object-dependent
+    if Platform.SELECT not in needed_platforms:
+        needed_platforms.append(Platform.SELECT)
     await hass.config_entries.async_forward_entry_setups(entry, needed_platforms)
 
     # ---- 8. Listen for option changes ----
@@ -347,6 +351,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     domain_overrides: dict[str, str] = entry.options.get(CONF_DOMAIN_MAPPING, {})
     selected_objects = entry_data.get(DATA_OBJECTS, [])
     needed_platforms = _get_platforms_in_use(selected_objects, domain_overrides)
+    if Platform.SELECT not in needed_platforms:
+        needed_platforms.append(Platform.SELECT)
 
     # Unload platforms
     unload_ok = await hass.config_entries.async_unload_platforms(

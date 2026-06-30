@@ -94,6 +94,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.cov_overrides = cov_overrides or {}
         self.entry = entry
         self.cov_increment = cov_increment
+        self.write_priority: int = DEFAULT_WRITE_PRIORITY
 
         # Track which objects have active COV and which need polling
         self._cov_subscriptions: dict[str, str] = {}  # obj_key → sub_key
