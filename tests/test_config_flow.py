@@ -1,6 +1,9 @@
-"""Tests for config_flow._validate_local_ip (issue #23 — CIDR-prefixed local IPs)."""
+"""Tests for config_flow address validators (issues #22, #23)."""
 
-from custom_components.bacnet.config_flow import _validate_local_ip
+from custom_components.bacnet.config_flow import (
+    _validate_local_ip,
+    _validate_target_address,
+)
 
 
 class TestValidateLocalIp:
@@ -24,3 +27,26 @@ class TestValidateLocalIp:
 
     def test_hostname_rejected(self):
         assert _validate_local_ip("bacnet-host") is False
+
+
+class TestValidateTargetAddress:
+    def test_empty_is_valid(self):
+        assert _validate_target_address("") is True
+
+    def test_plain_ipv4_is_valid(self):
+        assert _validate_target_address("192.168.1.50") is True
+
+    def test_ipv4_with_port_is_valid(self):
+        assert _validate_target_address("192.168.1.50:47808") is True
+
+    def test_remote_station_is_valid(self):
+        assert _validate_target_address("20000:1") is True
+
+    def test_remote_station_hex_mac_is_valid(self):
+        assert _validate_target_address("20000:0x05") is True
+
+    def test_out_of_range_network_rejected(self):
+        assert _validate_target_address("999999999:1") is False
+
+    def test_garbage_rejected(self):
+        assert _validate_target_address("garbage") is False

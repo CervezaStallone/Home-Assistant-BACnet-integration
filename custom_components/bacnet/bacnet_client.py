@@ -1250,7 +1250,7 @@ class BACnetClient:
         if self._app is None:
             raise RuntimeError("Client not connected")
 
-        addr = IPv4Address(device_address)
+        addr = Address(device_address)
         type_str = self._int_to_object_type_str(object_type)
         oid = ObjectIdentifier((type_str, instance))
         sub_key = f"{device_address}:{object_type}:{instance}"

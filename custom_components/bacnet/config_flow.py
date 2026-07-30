@@ -15,6 +15,7 @@ import logging
 from typing import Any
 
 import voluptuous as vol
+from bacpypes3.pdu import Address
 
 from homeassistant import config_entries
 import homeassistant.helpers.config_validation as cv
@@ -74,6 +75,25 @@ def _validate_local_ip(ip_string: str) -> bool:
         ipaddress.IPv4Interface(ip_string)
         return True
     except ValueError:
+        return False
+
+
+def _validate_target_address(addr: str) -> bool:
+    """Return True if *addr* is empty (auto-detect) or a syntactically valid
+    BACnet address for a target device.
+
+    Delegates to bacpypes3's own Address parser instead of reimplementing its
+    address-format rules, so this accepts anything the client can actually
+    address — a local station (IP or IP:port) as well as a remote-station
+    address behind a router (e.g. "20000:1"), which a plain-IPv4 validator
+    rejects outright.
+    """
+    if not addr:
+        return True  # empty = auto-detect / broadcast discovery
+    try:
+        Address(addr)
+        return True
+    except (ValueError, RuntimeError):
         return False
 
 
@@ -213,8 +233,9 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             target_address = user_input.get(CONF_TARGET_ADDRESS, "").strip()
             if target_address:
-                # Validate target address (IP or IP:port)
-                if not _validate_bbmd_address(target_address):
+                # Accepts IP[:port] or a remote-station "network:instance"
+                # address behind a router (issue #22).
+                if not _validate_target_address(target_address):
                     errors[CONF_TARGET_ADDRESS] = "invalid_ip"
 
             use_bbmd = user_input.get(CONF_USE_BBMD, False)
