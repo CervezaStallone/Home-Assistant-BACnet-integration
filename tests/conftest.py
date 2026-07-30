@@ -150,6 +150,7 @@ class _Platform(str, Enum):
     SWITCH = "switch"
     NUMBER = "number"
     CLIMATE = "climate"
+    SELECT = "select"
 
 
 # ---------------------------------------------------------------------------
