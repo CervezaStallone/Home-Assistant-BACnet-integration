@@ -60,6 +60,23 @@ def _validate_ip(ip_string: str) -> bool:
         return False
 
 
+def _validate_local_ip(ip_string: str) -> bool:
+    """Return True if *ip_string* is a valid local address (or empty for auto).
+
+    Accepts an optional CIDR prefix, e.g. "192.168.10.11/24". BACpypes3 derives
+    the broadcast address from that prefix; without it the address is an implicit
+    /32 whose broadcast address is itself, so no broadcast socket is opened and
+    every Who-Is raises RuntimeError("no broadcast").
+    """
+    if not ip_string:
+        return True  # empty = auto-detect
+    try:
+        ipaddress.IPv4Interface(ip_string)
+        return True
+    except ValueError:
+        return False
+
+
 def _validate_bbmd_address(addr: str) -> bool:
     """Validate a BBMD address in 'IP:port' or plain 'IP' format."""
     if not addr:
@@ -191,7 +208,7 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             # --- Validate inputs ---
             local_ip = user_input.get(CONF_LOCAL_IP, "").strip()
-            if local_ip and not _validate_ip(local_ip):
+            if local_ip and not _validate_local_ip(local_ip):
                 errors["base"] = "invalid_ip"
 
             target_address = user_input.get(CONF_TARGET_ADDRESS, "").strip()
