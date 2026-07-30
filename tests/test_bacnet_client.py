@@ -8,9 +8,16 @@ verified without any network.
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from custom_components.bacnet.bacnet_client import BACnetClient
+from custom_components.bacnet.const import (
+    OBJECT_TYPE_ANALOG_OUTPUT,
+    OBJECT_TYPE_ANALOG_VALUE,
+    OBJECT_TYPE_BINARY_VALUE,
+)
 
 # ---------------------------------------------------------------------------
 # Attempt to import BACpypes3 primitives for _coerce_value tests.
@@ -202,6 +209,119 @@ class TestPropertyNameMaps:
     def test_hyphen_to_camel_is_inverse(self):
         for camel, hyphen in BACnetClient._CAMEL_TO_HYPHEN.items():
             assert BACnetClient._HYPHEN_TO_CAMEL[hyphen] == camel
+
+
+# ---------------------------------------------------------------------------
+# write_property() priority gating — issue #24
+# ---------------------------------------------------------------------------
+
+
+class _FakeApp:
+    """Records write_property calls so tests can assert on the priority kwarg."""
+
+    def __init__(self):
+        self.calls: list[dict] = []
+
+    async def write_property(self, addr, oid, property_name, value, **kwargs):
+        self.calls.append({"property_name": property_name, **kwargs})
+
+
+class TestWritePropertyPriorityGating:
+    """priority must only be sent for presentValue writes to a commandable object.
+
+    Sending priority to a non-commandable object, or to any property other than
+    presentValue (e.g. covIncrement), is rejected by many real devices — the
+    object's type alone doesn't tell you whether *this* instance is commandable.
+    """
+
+    def _client(self):
+        client = BACnetClient(local_ip="127.0.0.1", local_port=47811)
+        client._app = _FakeApp()
+        return client
+
+    def test_commandable_presentvalue_sends_priority(self):
+        client = self._client()
+        asyncio.run(
+            client.write_property(
+                device_address="192.168.1.1",
+                object_type=OBJECT_TYPE_BINARY_VALUE,
+                instance=1,
+                property_name="presentValue",
+                value=1,
+                priority=8,
+                commandable=True,
+            )
+        )
+        assert client._app.calls[0]["priority"] == 8
+
+    def test_non_commandable_presentvalue_omits_priority(self):
+        client = self._client()
+        asyncio.run(
+            client.write_property(
+                device_address="192.168.1.1",
+                object_type=OBJECT_TYPE_BINARY_VALUE,
+                instance=1,
+                property_name="presentValue",
+                value=1,
+                priority=8,
+                commandable=False,
+            )
+        )
+        assert "priority" not in client._app.calls[0]
+
+    def test_non_presentvalue_omits_priority_even_if_commandable(self):
+        """covIncrement writes must never carry priority (coordinator.py caller)."""
+        client = self._client()
+        asyncio.run(
+            client.write_property(
+                device_address="192.168.1.1",
+                object_type=OBJECT_TYPE_ANALOG_VALUE,
+                instance=1,
+                property_name="covIncrement",
+                value=0.5,
+                commandable=True,
+            )
+        )
+        assert "priority" not in client._app.calls[0]
+
+    def test_default_commandable_is_false(self):
+        """Callers that don't pass commandable get the safe (no-priority) default."""
+        client = self._client()
+        asyncio.run(
+            client.write_property(
+                device_address="192.168.1.1",
+                object_type=OBJECT_TYPE_ANALOG_OUTPUT,
+                instance=1,
+                property_name="presentValue",
+                value=1.0,
+            )
+        )
+        assert "priority" not in client._app.calls[0]
+
+    def test_relinquish_defaults_commandable_true(self):
+        client = self._client()
+        asyncio.run(
+            client.relinquish(
+                device_address="192.168.1.1",
+                object_type=OBJECT_TYPE_ANALOG_OUTPUT,
+                instance=1,
+                priority=8,
+            )
+        )
+        assert client._app.calls[0]["priority"] == 8
+
+    def test_relinquish_non_commandable_omits_priority(self):
+        client = self._client()
+        asyncio.run(
+            client.relinquish(
+                device_address="192.168.1.1",
+                object_type=OBJECT_TYPE_ANALOG_VALUE,
+                instance=1,
+                priority=8,
+                commandable=False,
+            )
+        )
+        assert "priority" not in client._app.calls[0]
 
 
 # ---------------------------------------------------------------------------

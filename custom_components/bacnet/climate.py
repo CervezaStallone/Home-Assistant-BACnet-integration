@@ -163,6 +163,7 @@ class BACnetClimate(BACnetEntity, ClimateEntity):
             property_name="presentValue",
             value=float(temperature),
             priority=self.coordinator.write_priority,
+            commandable=self.is_commandable,
         )
         if success:
             await self.coordinator.async_request_refresh()
@@ -183,6 +184,7 @@ class BACnetClimate(BACnetEntity, ClimateEntity):
                 object_type=self._object_type,
                 instance=self._instance,
                 priority=self.coordinator.write_priority,
+                commandable=self.is_commandable,
             )
             if success:
                 await self.coordinator.async_request_refresh()

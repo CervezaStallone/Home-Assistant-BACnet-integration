@@ -88,7 +88,7 @@ class BACnetClient:
         devices = await client.discover_devices(timeout=5)
         objects = await client.read_object_list(device_address, device_id)
         value = await client.read_property(address, obj_type, instance, prop_id)
-        await client.write_property(address, obj_type, instance, prop_id, value, priority=8)
+        await client.write_property(address, obj_type, instance, prop_id, value, priority=8, commandable=True)
         await client.disconnect()
     """
 
@@ -1107,15 +1107,19 @@ class BACnetClient:
         property_name: str,
         value: Any,
         priority: int = DEFAULT_WRITE_PRIORITY,
+        commandable: bool = False,
     ) -> bool:
         """Write a value to a BACnet property with proper Priority Array handling.
 
         BACnet Standard compliance:
-        - For commandable objects, writes go through the Priority Array at the
-          specified priority level (default 16 = lowest).
+        - For commandable objects, writes to presentValue go through the
+          Priority Array at the specified priority level (default 16 = lowest).
         - To relinquish a commanded value (release the override), write Null
           at the previously written priority level.
-        - For non-commandable/writable objects, priority is not used.
+        - For non-commandable objects, and for any property other than
+          presentValue (e.g. covIncrement), priority is never sent — many
+          devices reject a priority parameter on a property that doesn't
+          support prioritization.
 
         Args:
             device_address: Target device address.
@@ -1123,7 +1127,13 @@ class BACnetClient:
             instance: Object instance number.
             property_name: Property to write (usually "presentValue").
             value: The value to write. Use None to send Null (relinquish).
-            priority: BACnet priority level (1-16). Only used for commandable objects.
+            priority: BACnet priority level (1-16). Only used when commandable
+                is True and property_name is "presentValue".
+            commandable: Whether this specific object instance is commandable
+                (has a Priority Array) — the value discovered per-object via
+                the priorityArray probe, not a guess from the object's type.
+                Output types (AO/BO/MSO) are always commandable; Value types
+                (AV/BV/MSV) may or may not be, depending on the device.
 
         Returns:
             True on success, False on failure.
@@ -1135,8 +1145,7 @@ class BACnetClient:
         type_str = self._int_to_object_type_str(object_type)
         oid = ObjectIdentifier((type_str, instance))
 
-        # Determine if this is a commandable object that needs priority
-        is_commandable = object_type in (COMMANDABLE_TYPES | POTENTIALLY_WRITABLE_TYPES)
+        send_priority = commandable and property_name == "presentValue"
 
         # Convert None -> Null for relinquish
         if value is None:
@@ -1151,11 +1160,11 @@ class BACnetClient:
                 type_str,
                 instance,
                 property_name,
-                priority if is_commandable else "N/A",
-                is_commandable,
+                priority if send_priority else "N/A",
+                commandable,
             )
 
-            if is_commandable:
+            if send_priority:
                 result = await self._app.write_property(
                     addr, oid, property_name, bacnet_value, priority=priority
                 )
@@ -1197,11 +1206,14 @@ class BACnetClient:
         object_type: int,
         instance: int,
         priority: int = DEFAULT_WRITE_PRIORITY,
+        commandable: bool = True,
     ) -> bool:
         """Send a Null write (relinquish) to release a previously commanded value.
 
         This clears the specified priority level in the Priority Array, allowing
-        lower-priority values (or the Relinquish Default) to take effect.
+        lower-priority values (or the Relinquish Default) to take effect. Only
+        meaningful for commandable objects — there is no priority level to
+        release on a non-commandable object.
         """
         return await self.write_property(
             device_address=device_address,
@@ -1210,6 +1222,7 @@ class BACnetClient:
             property_name="presentValue",
             value=None,  # Null = relinquish
             priority=priority,
+            commandable=commandable,
         )
 
     # ------------------------------------------------------------------
