@@ -141,6 +141,7 @@ class BACnetNumber(BACnetEntity, NumberEntity):
             property_name="presentValue",
             value=value,
             priority=self.coordinator.write_priority,
+            commandable=self.is_commandable,
         )
         if success:
             await self.coordinator.async_request_refresh()

@@ -96,6 +96,7 @@ class BACnetSwitch(BACnetEntity, SwitchEntity):
             property_name="presentValue",
             value=1,  # active
             priority=self.coordinator.write_priority,
+            commandable=self.is_commandable,
         )
         if success:
             # Optimistic update: immediately reflect in HA
@@ -116,6 +117,7 @@ class BACnetSwitch(BACnetEntity, SwitchEntity):
             property_name="presentValue",
             value=0,  # inactive
             priority=self.coordinator.write_priority,
+            commandable=self.is_commandable,
         )
         if success:
             await self.coordinator.async_request_refresh()
