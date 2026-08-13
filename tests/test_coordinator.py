@@ -630,3 +630,101 @@ class TestMetadataRefreshTiming:
         asyncio.run(coord._async_update_data())
 
         coord.async_refresh_metadata.assert_not_awaited()
+
+
+# ---------------------------------------------------------------------------
+# COV-triggered metadata check — issue #26
+# ---------------------------------------------------------------------------
+
+
+class TestCovTriggeredMetadataCheck:
+    """A COV notification is the cheapest live signal that a device is
+    talking about an object right now — use it to trigger a throttled
+    per-object metadata re-check instead of waiting on the hourly sweep."""
+
+    def test_notification_schedules_a_background_task(self):
+        coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
+        coord.data = {"0:1": {"presentValue": 20.0}}
+
+        captured = []
+        coord.hass.async_create_task = lambda coro: captured.append(coro) or coro
+
+        coord._handle_cov_notification("0:1", {"presentValue": 25.0})
+
+        assert len(captured) == 1
+        captured[0].close()  # avoid "never awaited" warning; not run in this test
+
+    def test_second_notification_within_throttle_window_is_skipped(self):
+        coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
+        coord.data = {"0:1": {"presentValue": 20.0}}
+
+        captured = []
+        coord.hass.async_create_task = lambda coro: captured.append(coro) or coro
+
+        coord._handle_cov_notification("0:1", {"presentValue": 25.0})
+        coord._handle_cov_notification("0:1", {"presentValue": 26.0})
+
+        assert len(captured) == 1
+        captured[0].close()
+
+    def test_notification_after_throttle_window_schedules_again(self):
+        from datetime import datetime, timedelta, timezone
+
+        coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
+        coord.data = {"0:1": {"presentValue": 20.0}}
+
+        captured = []
+        coord.hass.async_create_task = lambda coro: captured.append(coro) or coro
+
+        coord._handle_cov_notification("0:1", {"presentValue": 25.0})
+        coord._last_object_metadata_check["0:1"] = datetime.now(
+            timezone.utc
+        ) - timedelta(minutes=10)
+        coord._handle_cov_notification("0:1", {"presentValue": 26.0})
+
+        assert len(captured) == 2
+        for coro in captured:
+            coro.close()
+
+    def test_noop_when_data_is_none_does_not_schedule(self):
+        """The existing 'no data yet' guard must still short-circuit first."""
+        from unittest.mock import MagicMock
+
+        coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
+        coord.data = None
+        coord.hass.async_create_task = MagicMock()
+
+        coord._handle_cov_notification("0:1", {"presentValue": 25.0})
+
+        coord.hass.async_create_task.assert_not_called()
+
+    def test_refresh_object_metadata_now_applies_and_persists_change(self):
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        obj = {
+            "object_type": 0,
+            "instance": 1,
+            "object_name": "Old",
+            "units": None,
+        }
+        coord = _make_coordinator(objects=[obj])
+        coord.client.refresh_object_metadata = AsyncMock(
+            return_value={"object_name": "Old", "units": "degrees-celsius"}
+        )
+
+        asyncio.run(coord._refresh_object_metadata_now("0:1"))
+
+        assert obj["units"] == "degrees-celsius"
+        coord.hass.config_entries.async_update_entry.assert_called_once()
+
+    def test_refresh_object_metadata_now_unknown_key_is_noop(self):
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
+        coord.client.refresh_object_metadata = AsyncMock()
+
+        asyncio.run(coord._refresh_object_metadata_now("9:9"))
+
+        coord.client.refresh_object_metadata.assert_not_awaited()
