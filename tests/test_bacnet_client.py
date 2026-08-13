@@ -19,6 +19,17 @@ from custom_components.bacnet.const import (
     OBJECT_TYPE_BINARY_VALUE,
 )
 
+
+class _FakeReadApp:
+    """Fake BACpypes3 app that answers read_property from a canned value map."""
+
+    def __init__(self, values: dict) -> None:
+        self._values = values
+
+    async def read_property(self, addr, oid, prop_name, array_index=None):
+        return self._values.get(prop_name)
+
+
 # ---------------------------------------------------------------------------
 # Attempt to import BACpypes3 primitives for _coerce_value tests.
 # If not installed the coerce-value suite is skipped gracefully.
@@ -382,3 +393,61 @@ class TestReconnect:
 
         assert calls[0] == ("disconnect",)
         assert calls[1] == ("connect", None, 900)
+
+
+# ---------------------------------------------------------------------------
+# refresh_object_metadata() — issue #26 (stale metadata after discovery)
+# ---------------------------------------------------------------------------
+
+
+class TestRefreshObjectMetadata:
+    def _client(self):
+        return BACnetClient(local_ip="127.0.0.1", local_port=47813)
+
+    def test_returns_fresh_values(self):
+        client = self._client()
+        client._app = _FakeReadApp(
+            {
+                "objectName": "Room Temp",
+                "description": "Updated on device",
+                "units": "degrees-celsius",
+                "presentValue": 21.5,
+            }
+        )
+        result = asyncio.run(
+            client.refresh_object_metadata(
+                device_address="192.168.1.1",
+                object_type=OBJECT_TYPE_ANALOG_OUTPUT,
+                instance=3,
+            )
+        )
+        assert result["object_name"] == "Room Temp"
+        assert result["description"] == "Updated on device"
+        assert result["units"] == "degrees-celsius"
+        # AO is inherently commandable regardless of priorityArray probing.
+        assert result["commandable"] is True
+
+    def test_raises_when_not_connected(self):
+        client = self._client()
+        with pytest.raises(RuntimeError):
+            asyncio.run(
+                client.refresh_object_metadata(
+                    device_address="192.168.1.1",
+                    object_type=OBJECT_TYPE_ANALOG_OUTPUT,
+                    instance=1,
+                )
+            )
+
+    def test_units_none_when_device_has_no_units(self):
+        client = self._client()
+        client._app = _FakeReadApp(
+            {"objectName": "Binary Value", "description": "", "units": None}
+        )
+        result = asyncio.run(
+            client.refresh_object_metadata(
+                device_address="192.168.1.1",
+                object_type=OBJECT_TYPE_BINARY_VALUE,
+                instance=1,
+            )
+        )
+        assert result["units"] is None
