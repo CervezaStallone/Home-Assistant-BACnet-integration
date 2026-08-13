@@ -728,3 +728,140 @@ class TestCovTriggeredMetadataCheck:
         asyncio.run(coord._refresh_object_metadata_now("9:9"))
 
         coord.client.refresh_object_metadata.assert_not_awaited()
+
+
+# ---------------------------------------------------------------------------
+# Live SubscribeCOVProperty wiring — issue #26
+# ---------------------------------------------------------------------------
+
+
+class TestLiveMetadataPropertySubscriptions:
+    def test_disabled_by_default_no_property_subscriptions_attempted(self):
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        coord = _make_coordinator(
+            objects=[{"object_type": 0, "instance": 1, "commandable": False}]
+        )
+        coord.client.subscribe_cov = AsyncMock(return_value=None)
+        coord.client.subscribe_cov_property = AsyncMock(return_value="prop-sub")
+
+        asyncio.run(coord._setup_subscriptions())
+
+        coord.client.subscribe_cov_property.assert_not_awaited()
+
+    def test_enabled_property_is_attempted_and_tracked(self):
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        coord = _make_coordinator(
+            objects=[{"object_type": 0, "instance": 1, "commandable": False}]
+        )
+        coord.live_metadata_properties = ["units"]
+        coord.client.subscribe_cov = AsyncMock(return_value=None)
+        coord.client.subscribe_cov_property = AsyncMock(return_value="prop-sub-key")
+
+        asyncio.run(coord._setup_subscriptions())
+
+        coord.client.subscribe_cov_property.assert_awaited_once()
+        kwargs = coord.client.subscribe_cov_property.call_args.kwargs
+        assert kwargs["property_name"] == "units"
+        assert kwargs["object_type"] == 0
+        assert kwargs["instance"] == 1
+        assert coord._cov_property_subscriptions["0:1:units"] == "prop-sub-key"
+
+    def test_rejected_property_subscription_is_not_tracked(self):
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        coord = _make_coordinator(
+            objects=[{"object_type": 0, "instance": 1, "commandable": False}]
+        )
+        coord.live_metadata_properties = ["units", "description"]
+        coord.client.subscribe_cov = AsyncMock(return_value=None)
+        coord.client.subscribe_cov_property = AsyncMock(return_value=None)
+
+        asyncio.run(coord._setup_subscriptions())
+
+        assert coord.client.subscribe_cov_property.await_count == 2
+        assert coord._cov_property_subscriptions == {}
+
+    def test_disabled_cov_for_object_skips_property_subscriptions_too(self):
+        """COV off for an object means no COV mechanism at all for it."""
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        coord = _make_coordinator(
+            objects=[{"object_type": 0, "instance": 1, "commandable": False}],
+            enable_cov=False,
+        )
+        coord.live_metadata_properties = ["units"]
+        coord.client.subscribe_cov_property = AsyncMock(return_value="sub")
+
+        asyncio.run(coord._setup_subscriptions())
+
+        coord.client.subscribe_cov_property.assert_not_awaited()
+
+
+class TestHandleCovPropertyNotification:
+    def test_updates_and_persists_on_change(self):
+        obj = {"object_type": 0, "instance": 1, "units": None}
+        coord = _make_coordinator(objects=[obj])
+
+        coord._handle_cov_property_notification("0:1", "units", "degrees-celsius")
+
+        assert obj["units"] == "degrees-celsius"
+        coord.hass.config_entries.async_update_entry.assert_called_once()
+
+    def test_noop_when_value_unchanged(self):
+        obj = {"object_type": 0, "instance": 1, "units": "degrees-celsius"}
+        coord = _make_coordinator(objects=[obj])
+
+        coord._handle_cov_property_notification("0:1", "units", "degrees-celsius")
+
+        coord.hass.config_entries.async_update_entry.assert_not_called()
+
+    def test_unknown_object_key_is_noop(self):
+        coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
+
+        coord._handle_cov_property_notification("9:9", "units", "kilowatts")
+
+        coord.hass.config_entries.async_update_entry.assert_not_called()
+
+    def test_unknown_bacnet_property_name_is_noop(self):
+        obj = {"object_type": 0, "instance": 1}
+        coord = _make_coordinator(objects=[obj])
+
+        coord._handle_cov_property_notification("0:1", "presentValue", 42.0)
+
+        assert "presentValue" not in obj
+        coord.hass.config_entries.async_update_entry.assert_not_called()
+
+
+class TestShutdownAndRestoreCleanupPropertySubs:
+    def test_shutdown_unsubscribes_property_subs(self):
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
+        coord._cov_property_subscriptions = {"0:1:units": "sub-key"}
+        coord.client.unsubscribe_cov = AsyncMock()
+        coord.client.unsubscribe_cov_property = AsyncMock()
+
+        asyncio.run(coord.async_shutdown())
+
+        coord.client.unsubscribe_cov_property.assert_awaited_once_with("sub-key")
+        assert coord._cov_property_subscriptions == {}
+
+    def test_restore_subscriptions_clears_property_subs_before_resetup(self):
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
+        coord._cov_property_subscriptions = {"0:1:units": "stale-sub"}
+        coord._setup_subscriptions = AsyncMock()
+
+        asyncio.run(coord._restore_subscriptions())
+
+        assert coord._cov_property_subscriptions == {}
+        coord._setup_subscriptions.assert_awaited_once()
