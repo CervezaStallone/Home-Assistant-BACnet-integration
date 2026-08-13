@@ -65,6 +65,18 @@ DEFAULT_COV_INCREMENT = 0.1  # default COV increment for analog objects
 MAX_SILENT_FAILURES = 3
 RECONNECT_THRESHOLD = 10
 
+# Static object metadata (objectName, description, units, commandable) has no
+# COV/push mechanism in BACnet — a device-side edit is only visible on a fresh
+# ReadProperty. Two refresh paths pick that up (issue #26):
+#   1. COV-triggered: a COV notification proves the device is actively talking
+#      about that object right now, so it's the cheapest moment to also check
+#      its static properties. Throttled per-object so a fast-changing analog
+#      doesn't cause a metadata re-read on every notification.
+#   2. Periodic sweep: the safety net for polling-only objects, which never
+#      produce a COV notification to trigger off of.
+COV_METADATA_CHECK_INTERVAL = 300  # seconds (5 min) — per-object COV throttle
+DEFAULT_METADATA_REFRESH_INTERVAL = 3600  # seconds (1 hour) — polled-object sweep
+
 # ---------------------------------------------------------------------------
 # BACnet object type IDs  (from ASHRAE 135)
 # ---------------------------------------------------------------------------

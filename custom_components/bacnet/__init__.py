@@ -65,6 +65,7 @@ PLATFORMS: list[Platform] = [
     Platform.NUMBER,
     Platform.CLIMATE,
     Platform.SELECT,
+    Platform.BUTTON,
 ]
 
 
@@ -316,9 +317,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # ---- 7. Forward to platforms ----
     needed_platforms = _get_platforms_in_use(selected_objects, domain_overrides)
-    # SELECT is device-level (write priority selector), not object-dependent
-    if Platform.SELECT not in needed_platforms:
-        needed_platforms.append(Platform.SELECT)
+    # SELECT (write priority) and BUTTON (metadata refresh) are device-level,
+    # not object-dependent.
+    for device_level_platform in (Platform.SELECT, Platform.BUTTON):
+        if device_level_platform not in needed_platforms:
+            needed_platforms.append(device_level_platform)
     await hass.config_entries.async_forward_entry_setups(entry, needed_platforms)
 
     # ---- 8. Listen for option changes ----
@@ -351,8 +354,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     domain_overrides: dict[str, str] = entry.options.get(CONF_DOMAIN_MAPPING, {})
     selected_objects = entry_data.get(DATA_OBJECTS, [])
     needed_platforms = _get_platforms_in_use(selected_objects, domain_overrides)
-    if Platform.SELECT not in needed_platforms:
-        needed_platforms.append(Platform.SELECT)
+    for device_level_platform in (Platform.SELECT, Platform.BUTTON):
+        if device_level_platform not in needed_platforms:
+            needed_platforms.append(device_level_platform)
 
     # Unload platforms
     unload_ok = await hass.config_entries.async_unload_platforms(

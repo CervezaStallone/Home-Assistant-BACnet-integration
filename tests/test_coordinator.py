@@ -29,8 +29,14 @@ def _make_coordinator(
     entry.entry_id = "test"
     entry.data = {"device_address": "192.168.1.100"}
 
+    hass = MagicMock()
+    # Real HA schedules the coroutine; tests that don't care about the
+    # COV-triggered metadata check (most of them) just need it not to leak
+    # an "never awaited" warning. Tests that DO care override this.
+    hass.async_create_task = MagicMock(side_effect=lambda coro: coro.close())
+
     coord = BACnetCoordinator(
-        hass=MagicMock(),
+        hass=hass,
         client=client,
         objects=objects or [],
         domain_overrides=domain_overrides or {},
@@ -486,3 +492,141 @@ class TestCovOverrides:
         assert "0:1" not in coord._cov_subscriptions
         assert coord._cov_subscriptions["0:2"] == "sub_key"
         assert coord._polled_objects == [{"object_type": 0, "instance": 1}]
+
+
+# ---------------------------------------------------------------------------
+# async_refresh_metadata — issue #26 (stale metadata after discovery)
+# ---------------------------------------------------------------------------
+
+
+class TestRefreshMetadata:
+    def test_updates_changed_fields_and_persists(self):
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        obj = {
+            "object_type": 0,
+            "instance": 1,
+            "object_name": "Old Name",
+            "description": "",
+            "units": None,
+            "commandable": False,
+        }
+        coord = _make_coordinator(objects=[obj])
+        coord.client.refresh_object_metadata = AsyncMock(
+            return_value={
+                "object_name": "New Name",
+                "description": "",
+                "units": "degrees-celsius",
+                "commandable": False,
+            }
+        )
+
+        changed = asyncio.run(coord.async_refresh_metadata())
+
+        assert changed is True
+        assert obj["object_name"] == "New Name"
+        assert obj["units"] == "degrees-celsius"
+        coord.hass.config_entries.async_update_entry.assert_called_once()
+
+    def test_no_change_skips_persist(self):
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        obj = {
+            "object_type": 0,
+            "instance": 1,
+            "object_name": "Same",
+            "description": "",
+            "units": None,
+            "commandable": False,
+        }
+        coord = _make_coordinator(objects=[obj])
+        coord.client.refresh_object_metadata = AsyncMock(return_value=dict(obj))
+
+        changed = asyncio.run(coord.async_refresh_metadata())
+
+        assert changed is False
+        coord.hass.config_entries.async_update_entry.assert_not_called()
+
+    def test_none_result_is_skipped(self):
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        obj = {"object_type": 0, "instance": 1, "object_name": "Same"}
+        coord = _make_coordinator(objects=[obj])
+        coord.client.refresh_object_metadata = AsyncMock(return_value=None)
+
+        changed = asyncio.run(coord.async_refresh_metadata())
+
+        assert changed is False
+        assert obj["object_name"] == "Same"
+
+    def test_read_error_does_not_crash(self):
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        obj = {"object_type": 0, "instance": 1}
+        coord = _make_coordinator(objects=[obj])
+        coord.client.refresh_object_metadata = AsyncMock(
+            side_effect=RuntimeError("boom")
+        )
+
+        changed = asyncio.run(coord.async_refresh_metadata())
+
+        assert changed is False
+
+
+class TestMetadataRefreshTiming:
+    """_async_update_data must only trigger a metadata refresh once the
+    DEFAULT_METADATA_REFRESH_INTERVAL has elapsed since the last one."""
+
+    def test_not_triggered_before_interval_elapses(self):
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
+        coord._setup_subscriptions = AsyncMock()
+        coord.client.poll_objects = AsyncMock(
+            return_value={"0:1": {"presentValue": 1.0, "statusFlags": [False] * 4}}
+        )
+        coord.async_refresh_metadata = AsyncMock()
+
+        asyncio.run(coord._async_update_data())
+
+        coord.async_refresh_metadata.assert_not_awaited()
+
+    def test_triggered_once_interval_elapses(self):
+        import asyncio
+        from datetime import datetime, timedelta, timezone
+        from unittest.mock import AsyncMock
+
+        coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
+        coord._setup_subscriptions = AsyncMock()
+        coord.client.poll_objects = AsyncMock(
+            return_value={"0:1": {"presentValue": 1.0, "statusFlags": [False] * 4}}
+        )
+        coord.async_refresh_metadata = AsyncMock()
+        coord._last_metadata_refresh = datetime.now(timezone.utc) - timedelta(hours=2)
+
+        asyncio.run(coord._async_update_data())
+
+        coord.async_refresh_metadata.assert_awaited_once()
+
+    def test_not_triggered_on_failed_poll(self):
+        """A failed poll must not attempt a metadata refresh either."""
+        import asyncio
+        from datetime import datetime, timedelta, timezone
+        from unittest.mock import AsyncMock
+
+        coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
+        coord._setup_subscriptions = AsyncMock()
+        coord.client.poll_objects = AsyncMock(
+            return_value={"0:1": {"presentValue": None, "statusFlags": None}}
+        )
+        coord.async_refresh_metadata = AsyncMock()
+        coord._last_metadata_refresh = datetime.now(timezone.utc) - timedelta(hours=2)
+
+        asyncio.run(coord._async_update_data())
+
+        coord.async_refresh_metadata.assert_not_awaited()

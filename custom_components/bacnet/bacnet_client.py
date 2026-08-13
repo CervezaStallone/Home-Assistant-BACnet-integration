@@ -850,6 +850,26 @@ class BACnetClient:
         )
         return objects
 
+    async def refresh_object_metadata(
+        self, device_address: str, object_type: int, instance: int
+    ) -> dict[str, Any] | None:
+        """Re-read objectName/description/units/commandable for one known object.
+
+        Used by the coordinator to pick up metadata edited on the device after
+        initial discovery (issue #26). Targets a single object directly instead
+        of walking the device's objectList like read_object_list() does, since
+        the object identity is already known.
+
+        Returns the same dict shape as read_object_list() entries, or None on
+        failure.
+        """
+        if self._app is None:
+            raise RuntimeError("Client not connected")
+        addr = Address(device_address)
+        type_str = self._int_to_object_type_str(object_type)
+        oid = ObjectIdentifier((type_str, instance))
+        return await self._read_object_metadata(addr, oid, object_type, instance)
+
     async def _read_object_metadata(
         self,
         addr: Address,
