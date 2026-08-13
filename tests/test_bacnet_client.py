@@ -30,6 +30,31 @@ class _FakeReadApp:
         return self._values.get(prop_name)
 
 
+class _FakeCovApp:
+    """Fake BACpypes3 app for exercising COV-Property subscribe/cancel.
+
+    Mirrors just enough of ChangeOfValueServices' private surface
+    (_cov_next_id, _cov_contexts) for _PropertyCOVSubscriptionContextManager
+    to work, plus a scriptable async request() that records every APDU sent.
+    """
+
+    def __init__(self, request_result=None):
+        self._cov_next_id = 1
+        self._cov_contexts = {}
+        self.requests = []
+        self._request_result = request_result
+
+    async def request(self, apdu):
+        self.requests.append(apdu)
+        if isinstance(self._request_result, Exception):
+            raise self._request_result
+        if self._request_result is not None:
+            return self._request_result
+        from bacpypes3.apdu import SimpleAckPDU
+
+        return SimpleAckPDU()
+
+
 # ---------------------------------------------------------------------------
 # Attempt to import BACpypes3 primitives for _coerce_value tests.
 # If not installed the coerce-value suite is skipped gracefully.
@@ -451,3 +476,120 @@ class TestRefreshObjectMetadata:
             )
         )
         assert result["units"] is None
+
+
+# ---------------------------------------------------------------------------
+# SubscribeCOVProperty — issue #26 (live metadata push)
+# ---------------------------------------------------------------------------
+
+
+class TestCoerceCovPropertyValue:
+    def test_units_returns_hyphenated_string_not_int(self):
+        """EngineeringUnits is an int subclass — must NOT go through
+        _coerce_value(), which would return a bare integer."""
+
+        class _FakeUnits(int):
+            def __str__(self):
+                return "degrees-celsius"
+
+        result = BACnetClient._coerce_cov_property_value("units", _FakeUnits(62))
+        assert result == "degrees-celsius"
+        assert isinstance(result, str)
+
+    def test_description_uses_generic_coercion(self):
+        result = BACnetClient._coerce_cov_property_value("description", "Zone 1 desc")
+        assert result == "Zone 1 desc"
+
+    def test_none_passthrough(self):
+        assert BACnetClient._coerce_cov_property_value("units", None) is None
+
+
+class TestSubscribeCovProperty:
+    def _client(self):
+        return BACnetClient(local_ip="127.0.0.1", local_port=47814)
+
+    def test_successful_subscription_sends_subscribe_request(self):
+        client = self._client()
+        client._app = _FakeCovApp()
+
+        sub_key = asyncio.run(
+            client.subscribe_cov_property(
+                device_address="192.168.1.50",
+                object_type=0,  # analog-input
+                instance=1,
+                property_name="units",
+                callback=lambda *a: None,
+                lifetime=300,
+            )
+        )
+
+        assert sub_key is not None
+        assert len(client._app.requests) == 1
+        from bacpypes3.apdu import SubscribeCOVPropertyRequest
+
+        sent = client._app.requests[0]
+        assert isinstance(sent, SubscribeCOVPropertyRequest)
+        assert str(sent.monitoredPropertyIdentifier.propertyIdentifier) == "units"
+        assert sub_key in client._cov_property_tasks
+
+        asyncio.run(client.unsubscribe_cov_property(sub_key))
+        assert sub_key not in client._cov_property_tasks
+        # task.cancel() raises CancelledError inside the `async with scm:`
+        # block, so __aexit__ sees a non-None exc_details and — matching
+        # SubscriptionContextManager's own base-class behavior, and this
+        # codebase's existing subscribe_cov()/unsubscribe_cov() — skips
+        # sending a device-side cancel APDU. The subscription just expires
+        # naturally on the device after its lifetime. Verified directly
+        # against bacpypes3 during planning; only the original subscribe
+        # request is ever sent here.
+        assert len(client._app.requests) == 1
+
+    def test_rejected_subscription_returns_none(self):
+        from bacpypes3.apdu import ErrorRejectAbortNack
+
+        client = self._client()
+        client._app = _FakeCovApp(request_result=ErrorRejectAbortNack())
+
+        sub_key = asyncio.run(
+            client.subscribe_cov_property(
+                device_address="192.168.1.50",
+                object_type=5,  # binary-value
+                instance=2,
+                property_name="description",
+                callback=lambda *a: None,
+                lifetime=300,
+            )
+        )
+
+        assert sub_key is None
+        assert client._cov_property_tasks == {}
+
+    def test_raises_when_not_connected(self):
+        client = self._client()
+        with pytest.raises(RuntimeError):
+            asyncio.run(
+                client.subscribe_cov_property(
+                    device_address="192.168.1.50",
+                    object_type=0,
+                    instance=1,
+                    property_name="units",
+                    callback=lambda *a: None,
+                )
+            )
+
+    def test_next_cov_process_id_avoids_collision(self):
+        client = self._client()
+        client._app = _FakeCovApp()
+        from bacpypes3.pdu import Address
+
+        addr = Address("192.168.1.50")
+        client._app._cov_contexts[(addr, 1)] = object()
+
+        pid = client._next_cov_process_id(addr)
+
+        assert pid != 1
+        assert (addr, pid) not in client._app._cov_contexts
+
+    def test_unsubscribe_unknown_key_is_noop(self):
+        client = self._client()
+        asyncio.run(client.unsubscribe_cov_property("does-not-exist"))  # must not raise

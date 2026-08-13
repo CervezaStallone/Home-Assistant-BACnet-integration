@@ -17,7 +17,7 @@ import hashlib
 import logging
 from typing import Any, Callable, Union
 
-from bacpypes3.apdu import ErrorRejectAbortNack
+from bacpypes3.apdu import ErrorRejectAbortNack, SubscribeCOVPropertyRequest
 from bacpypes3.ipv4.app import ForeignApplication, NormalApplication
 from bacpypes3.local.device import DeviceObject
 from bacpypes3.pdu import Address, IPv4Address
@@ -29,6 +29,7 @@ from bacpypes3.primitivedata import (
     Real,
     Unsigned,
 )
+from bacpypes3.service.cov import SubscriptionContextManager
 
 from .const import (
     DEFAULT_WRITE_PRIORITY,
@@ -78,6 +79,85 @@ POTENTIALLY_WRITABLE_TYPES: set[int] = {
 _AppType = Union[NormalApplication, ForeignApplication]
 
 
+class _PropertyCOVSubscriptionContextManager(SubscriptionContextManager):
+    """SubscriptionContextManager variant that sends SubscribeCOVProperty.
+
+    BACpypes3's own change_of_value() helper (used by subscribe_cov() below)
+    hardcodes plain SubscribeCOVRequest, which per ASHRAE 135 only reports
+    presentValue/statusFlags. SubscribeCOVProperty (135-2012 Addendum ar)
+    lets a subscriber ask for live notifications on any single property —
+    e.g. units or description — instead of relying on a periodic re-read
+    (issue #26). BACpypes3 defines the SubscribeCOVPropertyRequest APDU but
+    never builds or sends one; this subclass overrides only
+    refresh_subscription() and __aexit__() (the two methods that build the
+    wire request) so it reuses the base class's renewal timer, queue, and
+    _cov_contexts bookkeeping unchanged. Notification routing
+    (do_ConfirmedCOVNotificationRequest / do_UnconfirmedCOVNotificationRequest
+    in bacpypes3.service.cov) is generic — keyed by
+    (address, subscriber_process_identifier) — so it works for this
+    subscription type without any further changes there.
+
+    monitoredPropertyIdentifier must be passed as a raw string (e.g.
+    "units"), NOT wrapped in a PropertyReference instance — bacpypes3's
+    Sequence field machinery constructs the PropertyReference itself and
+    raises TypeError if handed an already-built one.
+
+    Not all devices implement this addendum; a rejected request raises
+    ErrorRejectAbortNack like any other, so the caller
+    (BACnetClient.subscribe_cov_property below) can fall back to the
+    existing poll-cycle/COV-triggered ReadProperty check.
+    """
+
+    def __init__(self, *args, monitored_property_identifier: str, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.monitored_property_identifier = monitored_property_identifier
+
+    async def refresh_subscription(self) -> None:
+        request = SubscribeCOVPropertyRequest(
+            subscriberProcessIdentifier=self.subscriber_process_identifier,
+            monitoredObjectIdentifier=self.monitored_object_identifier,
+            issueConfirmedNotifications=self.issue_confirmed_notifications,
+            lifetime=self.lifetime,
+            monitoredPropertyIdentifier=self.monitored_property_identifier,
+            destination=self.address,
+        )
+
+        response = await self.app.request(request)
+        if isinstance(response, ErrorRejectAbortNack):
+            raise response
+
+        if self.lifetime == 0:
+            return
+
+        loop = asyncio.get_event_loop()
+        self.refresh_subscription_handle = loop.call_later(
+            max(1.0, self.lifetime - 2.0), self.create_refresh_task
+        )
+
+    async def __aexit__(self, *exc_details) -> None:
+        if self.refresh_subscription_handle:
+            self.refresh_subscription_handle.cancel()
+        del self.app._cov_contexts[(self.address, self.subscriber_process_identifier)]
+
+        if exc_details != (None, None, None):
+            return
+
+        cancel_request = SubscribeCOVPropertyRequest(
+            subscriberProcessIdentifier=self.subscriber_process_identifier,
+            monitoredObjectIdentifier=self.monitored_object_identifier,
+            monitoredPropertyIdentifier=self.monitored_property_identifier,
+            destination=self.address,
+        )
+        response = await self.app.request(cancel_request)
+        if isinstance(response, ErrorRejectAbortNack):
+            _LOGGER.debug(
+                "COV-Property cancel rejected for %s (device may have already "
+                "expired the subscription): %s",
+                self.monitored_object_identifier,
+                response,
+            )
+
+
 class BACnetClient:
     """Wrapper around BACpypes3 providing a clean async API for HA.
 
@@ -110,6 +190,7 @@ class BACnetClient:
         )
         self._app: _AppType | None = None
         self._cov_tasks: dict[str, asyncio.Task] = {}
+        self._cov_property_tasks: dict[str, asyncio.Task] = {}
         # Per-device RPM support cache: True = supported (or untested), False = rejected
         self._rpm_supported: dict[str, bool] = {}
         # Last successful connect() parameters — used by reconnect() to
@@ -315,6 +396,10 @@ class BACnetClient:
         for task in self._cov_tasks.values():
             task.cancel()
         self._cov_tasks.clear()
+
+        for task in self._cov_property_tasks.values():
+            task.cancel()
+        self._cov_property_tasks.clear()
 
         if self._app is not None:
             try:
@@ -1449,6 +1534,211 @@ class BACnetClient:
         """Cancel all COV subscriptions."""
         for sub_key in list(self._cov_tasks):
             await self.unsubscribe_cov(sub_key)
+
+    # ------------------------------------------------------------------
+    # SubscribeCOVProperty — live metadata push (issue #26)
+    # ------------------------------------------------------------------
+
+    def _next_cov_process_id(self, address: Address) -> int:
+        """Return a subscriber_process_identifier unused for *address*.
+
+        Reuses the same counter/collision-check bacpypes3's own
+        ChangeOfValueServices.change_of_value() uses internally for plain
+        COV subscriptions (accessed via the app's private _cov_next_id /
+        _cov_contexts) so property-COV and value-COV subscriptions to the
+        same device never collide — they share the same _cov_contexts dict.
+        """
+        app = self._app
+        while True:
+            pid = app._cov_next_id
+            app._cov_next_id = (app._cov_next_id + 1) % (1 << 22)
+            if (address, pid) not in app._cov_contexts:
+                return pid
+
+    @staticmethod
+    def _coerce_cov_property_value(property_name: str, value: Any) -> Any:
+        """Coerce a COV-Property notification value for storage.
+
+        Mirrors how _read_object_metadata() coerces the same properties.
+        "units" must stay the hyphenated string form (e.g.
+        "degrees-celsius") — EngineeringUnits is an int subclass, so the
+        generic _coerce_value() path would silently return a bare integer
+        instead.
+        """
+        if value is None:
+            return None
+        if property_name == "units":
+            return str(value)
+        return BACnetClient._coerce_value(value)
+
+    async def subscribe_cov_property(
+        self,
+        device_address: str,
+        object_type: int,
+        instance: int,
+        property_name: str,
+        callback: Callable[[str, str, Any], None],
+        lifetime: int = 300,
+    ) -> str | None:
+        """Subscribe to live COV-Property notifications for one property.
+
+        Uses SubscribeCOVProperty (ASHRAE 135-2012 Addendum ar) to get
+        pushed updates when a specific non-presentValue property changes —
+        e.g. units or description — instead of periodically re-reading it.
+        Not every device implements this addendum; on rejection this
+        returns None so the caller falls back to the existing
+        ReadProperty-based refresh (issue #26).
+
+        Args:
+            device_address: Target device address.
+            object_type: BACnet object type integer.
+            instance: Object instance number.
+            property_name: BACnet camelCase property name (e.g. "units").
+            callback: callback(obj_key, property_name, value) invoked on
+                      each notification.
+            lifetime: Subscription lifetime in seconds.
+
+        Returns:
+            A subscription key string on success, or None on failure.
+        """
+        if self._app is None:
+            raise RuntimeError("Client not connected")
+
+        addr = Address(device_address)
+        type_str = self._int_to_object_type_str(object_type)
+        oid = ObjectIdentifier((type_str, instance))
+        sub_key = f"{device_address}:{object_type}:{instance}:{property_name}"
+        obj_key = f"{object_type}:{instance}"
+
+        ready_event: asyncio.Event = asyncio.Event()
+
+        try:
+            subscriber_process_identifier = self._next_cov_process_id(addr)
+            scm = _PropertyCOVSubscriptionContextManager(
+                self._app,
+                addr,
+                oid,
+                subscriber_process_identifier,
+                True,
+                lifetime,
+                monitored_property_identifier=property_name,
+            )
+
+            task = asyncio.create_task(
+                self._cov_property_reader_task(
+                    scm, sub_key, obj_key, property_name, callback, ready_event
+                )
+            )
+            self._cov_property_tasks[sub_key] = task
+
+            try:
+                await asyncio.wait_for(ready_event.wait(), timeout=10.0)
+            except asyncio.TimeoutError:
+                _LOGGER.warning(
+                    "COV-Property subscription (%s) timed out for %s:%d at %s.",
+                    property_name,
+                    type_str,
+                    instance,
+                    device_address,
+                )
+                if not task.done():
+                    task.cancel()
+                    try:
+                        await task
+                    except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                        pass
+                self._cov_property_tasks.pop(sub_key, None)
+                return None
+
+            if task.done():
+                _LOGGER.info(
+                    "COV-Property subscription (%s) rejected for %s:%d at %s "
+                    "— device likely does not support Addendum ar.",
+                    property_name,
+                    type_str,
+                    instance,
+                    device_address,
+                )
+                self._cov_property_tasks.pop(sub_key, None)
+                return None
+
+            _LOGGER.info(
+                "COV-Property subscription active: %s for %s:%d",
+                property_name,
+                type_str,
+                instance,
+            )
+            return sub_key
+
+        except (ErrorRejectAbortNack, Exception) as exc:  # noqa: BLE001
+            _LOGGER.info(
+                "COV-Property subscription (%s) failed for %s:%d at %s: %s.",
+                property_name,
+                type_str,
+                instance,
+                device_address,
+                exc,
+            )
+            self._cov_property_tasks.pop(sub_key, None)
+            return None
+
+    async def _cov_property_reader_task(
+        self,
+        scm: "_PropertyCOVSubscriptionContextManager",
+        sub_key: str,
+        obj_key: str,
+        property_name: str,
+        callback: Callable[[str, str, Any], None],
+        ready_event: asyncio.Event,
+    ) -> None:
+        """Long-running task that reads from a COV-Property subscription queue.
+
+        Mirrors _cov_reader_task above but for a single monitored property
+        instead of presentValue/statusFlags (issue #26).
+        """
+        try:
+            async with scm:
+                ready_event.set()
+                while True:
+                    prop_id, value = await scm.get_value()
+                    coerced = self._coerce_cov_property_value(property_name, value)
+                    _LOGGER.debug(
+                        "COV-Property notification %s: %s=%r", sub_key, prop_id, coerced
+                    )
+                    try:
+                        callback(obj_key, property_name, coerced)
+                    except Exception:  # noqa: BLE001
+                        _LOGGER.exception(
+                            "Error in COV-Property callback for %s", sub_key
+                        )
+        except asyncio.CancelledError:
+            _LOGGER.debug("COV-Property task cancelled for %s", sub_key)
+        except (ErrorRejectAbortNack, Exception) as exc:  # noqa: BLE001
+            if not ready_event.is_set():
+                ready_event.set()
+            self._cov_property_tasks.pop(sub_key, None)
+            _LOGGER.debug(
+                "COV-Property not supported by device for %s (falling back to "
+                "ReadProperty refresh): %s",
+                sub_key,
+                exc,
+            )
+
+    async def unsubscribe_cov_property(self, sub_key: str) -> None:
+        """Cancel a COV-Property subscription by cancelling its reader task."""
+        task = self._cov_property_tasks.pop(sub_key, None)
+        if task is not None and not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            _LOGGER.debug("COV-Property unsubscribed: %s", sub_key)
+
+    async def unsubscribe_all_cov_property(self) -> None:
+        """Cancel all COV-Property subscriptions."""
+        for sub_key in list(self._cov_property_tasks):
+            await self.unsubscribe_cov_property(sub_key)
 
     # ------------------------------------------------------------------
     # Value conversion helpers
