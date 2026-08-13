@@ -1684,7 +1684,7 @@ class BACnetClient:
 
     async def _cov_property_reader_task(
         self,
-        scm: "_PropertyCOVSubscriptionContextManager",
+        scm: _PropertyCOVSubscriptionContextManager,
         sub_key: str,
         obj_key: str,
         property_name: str,
