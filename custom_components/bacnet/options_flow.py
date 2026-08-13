@@ -12,8 +12,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import homeassistant.helpers.config_validation as cv
 import voluptuous as vol
-
 from homeassistant import config_entries
 from homeassistant.data_entry_flow import FlowResult
 
@@ -22,14 +22,17 @@ from .const import (
     CONF_COV_OVERRIDES,
     CONF_DOMAIN_MAPPING,
     CONF_ENABLE_COV,
+    CONF_LIVE_METADATA_PROPERTIES,
     CONF_POLLING_INTERVAL,
     CONF_SELECTED_OBJECTS,
     CONF_USE_DESCRIPTION,
     DEFAULT_COV_INCREMENT,
     DEFAULT_DOMAIN_MAP,
     DEFAULT_ENABLE_COV,
+    DEFAULT_LIVE_METADATA_PROPERTIES,
     DEFAULT_POLLING_INTERVAL,
     DEFAULT_USE_DESCRIPTION,
+    LIVE_METADATA_PROPERTY_CHOICES,
     SUPPORTED_DOMAINS,
 )
 
@@ -80,6 +83,9 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
         current_cov_inc = self._config_entry.options.get(
             CONF_COV_INCREMENT, DEFAULT_COV_INCREMENT
         )
+        current_live_metadata = self._config_entry.options.get(
+            CONF_LIVE_METADATA_PROPERTIES, DEFAULT_LIVE_METADATA_PROPERTIES
+        )
 
         schema = vol.Schema(
             {
@@ -91,6 +97,14 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
                     vol.Coerce(int), vol.Range(min=1)
                 ),
                 vol.Optional(CONF_USE_DESCRIPTION, default=current_desc): bool,
+                vol.Optional(
+                    CONF_LIVE_METADATA_PROPERTIES, default=current_live_metadata
+                ): cv.multi_select(
+                    {
+                        p: p.replace("_", " ").title()
+                        for p in LIVE_METADATA_PROPERTY_CHOICES
+                    }
+                ),
             }
         )
 
