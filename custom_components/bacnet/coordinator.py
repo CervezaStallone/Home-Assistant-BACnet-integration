@@ -33,6 +33,8 @@ from .const import (
     DEFAULT_USE_DESCRIPTION,
     DEFAULT_WRITE_PRIORITY,
     DOMAIN,
+    LIVE_METADATA_BACNET_TO_PROPERTY,
+    LIVE_METADATA_PROPERTY_TO_BACNET,
     MAX_SILENT_FAILURES,
     OBJECT_TYPE_ANALOG_INPUT,
     OBJECT_TYPE_ANALOG_OUTPUT,
@@ -73,6 +75,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         cov_overrides: dict[str, bool] | None = None,
         entry: ConfigEntry | None = None,
         cov_increment: float = DEFAULT_COV_INCREMENT,
+        live_metadata_properties: list[str] | None = None,
     ) -> None:
         """Initialise the coordinator.
 
@@ -88,6 +91,10 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 flow. Objects with no entry fall back to `enable_cov`.
             entry: The ConfigEntry for accessing device addressing info.
             cov_increment: COV increment for analog objects (0.0 = device default).
+            live_metadata_properties: Which static properties (object_name,
+                description, units) get a live SubscribeCOVProperty
+                subscription instead of the periodic/COV-triggered
+                ReadProperty refresh. Empty by default (issue #26).
         """
         self.client = client
         self.objects = objects
@@ -98,10 +105,14 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.cov_overrides = cov_overrides or {}
         self.entry = entry
         self.cov_increment = cov_increment
+        self.live_metadata_properties = live_metadata_properties or []
         self.write_priority: int = DEFAULT_WRITE_PRIORITY
 
         # Track which objects have active COV and which need polling
         self._cov_subscriptions: dict[str, str] = {}  # obj_key → sub_key
+        self._cov_property_subscriptions: dict[
+            str, str
+        ] = {}  # "obj_key:prop" → sub_key
         self._polled_objects: list[dict[str, Any]] = []
 
         # Outage-recovery state (issue #18).
@@ -276,6 +287,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Cancel any lingering sub keys (tasks are already dead post-reconnect
         # but clearing the mapping ensures a clean rebuild).
         self._cov_subscriptions.clear()
+        self._cov_property_subscriptions.clear()
         self._polled_objects.clear()
         await self._setup_subscriptions()
         self._needs_resubscribe = False
@@ -388,7 +400,9 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 instance=obj["instance"],
             )
         except Exception as exc:  # noqa: BLE001
-            _LOGGER.debug("COV-triggered metadata check failed for %s: %s", obj_key, exc)
+            _LOGGER.debug(
+                "COV-triggered metadata check failed for %s: %s", obj_key, exc
+            )
             return
 
         if fresh is None:
@@ -438,6 +452,30 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                             "Could not write covIncrement for %s (device may "
                             "not support it — using device default)",
                             obj_key,
+                        )
+
+                # Live metadata push (issue #26) — opt-in per property since
+                # each one is a SEPARATE COV subscription on the device.
+                # Rejected/unsupported properties simply keep using the
+                # existing poll-cycle/COV-triggered ReadProperty refresh.
+                for prop_key in self.live_metadata_properties:
+                    bacnet_prop = LIVE_METADATA_PROPERTY_TO_BACNET.get(prop_key)
+                    if bacnet_prop is None:
+                        continue
+                    prop_sub_key = await self.client.subscribe_cov_property(
+                        device_address=self.device_address,
+                        object_type=obj["object_type"],
+                        instance=obj["instance"],
+                        property_name=bacnet_prop,
+                        callback=self._handle_cov_property_notification,
+                        lifetime=COV_LIFETIME_SECONDS,
+                    )
+                    if prop_sub_key is not None:
+                        self._cov_property_subscriptions[f"{obj_key}:{prop_key}"] = (
+                            prop_sub_key
+                        )
+                        _LOGGER.debug(
+                            "Live COV-Property active: %s for %s", prop_key, obj_key
                         )
 
                 sub_key = await self.client.subscribe_cov(
@@ -519,6 +557,47 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._last_object_metadata_check[obj_key] = now
         self.hass.async_create_task(self._refresh_object_metadata_now(obj_key))
 
+    @callback
+    def _handle_cov_property_notification(
+        self, obj_key: str, bacnet_property_name: str, value: Any
+    ) -> None:
+        """Process a live COV-Property notification (issue #26).
+
+        Unlike _handle_cov_notification (presentValue/statusFlags →
+        coordinator data), this updates the object's own metadata dict and,
+        if the value actually changed, reloads the entry the same way
+        async_refresh_metadata does — units/device_class are read once at
+        entity __init__, so an in-place dict mutation alone wouldn't
+        update an already-created sensor entity.
+        """
+        internal_key = LIVE_METADATA_BACNET_TO_PROPERTY.get(bacnet_property_name)
+        if internal_key is None:
+            return
+
+        obj = next(
+            (
+                o
+                for o in self.objects
+                if f"{o['object_type']}:{o['instance']}" == obj_key
+            ),
+            None,
+        )
+        if obj is None:
+            return
+
+        if obj.get(internal_key) == value:
+            return
+
+        _LOGGER.info(
+            "BACnet object %s metadata changed via live COV-Property: %s %r → %r",
+            obj_key,
+            internal_key,
+            obj.get(internal_key),
+            value,
+        )
+        obj[internal_key] = value
+        self._persist_metadata_change()
+
     # ------------------------------------------------------------------
     # Shutdown
     # ------------------------------------------------------------------
@@ -533,6 +612,11 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         for sub_key in list(self._cov_subscriptions.values()):
             await self.client.unsubscribe_cov(sub_key)
         self._cov_subscriptions.clear()
+
+        for sub_key in list(self._cov_property_subscriptions.values()):
+            await self.client.unsubscribe_cov_property(sub_key)
+        self._cov_property_subscriptions.clear()
+
         self._polled_objects.clear()
 
         _LOGGER.debug("Coordinator shutdown complete")
