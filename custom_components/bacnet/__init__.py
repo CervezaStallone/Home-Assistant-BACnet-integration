@@ -30,6 +30,7 @@ from .const import (
     CONF_DOMAIN_MAPPING,
     CONF_ENABLE_COV,
     CONF_FIRMWARE_VERSION,
+    CONF_LIVE_METADATA_PROPERTIES,
     CONF_LOCAL_IP,
     CONF_LOCAL_PORT,
     CONF_MODEL_NAME,
@@ -47,6 +48,7 @@ from .const import (
     DEFAULT_COV_INCREMENT,
     DEFAULT_DOMAIN_MAP,
     DEFAULT_ENABLE_COV,
+    DEFAULT_LIVE_METADATA_PROPERTIES,
     DEFAULT_POLLING_INTERVAL,
     DEFAULT_USE_DESCRIPTION,
     DOMAIN,
@@ -65,6 +67,7 @@ PLATFORMS: list[Platform] = [
     Platform.NUMBER,
     Platform.CLIMATE,
     Platform.SELECT,
+    Platform.BUTTON,
 ]
 
 
@@ -241,6 +244,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     domain_overrides: dict[str, str] = entry.options.get(CONF_DOMAIN_MAPPING, {})
     cov_overrides: dict[str, bool] = entry.options.get(CONF_COV_OVERRIDES, {})
     cov_increment: float = entry.options.get(CONF_COV_INCREMENT, DEFAULT_COV_INCREMENT)
+    live_metadata_properties: list[str] = entry.options.get(
+        CONF_LIVE_METADATA_PROPERTIES, DEFAULT_LIVE_METADATA_PROPERTIES
+    )
 
     # ---- 2. Get or create a shared BACnet client for this port ----
     # A single UDP socket (one BACnetClient) can communicate with any number
@@ -288,6 +294,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         cov_overrides=cov_overrides,
         entry=entry,
         cov_increment=cov_increment,
+        live_metadata_properties=live_metadata_properties,
     )
 
     # Perform the first data refresh so entities have initial state
@@ -316,9 +323,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # ---- 7. Forward to platforms ----
     needed_platforms = _get_platforms_in_use(selected_objects, domain_overrides)
-    # SELECT is device-level (write priority selector), not object-dependent
-    if Platform.SELECT not in needed_platforms:
-        needed_platforms.append(Platform.SELECT)
+    # SELECT (write priority) and BUTTON (metadata refresh) are device-level,
+    # not object-dependent.
+    for device_level_platform in (Platform.SELECT, Platform.BUTTON):
+        if device_level_platform not in needed_platforms:
+            needed_platforms.append(device_level_platform)
     await hass.config_entries.async_forward_entry_setups(entry, needed_platforms)
 
     # ---- 8. Listen for option changes ----
@@ -351,8 +360,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     domain_overrides: dict[str, str] = entry.options.get(CONF_DOMAIN_MAPPING, {})
     selected_objects = entry_data.get(DATA_OBJECTS, [])
     needed_platforms = _get_platforms_in_use(selected_objects, domain_overrides)
-    if Platform.SELECT not in needed_platforms:
-        needed_platforms.append(Platform.SELECT)
+    for device_level_platform in (Platform.SELECT, Platform.BUTTON):
+        if device_level_platform not in needed_platforms:
+            needed_platforms.append(device_level_platform)
 
     # Unload platforms
     unload_ok = await hass.config_entries.async_unload_platforms(

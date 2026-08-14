@@ -128,6 +128,7 @@ After setup, click **Configure** on the integration card to adjust:
 | **Use description** | Show BACnet `description` (property 28) instead of `objectName` as entity name | Off |
 | **Domain mapping** | Change the HA entity type per object (e.g. sensor → number, switch → binary_sensor) | Auto |
 | **Per-object COV override** | Override **Enable COV** for an individual object — shown as a checkbox next to its domain mapping. Objects with no override use the device-wide **Enable COV** setting. | Follows **Enable COV** |
+| **Live metadata properties** | Opt-in per property (`object_name`, `description`, `units`) for a *live* push update via BACnet's SubscribeCOVProperty service, instead of periodic re-reads. Each one is a separate COV subscription on the device — leave off unless you need instant updates and know your device supports it. | None |
 
 Changes take effect immediately — the integration reloads automatically.
 
@@ -143,6 +144,15 @@ To use it:
 Available levels: `8` (Manual Operator), `9`, `12`, `13`, `14`, `15`, `16` (default — lowest), `17`
 
 > BACnet Priority Array levels run 1–16. Priority 16 is the safest default. Use level 8 if your BAS requires Manual Operator override. The selected priority persists across HA restarts.
+
+### Live metadata properties
+
+By default, changes to an object's `objectName`, `description`, or `units` on the BACnet device are picked up automatically within about an hour (or sooner if the object also has active COV traffic) — see [issue #26](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/issues/26). No action is needed for this baseline behavior.
+
+If you need those changes reflected immediately, enable one or more properties under **Live metadata properties** in **Configure**. This uses BACnet's `SubscribeCOVProperty` service (ASHRAE 135-2012 Addendum ar) to get a live push the moment the property changes on the device — but:
+
+- It's a **separate COV subscription per property, per object**. Enabling all three on 20 objects adds 60 extra subscriptions on top of the 20 already used for live values — many devices cap total COV subscriptions well below that.
+- Not all devices implement this addendum. Unsupported properties/devices silently fall back to the default periodic behavior above — no error, no user action needed.
 
 ---
 

@@ -14,7 +14,7 @@ The coordinator also handles:
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -23,13 +23,18 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .bacnet_client import BACnetClient
 from .const import (
+    CONF_SELECTED_OBJECTS,
+    COV_METADATA_CHECK_INTERVAL,
     DEFAULT_COV_INCREMENT,
     DEFAULT_DOMAIN_MAP,
     DEFAULT_ENABLE_COV,
+    DEFAULT_METADATA_REFRESH_INTERVAL,
     DEFAULT_POLLING_INTERVAL,
     DEFAULT_USE_DESCRIPTION,
     DEFAULT_WRITE_PRIORITY,
     DOMAIN,
+    LIVE_METADATA_BACNET_TO_PROPERTY,
+    LIVE_METADATA_PROPERTY_TO_BACNET,
     MAX_SILENT_FAILURES,
     OBJECT_TYPE_ANALOG_INPUT,
     OBJECT_TYPE_ANALOG_OUTPUT,
@@ -70,6 +75,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         cov_overrides: dict[str, bool] | None = None,
         entry: ConfigEntry | None = None,
         cov_increment: float = DEFAULT_COV_INCREMENT,
+        live_metadata_properties: list[str] | None = None,
     ) -> None:
         """Initialise the coordinator.
 
@@ -85,6 +91,10 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 flow. Objects with no entry fall back to `enable_cov`.
             entry: The ConfigEntry for accessing device addressing info.
             cov_increment: COV increment for analog objects (0.0 = device default).
+            live_metadata_properties: Which static properties (object_name,
+                description, units) get a live SubscribeCOVProperty
+                subscription instead of the periodic/COV-triggered
+                ReadProperty refresh. Empty by default (issue #26).
         """
         self.client = client
         self.objects = objects
@@ -95,10 +105,14 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.cov_overrides = cov_overrides or {}
         self.entry = entry
         self.cov_increment = cov_increment
+        self.live_metadata_properties = live_metadata_properties or []
         self.write_priority: int = DEFAULT_WRITE_PRIORITY
 
         # Track which objects have active COV and which need polling
         self._cov_subscriptions: dict[str, str] = {}  # obj_key → sub_key
+        self._cov_property_subscriptions: dict[
+            str, str
+        ] = {}  # "obj_key:prop" → sub_key
         self._polled_objects: list[dict[str, Any]] = []
 
         # Outage-recovery state (issue #18).
@@ -110,6 +124,11 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # after a reconnect so the next successful poll re-creates COV subs.
         self._consecutive_failures: int = 0
         self._needs_resubscribe: bool = False
+
+        # Metadata refresh (issue #26). Skip an immediate refresh right after
+        # setup — the config flow just read fresh metadata during discovery.
+        self._last_metadata_refresh: datetime = datetime.now(timezone.utc)
+        self._last_object_metadata_check: dict[str, datetime] = {}
 
         # Device address for reads/writes (from config entry data)
         self.device_address: str = ""
@@ -194,6 +213,13 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # confirmed reachable again.
             if self._needs_resubscribe:
                 await self._restore_subscriptions()
+
+            # Piggyback the metadata refresh on this same successful cycle
+            # rather than a dedicated timer — the device is already confirmed
+            # reachable, so this is the cheapest point to check for changes.
+            elapsed = datetime.now(timezone.utc) - self._last_metadata_refresh
+            if elapsed >= timedelta(seconds=DEFAULT_METADATA_REFRESH_INTERVAL):
+                await self.async_refresh_metadata()
         else:
             await self._handle_poll_failure()
 
@@ -261,9 +287,170 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Cancel any lingering sub keys (tasks are already dead post-reconnect
         # but clearing the mapping ensures a clean rebuild).
         self._cov_subscriptions.clear()
+        self._cov_property_subscriptions.clear()
         self._polled_objects.clear()
         await self._setup_subscriptions()
         self._needs_resubscribe = False
+
+    # ------------------------------------------------------------------
+    # Static metadata refresh — issue #26
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _diff_metadata(obj: dict[str, Any], fresh: dict[str, Any]) -> dict[str, Any]:
+        """Return the object_name/description/units/commandable fields that
+        differ between *obj* and *fresh* (empty dict if nothing changed).
+
+        Deliberately does NOT mutate *obj*. self.objects is the SAME list
+        of dicts as entry.data[CONF_SELECTED_OBJECTS] (assigned once by
+        async_setup_entry) — HA's async_update_entry only fires the reload
+        listener when `entry.data != data`, so mutating these dicts in
+        place before that comparison makes old and new data compare equal
+        and the reload silently never fires. unit_of_measurement/
+        device_class then stay stale forever, even though
+        extra_state_attributes (a live read of the mutated dict) looks
+        correct. Confirmed on the v1.0.42-beta pre-release via issue #26.
+        Callers must build a genuinely new dict/list instead — see
+        _replace_object().
+        """
+        changed: dict[str, Any] = {}
+        for key in ("object_name", "description", "units", "commandable"):
+            if obj.get(key) != fresh.get(key):
+                changed[key] = fresh[key]
+        return changed
+
+    def _replace_object(self, obj_key: str, updates: dict[str, Any]) -> None:
+        """Point self.objects at a new list with obj_key's dict replaced by
+        a copy carrying *updates* merged in — see _diff_metadata for why
+        this must be a genuinely new object, not an in-place mutation.
+        """
+        self.objects = [
+            {**o, **updates} if f"{o['object_type']}:{o['instance']}" == obj_key else o
+            for o in self.objects
+        ]
+
+    def _persist_metadata_change(self) -> None:
+        """Reload the config entry so entities pick up new units/device_class.
+
+        A reload (not just an in-place dict mutation) is required because HA
+        sensor entities read units/device_class once at __init__. Reuses the
+        same options-update-listener path already used when the user edits
+        options.
+        """
+        if self.entry is None:
+            return
+        _LOGGER.info("BACnet object metadata changed on device — reloading entry")
+        self.hass.config_entries.async_update_entry(
+            self.entry,
+            data={**self.entry.data, CONF_SELECTED_OBJECTS: self.objects},
+        )
+
+    async def async_refresh_metadata(self) -> bool:
+        """Re-read objectName/description/units/commandable for every object.
+
+        Safety-net sweep for polling-only objects, which never produce a COV
+        notification to trigger the cheaper per-object check below. Runs on
+        DEFAULT_METADATA_REFRESH_INTERVAL, piggybacked on the regular poll
+        cycle rather than a dedicated timer (issue #26).
+
+        Returns True if any object's metadata changed.
+        """
+        self._last_metadata_refresh = datetime.now(timezone.utc)
+        new_objects: list[dict[str, Any]] = []
+        changed = False
+
+        for obj in self.objects:
+            try:
+                fresh = await self.client.refresh_object_metadata(
+                    device_address=self.device_address,
+                    object_type=obj["object_type"],
+                    instance=obj["instance"],
+                )
+            except Exception as exc:  # noqa: BLE001
+                _LOGGER.debug(
+                    "Metadata refresh failed for %s:%s: %s",
+                    obj["object_type"],
+                    obj["instance"],
+                    exc,
+                )
+                new_objects.append(obj)
+                continue
+
+            if fresh is None:
+                new_objects.append(obj)
+                continue
+
+            updates = self._diff_metadata(obj, fresh)
+            if updates:
+                for key, value in updates.items():
+                    _LOGGER.info(
+                        "BACnet object %s:%s metadata changed: %s %r → %r",
+                        obj["object_type"],
+                        obj["instance"],
+                        key,
+                        obj.get(key),
+                        value,
+                    )
+                obj = {**obj, **updates}
+                changed = True
+            new_objects.append(obj)
+
+        if changed:
+            self.objects = new_objects
+            self._persist_metadata_change()
+
+        return changed
+
+    async def _refresh_object_metadata_now(self, obj_key: str) -> None:
+        """Re-read metadata for one object, triggered by a live COV notification.
+
+        BACnet COV only ever carries presentValue/statusFlags — there is no
+        protocol-level push for a property like units changing. A COV
+        notification is still the best available signal that the device is
+        live and actively talking about this object right now, so it's used
+        as the trigger point for a real ReadProperty check instead of waiting
+        on the periodic sweep (issue #26).
+        """
+        obj = next(
+            (
+                o
+                for o in self.objects
+                if f"{o['object_type']}:{o['instance']}" == obj_key
+            ),
+            None,
+        )
+        if obj is None:
+            return
+
+        try:
+            fresh = await self.client.refresh_object_metadata(
+                device_address=self.device_address,
+                object_type=obj["object_type"],
+                instance=obj["instance"],
+            )
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.debug(
+                "COV-triggered metadata check failed for %s: %s", obj_key, exc
+            )
+            return
+
+        if fresh is None:
+            return
+
+        updates = self._diff_metadata(obj, fresh)
+        if not updates:
+            return
+
+        for key, value in updates.items():
+            _LOGGER.info(
+                "BACnet object %s metadata changed: %s %r → %r",
+                obj_key,
+                key,
+                obj.get(key),
+                value,
+            )
+        self._replace_object(obj_key, updates)
+        self._persist_metadata_change()
 
     # ------------------------------------------------------------------
     # COV subscription management
@@ -306,6 +493,30 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                             "Could not write covIncrement for %s (device may "
                             "not support it — using device default)",
                             obj_key,
+                        )
+
+                # Live metadata push (issue #26) — opt-in per property since
+                # each one is a SEPARATE COV subscription on the device.
+                # Rejected/unsupported properties simply keep using the
+                # existing poll-cycle/COV-triggered ReadProperty refresh.
+                for prop_key in self.live_metadata_properties:
+                    bacnet_prop = LIVE_METADATA_PROPERTY_TO_BACNET.get(prop_key)
+                    if bacnet_prop is None:
+                        continue
+                    prop_sub_key = await self.client.subscribe_cov_property(
+                        device_address=self.device_address,
+                        object_type=obj["object_type"],
+                        instance=obj["instance"],
+                        property_name=bacnet_prop,
+                        callback=self._handle_cov_property_notification,
+                        lifetime=COV_LIFETIME_SECONDS,
+                    )
+                    if prop_sub_key is not None:
+                        self._cov_property_subscriptions[f"{obj_key}:{prop_key}"] = (
+                            prop_sub_key
+                        )
+                        _LOGGER.debug(
+                            "Live COV-Property active: %s for %s", prop_key, obj_key
                         )
 
                 sub_key = await self.client.subscribe_cov(
@@ -368,6 +579,68 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.data = data
         self.async_update_listeners()
 
+        self._maybe_schedule_metadata_check(obj_key)
+
+    def _maybe_schedule_metadata_check(self, obj_key: str) -> None:
+        """Schedule a COV-triggered metadata check for *obj_key*, throttled.
+
+        _handle_cov_notification is a sync @callback (invoked directly by the
+        COV reader task), so the actual ReadProperty check has to run as a
+        background task — the same pattern used elsewhere in this integration
+        for scheduling async cleanup from a sync HA callback.
+        """
+        now = datetime.now(timezone.utc)
+        last_check = self._last_object_metadata_check.get(obj_key)
+        if last_check is not None and (now - last_check) < timedelta(
+            seconds=COV_METADATA_CHECK_INTERVAL
+        ):
+            return
+        self._last_object_metadata_check[obj_key] = now
+        self.hass.async_create_task(self._refresh_object_metadata_now(obj_key))
+
+    @callback
+    def _handle_cov_property_notification(
+        self, obj_key: str, bacnet_property_name: str, value: Any
+    ) -> None:
+        """Process a live COV-Property notification (issue #26).
+
+        Unlike _handle_cov_notification (presentValue/statusFlags →
+        coordinator data), this replaces the object's own metadata dict
+        with an updated copy and, if the value actually changed, reloads
+        the entry the same way async_refresh_metadata does —
+        units/device_class are read once at entity __init__, so an
+        in-place dict mutation alone wouldn't update an already-created
+        sensor entity (see _diff_metadata for why it must be a genuinely
+        new dict, not a mutation).
+        """
+        internal_key = LIVE_METADATA_BACNET_TO_PROPERTY.get(bacnet_property_name)
+        if internal_key is None:
+            return
+
+        obj = next(
+            (
+                o
+                for o in self.objects
+                if f"{o['object_type']}:{o['instance']}" == obj_key
+            ),
+            None,
+        )
+        if obj is None:
+            return
+
+        if obj.get(internal_key) == value:
+            return
+
+        _LOGGER.info(
+            "BACnet object %s metadata changed via live COV-Property: %s %r → %r",
+            obj_key,
+            internal_key,
+            obj.get(internal_key),
+            value,
+        )
+        self._replace_object(obj_key, {internal_key: value})
+        self._persist_metadata_change()
+
     # ------------------------------------------------------------------
     # Shutdown
     # ------------------------------------------------------------------
@@ -382,6 +655,11 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         for sub_key in list(self._cov_subscriptions.values()):
             await self.client.unsubscribe_cov(sub_key)
         self._cov_subscriptions.clear()
+
+        for sub_key in list(self._cov_property_subscriptions.values()):
+            await self.client.unsubscribe_cov_property(sub_key)
+        self._cov_property_subscriptions.clear()
+
         self._polled_objects.clear()
 
         _LOGGER.debug("Coordinator shutdown complete")

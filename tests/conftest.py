@@ -151,6 +151,11 @@ class _Platform(str, Enum):
     NUMBER = "number"
     CLIMATE = "climate"
     SELECT = "select"
+    BUTTON = "button"
+
+
+class _ButtonEntity(_CoordinatorEntity):
+    pass
 
 
 # ---------------------------------------------------------------------------
@@ -202,6 +207,9 @@ _ha_climate_mod.ClimateEntity = _ClimateEntity
 _ha_climate_mod.ClimateEntityFeature = _ClimateEntityFeature
 _ha_climate_mod.HVACMode = _HVACMode
 
+_ha_button_mod = MagicMock()
+_ha_button_mod.ButtonEntity = _ButtonEntity
+
 _voluptuous = MagicMock()
 _voluptuous.Schema = dict  # vol.Schema({…}) → just a dict for stub purposes
 
@@ -220,6 +228,7 @@ sys.modules.update(
         "homeassistant.components.switch": _ha_switch_mod,
         "homeassistant.components.number": _ha_number_mod,
         "homeassistant.components.climate": _ha_climate_mod,
+        "homeassistant.components.button": _ha_button_mod,
         "homeassistant.helpers": MagicMock(),
         "homeassistant.helpers.update_coordinator": _ha_coordinator_mod,
         "homeassistant.helpers.device_registry": _ha_device_registry,
