@@ -65,6 +65,39 @@ DEFAULT_COV_INCREMENT = 0.1  # default COV increment for analog objects
 MAX_SILENT_FAILURES = 3
 RECONNECT_THRESHOLD = 10
 
+# Static object metadata (objectName, description, units, commandable) has no
+# COV/push mechanism in BACnet — a device-side edit is only visible on a fresh
+# ReadProperty. Two refresh paths pick that up (issue #26):
+#   1. COV-triggered: a COV notification proves the device is actively talking
+#      about that object right now, so it's the cheapest moment to also check
+#      its static properties. Throttled per-object so a fast-changing analog
+#      doesn't cause a metadata re-read on every notification.
+#   2. Periodic sweep: the safety net for polling-only objects, which never
+#      produce a COV notification to trigger off of.
+COV_METADATA_CHECK_INTERVAL = 300  # seconds (5 min) — per-object COV throttle
+DEFAULT_METADATA_REFRESH_INTERVAL = 3600  # seconds (1 hour) — polled-object sweep
+
+# Properties eligible for a LIVE SubscribeCOVProperty subscription (ASHRAE
+# 135-2012 Addendum ar) instead of the ReadProperty-based refresh above.
+# Opt-in per property because each one is a SEPARATE COV subscription on the
+# device — SubscribeCOVProperty has no "any property" wildcard
+# (monitoredPropertyIdentifier is singular) — and devices often cap total COV
+# subscriptions in the 10s-100s. Default is empty so upgrading users don't
+# silently multiply their subscription count (issue #26).
+CONF_LIVE_METADATA_PROPERTIES = "live_metadata_properties"
+LIVE_METADATA_PROPERTY_CHOICES: list[str] = ["object_name", "description", "units"]
+DEFAULT_LIVE_METADATA_PROPERTIES: list[str] = []
+
+# snake_case (our config key) -> BACnet camelCase property name
+LIVE_METADATA_PROPERTY_TO_BACNET: dict[str, str] = {
+    "object_name": "objectName",
+    "description": "description",
+    "units": "units",
+}
+LIVE_METADATA_BACNET_TO_PROPERTY: dict[str, str] = {
+    v: k for k, v in LIVE_METADATA_PROPERTY_TO_BACNET.items()
+}
+
 # ---------------------------------------------------------------------------
 # BACnet object type IDs  (from ASHRAE 135)
 # ---------------------------------------------------------------------------
