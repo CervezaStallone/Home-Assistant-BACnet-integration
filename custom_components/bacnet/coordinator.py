@@ -296,25 +296,38 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     # Static metadata refresh — issue #26
     # ------------------------------------------------------------------
 
-    def _apply_fresh_metadata(self, obj: dict[str, Any], fresh: dict[str, Any]) -> bool:
-        """Merge a fresh metadata read into *obj* in place.
+    @staticmethod
+    def _diff_metadata(obj: dict[str, Any], fresh: dict[str, Any]) -> dict[str, Any]:
+        """Return the object_name/description/units/commandable fields that
+        differ between *obj* and *fresh* (empty dict if nothing changed).
 
-        Returns True if any of object_name/description/units/commandable changed.
+        Deliberately does NOT mutate *obj*. self.objects is the SAME list
+        of dicts as entry.data[CONF_SELECTED_OBJECTS] (assigned once by
+        async_setup_entry) — HA's async_update_entry only fires the reload
+        listener when `entry.data != data`, so mutating these dicts in
+        place before that comparison makes old and new data compare equal
+        and the reload silently never fires. unit_of_measurement/
+        device_class then stay stale forever, even though
+        extra_state_attributes (a live read of the mutated dict) looks
+        correct. Confirmed on the v1.0.42-beta pre-release via issue #26.
+        Callers must build a genuinely new dict/list instead — see
+        _replace_object().
         """
-        changed = False
+        changed: dict[str, Any] = {}
         for key in ("object_name", "description", "units", "commandable"):
             if obj.get(key) != fresh.get(key):
-                _LOGGER.info(
-                    "BACnet object %s:%s metadata changed: %s %r → %r",
-                    obj["object_type"],
-                    obj["instance"],
-                    key,
-                    obj.get(key),
-                    fresh.get(key),
-                )
-                obj[key] = fresh[key]
-                changed = True
+                changed[key] = fresh[key]
         return changed
+
+    def _replace_object(self, obj_key: str, updates: dict[str, Any]) -> None:
+        """Point self.objects at a new list with obj_key's dict replaced by
+        a copy carrying *updates* merged in — see _diff_metadata for why
+        this must be a genuinely new object, not an in-place mutation.
+        """
+        self.objects = [
+            {**o, **updates} if f"{o['object_type']}:{o['instance']}" == obj_key else o
+            for o in self.objects
+        ]
 
     def _persist_metadata_change(self) -> None:
         """Reload the config entry so entities pick up new units/device_class.
@@ -343,6 +356,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         Returns True if any object's metadata changed.
         """
         self._last_metadata_refresh = datetime.now(timezone.utc)
+        new_objects: list[dict[str, Any]] = []
         changed = False
 
         for obj in self.objects:
@@ -359,15 +373,30 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     obj["instance"],
                     exc,
                 )
+                new_objects.append(obj)
                 continue
 
             if fresh is None:
+                new_objects.append(obj)
                 continue
 
-            if self._apply_fresh_metadata(obj, fresh):
+            updates = self._diff_metadata(obj, fresh)
+            if updates:
+                for key, value in updates.items():
+                    _LOGGER.info(
+                        "BACnet object %s:%s metadata changed: %s %r → %r",
+                        obj["object_type"],
+                        obj["instance"],
+                        key,
+                        obj.get(key),
+                        value,
+                    )
+                obj = {**obj, **updates}
                 changed = True
+            new_objects.append(obj)
 
         if changed:
+            self.objects = new_objects
             self._persist_metadata_change()
 
         return changed
@@ -408,8 +437,20 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if fresh is None:
             return
 
-        if self._apply_fresh_metadata(obj, fresh):
-            self._persist_metadata_change()
+        updates = self._diff_metadata(obj, fresh)
+        if not updates:
+            return
+
+        for key, value in updates.items():
+            _LOGGER.info(
+                "BACnet object %s metadata changed: %s %r → %r",
+                obj_key,
+                key,
+                obj.get(key),
+                value,
+            )
+        self._replace_object(obj_key, updates)
+        self._persist_metadata_change()
 
     # ------------------------------------------------------------------
     # COV subscription management
@@ -564,11 +605,13 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Process a live COV-Property notification (issue #26).
 
         Unlike _handle_cov_notification (presentValue/statusFlags →
-        coordinator data), this updates the object's own metadata dict and,
-        if the value actually changed, reloads the entry the same way
-        async_refresh_metadata does — units/device_class are read once at
-        entity __init__, so an in-place dict mutation alone wouldn't
-        update an already-created sensor entity.
+        coordinator data), this replaces the object's own metadata dict
+        with an updated copy and, if the value actually changed, reloads
+        the entry the same way async_refresh_metadata does —
+        units/device_class are read once at entity __init__, so an
+        in-place dict mutation alone wouldn't update an already-created
+        sensor entity (see _diff_metadata for why it must be a genuinely
+        new dict, not a mutation).
         """
         internal_key = LIVE_METADATA_BACNET_TO_PROPERTY.get(bacnet_property_name)
         if internal_key is None:
@@ -595,7 +638,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             obj.get(internal_key),
             value,
         )
-        obj[internal_key] = value
+        self._replace_object(obj_key, {internal_key: value})
         self._persist_metadata_change()
 
     # ------------------------------------------------------------------

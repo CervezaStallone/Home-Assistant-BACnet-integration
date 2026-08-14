@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from custom_components.bacnet.const import (
+    CONF_SELECTED_OBJECTS,
     OBJECT_TYPE_ANALOG_INPUT,
     OBJECT_TYPE_ANALOG_OUTPUT,
     OBJECT_TYPE_ANALOG_VALUE,
@@ -525,8 +526,10 @@ class TestRefreshMetadata:
         changed = asyncio.run(coord.async_refresh_metadata())
 
         assert changed is True
-        assert obj["object_name"] == "New Name"
-        assert obj["units"] == "degrees-celsius"
+        # A genuinely new dict replaces the original — see _diff_metadata's
+        # docstring for why the original `obj` reference must NOT be mutated.
+        assert coord.objects[0]["object_name"] == "New Name"
+        assert coord.objects[0]["units"] == "degrees-celsius"
         coord.hass.config_entries.async_update_entry.assert_called_once()
 
     def test_no_change_skips_persist(self):
@@ -715,7 +718,7 @@ class TestCovTriggeredMetadataCheck:
 
         asyncio.run(coord._refresh_object_metadata_now("0:1"))
 
-        assert obj["units"] == "degrees-celsius"
+        assert coord.objects[0]["units"] == "degrees-celsius"
         coord.hass.config_entries.async_update_entry.assert_called_once()
 
     def test_refresh_object_metadata_now_unknown_key_is_noop(self):
@@ -810,7 +813,7 @@ class TestHandleCovPropertyNotification:
 
         coord._handle_cov_property_notification("0:1", "units", "degrees-celsius")
 
-        assert obj["units"] == "degrees-celsius"
+        assert coord.objects[0]["units"] == "degrees-celsius"
         coord.hass.config_entries.async_update_entry.assert_called_once()
 
     def test_noop_when_value_unchanged(self):
@@ -865,3 +868,81 @@ class TestShutdownAndRestoreCleanupPropertySubs:
 
         assert coord._cov_property_subscriptions == {}
         coord._setup_subscriptions.assert_awaited_once()
+
+
+# ---------------------------------------------------------------------------
+# Regression: metadata change must be a REAL entry.data change — issue #26
+# ---------------------------------------------------------------------------
+
+
+class TestMetadataChangeTriggersRealReload:
+    """Home Assistant's async_update_entry only fires update listeners (and
+    therefore only reloads the integration) when `entry.data != data`
+    (homeassistant/config_entries.py). In production, coordinator.objects
+    IS entry.data[CONF_SELECTED_OBJECTS] — the same list, same dicts,
+    assigned once in __init__.py's async_setup_entry(). Mutating those
+    dicts in place before calling async_update_entry made old and new data
+    compare equal, so the real reload silently never fired: units/
+    description looked updated via extra_state_attributes (a live read of
+    the mutated dict) but unit_of_measurement never refreshed because the
+    sensor entity was never recreated. Confirmed live on the v1.0.42-beta
+    pre-release via issue #26."""
+
+    def test_async_refresh_metadata_persists_genuinely_new_data(self):
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        obj = {"object_type": 0, "instance": 1, "object_name": "Old", "units": None}
+        coord = _make_coordinator(objects=[obj])
+        # Mirror __init__.py exactly: entry.data[CONF_SELECTED_OBJECTS] is
+        # the SAME list object as coordinator.objects.
+        coord.entry.data[CONF_SELECTED_OBJECTS] = coord.objects
+        pre_change_entry_data = dict(coord.entry.data)
+
+        coord.client.refresh_object_metadata = AsyncMock(
+            return_value={"object_name": "Old", "units": "degrees-celsius"}
+        )
+
+        asyncio.run(coord.async_refresh_metadata())
+
+        persisted_data = coord.hass.config_entries.async_update_entry.call_args.kwargs[
+            "data"
+        ]
+        assert persisted_data != pre_change_entry_data, (
+            "async_update_entry was called with data equal to entry.data "
+            "before the change — real HA's `entry.data != data` check "
+            "would treat this as a no-op and never fire the reload."
+        )
+
+    def test_refresh_object_metadata_now_persists_genuinely_new_data(self):
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        obj = {"object_type": 0, "instance": 1, "object_name": "Old", "units": None}
+        coord = _make_coordinator(objects=[obj])
+        coord.entry.data[CONF_SELECTED_OBJECTS] = coord.objects
+        pre_change_entry_data = dict(coord.entry.data)
+
+        coord.client.refresh_object_metadata = AsyncMock(
+            return_value={"object_name": "Old", "units": "degrees-celsius"}
+        )
+
+        asyncio.run(coord._refresh_object_metadata_now("0:1"))
+
+        persisted_data = coord.hass.config_entries.async_update_entry.call_args.kwargs[
+            "data"
+        ]
+        assert persisted_data != pre_change_entry_data
+
+    def test_handle_cov_property_notification_persists_genuinely_new_data(self):
+        obj = {"object_type": 0, "instance": 1, "units": None}
+        coord = _make_coordinator(objects=[obj])
+        coord.entry.data[CONF_SELECTED_OBJECTS] = coord.objects
+        pre_change_entry_data = dict(coord.entry.data)
+
+        coord._handle_cov_property_notification("0:1", "units", "degrees-celsius")
+
+        persisted_data = coord.hass.config_entries.async_update_entry.call_args.kwargs[
+            "data"
+        ]
+        assert persisted_data != pre_change_entry_data
