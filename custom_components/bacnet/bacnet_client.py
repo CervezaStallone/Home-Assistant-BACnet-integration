@@ -936,7 +936,11 @@ class BACnetClient:
         return objects
 
     async def refresh_object_metadata(
-        self, device_address: str, object_type: int, instance: int
+        self,
+        device_address: str,
+        object_type: int,
+        instance: int,
+        current_commandable: bool = False,
     ) -> dict[str, Any] | None:
         """Re-read objectName/description/units/commandable for one known object.
 
@@ -944,6 +948,10 @@ class BACnetClient:
         initial discovery (issue #26). Targets a single object directly instead
         of walking the device's objectList like read_object_list() does, since
         the object identity is already known.
+
+        current_commandable: the object's currently-known commandable state,
+        used to avoid spuriously flipping it to False on a transient read
+        failure (see _read_object_metadata).
 
         Returns the same dict shape as read_object_list() entries, or None on
         failure.
@@ -953,7 +961,9 @@ class BACnetClient:
         addr = Address(device_address)
         type_str = self._int_to_object_type_str(object_type)
         oid = ObjectIdentifier((type_str, instance))
-        return await self._read_object_metadata(addr, oid, object_type, instance)
+        return await self._read_object_metadata(
+            addr, oid, object_type, instance, current_commandable=current_commandable
+        )
 
     async def _read_object_metadata(
         self,
@@ -961,6 +971,7 @@ class BACnetClient:
         oid: ObjectIdentifier,
         obj_type: int,
         instance: int,
+        current_commandable: bool = False,
     ) -> dict[str, Any] | None:
         """Read metadata properties for one BACnet object.
 
@@ -990,10 +1001,16 @@ class BACnetClient:
             # Determine if this object is commandable (has a Priority Array)
             commandable = obj_type in COMMANDABLE_TYPES
             if obj_type in POTENTIALLY_WRITABLE_TYPES:
-                # Try to read priority array - if it exists the object is commandable
+                # Try to read priority array - if it exists the object is commandable.
+                # _safe_read() returns None both when the property genuinely
+                # doesn't exist AND on a transient timeout/error — the two are
+                # indistinguishable here. Downgrading commandable to False on
+                # every such None used to make a flaky read look like the
+                # device changed, which triggered a spurious config-entry
+                # reload each time (issue #27). Keep the previously-known
+                # state instead when the probe comes back empty.
                 pa = await self._safe_read(addr, oid, "priorityArray")
-                if pa is not None:
-                    commandable = True
+                commandable = pa is not None or current_commandable
 
             return {
                 "object_type": int(obj_type),
