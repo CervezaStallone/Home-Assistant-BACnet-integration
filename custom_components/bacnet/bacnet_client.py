@@ -941,6 +941,9 @@ class BACnetClient:
         object_type: int,
         instance: int,
         current_commandable: bool = False,
+        current_object_name: str | None = None,
+        current_description: str | None = None,
+        current_units: str | None = None,
     ) -> dict[str, Any] | None:
         """Re-read objectName/description/units/commandable for one known object.
 
@@ -949,9 +952,10 @@ class BACnetClient:
         of walking the device's objectList like read_object_list() does, since
         the object identity is already known.
 
-        current_commandable: the object's currently-known commandable state,
-        used to avoid spuriously flipping it to False on a transient read
-        failure (see _read_object_metadata).
+        current_commandable/current_object_name/current_description/
+        current_units: the object's currently-known values, used to avoid
+        spuriously flipping any of them on a transient read failure (see
+        _read_object_metadata).
 
         Returns the same dict shape as read_object_list() entries, or None on
         failure.
@@ -962,7 +966,14 @@ class BACnetClient:
         type_str = self._int_to_object_type_str(object_type)
         oid = ObjectIdentifier((type_str, instance))
         return await self._read_object_metadata(
-            addr, oid, object_type, instance, current_commandable=current_commandable
+            addr,
+            oid,
+            object_type,
+            instance,
+            current_commandable=current_commandable,
+            current_object_name=current_object_name,
+            current_description=current_description,
+            current_units=current_units,
         )
 
     async def _read_object_metadata(
@@ -972,6 +983,9 @@ class BACnetClient:
         obj_type: int,
         instance: int,
         current_commandable: bool = False,
+        current_object_name: str | None = None,
+        current_description: str | None = None,
+        current_units: str | None = None,
     ) -> dict[str, Any] | None:
         """Read metadata properties for one BACnet object.
 
@@ -980,11 +994,31 @@ class BACnetClient:
         try:
             # Read commonly needed properties individually (safer than RPM for
             # devices that don't support ReadPropertyMultiple)
+            #
+            # _safe_read() returns None both when a property genuinely doesn't
+            # exist AND on a transient timeout/error — the two are
+            # indistinguishable here. Falling back to a placeholder/empty value
+            # on every such None used to make a flaky read look like the device
+            # changed, which triggered a spurious config-entry reload each time
+            # (issue #27 — this originally only guarded `commandable` below,
+            # but object_name/description/units suffered the identical bug and
+            # kept the reload loop alive after that fix). Keep the
+            # previously-known value instead when the read comes back empty.
+            object_name_raw = await self._safe_read(addr, oid, "objectName")
             object_name = (
-                await self._safe_read(addr, oid, "objectName") or f"Object {instance}"
+                object_name_raw
+                if object_name_raw is not None
+                else (current_object_name or f"Object {instance}")
             )
-            description = await self._safe_read(addr, oid, "description") or ""
+            description_raw = await self._safe_read(addr, oid, "description")
+            description = (
+                description_raw
+                if description_raw is not None
+                else (current_description or "")
+            )
             units = await self._safe_read(addr, oid, "units")
+            if units is None:
+                units = current_units
             present_value = await self._safe_read(addr, oid, "presentValue")
 
             _LOGGER.debug(
