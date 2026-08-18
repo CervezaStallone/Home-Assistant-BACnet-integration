@@ -366,6 +366,9 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     object_type=obj["object_type"],
                     instance=obj["instance"],
                     current_commandable=obj.get("commandable", False),
+                    current_object_name=obj.get("object_name"),
+                    current_description=obj.get("description"),
+                    current_units=obj.get("units"),
                 )
             except Exception as exc:  # noqa: BLE001
                 _LOGGER.debug(
@@ -429,6 +432,9 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 object_type=obj["object_type"],
                 instance=obj["instance"],
                 current_commandable=obj.get("commandable", False),
+                current_object_name=obj.get("object_name"),
+                current_description=obj.get("description"),
+                current_units=obj.get("units"),
             )
         except Exception as exc:  # noqa: BLE001
             _LOGGER.debug(
