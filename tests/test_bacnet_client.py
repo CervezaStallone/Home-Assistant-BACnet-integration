@@ -593,3 +593,70 @@ class TestSubscribeCovProperty:
     def test_unsubscribe_unknown_key_is_noop(self):
         client = self._client()
         asyncio.run(client.unsubscribe_cov_property("does-not-exist"))  # must not raise
+
+
+class _FakeCovValueSCM:
+    """Fake change_of_value() context manager yielding scripted (id, value) pairs.
+
+    Once the scripted items are exhausted, get_value() blocks so the
+    asyncio.wait_for(..., timeout=0.05) drain loop in _cov_reader_task
+    times out naturally instead of looping forever.
+    """
+
+    def __init__(self, items):
+        self._items = list(items)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    async def get_value(self):
+        if self._items:
+            return self._items.pop(0)
+        await asyncio.sleep(10)
+
+
+class TestCovReaderTaskKeyNormalization:
+    """Regression test for issue #28: COV keys must be camelCase to match
+    the keys entities read via get_object_value(prop="presentValue"),
+    matching the normalization _try_rpm_poll already applies via
+    _HYPHEN_TO_CAMEL."""
+
+    def test_hyphenated_property_ids_normalized_to_camel_case(self):
+        client = BACnetClient(local_ip="127.0.0.1", local_port=47815)
+        scm = _FakeCovValueSCM([("present-value", 1), ("status-flags", [0, 1, 0, 0])])
+        client._app = type(
+            "_FakeApp", (), {"change_of_value": lambda self, *a, **k: scm}
+        )()
+
+        received: list[dict] = []
+
+        async def run():
+            ready_event = asyncio.Event()
+            task = asyncio.create_task(
+                client._cov_reader_task(
+                    addr="192.168.1.50",
+                    oid="analog-input,1",
+                    lifetime=300,
+                    sub_key="sub-1",
+                    obj_key="obj-1",
+                    callback=lambda obj_key, changes: received.append(changes),
+                    ready_event=ready_event,
+                )
+            )
+            await ready_event.wait()
+            # Wait long enough for one full notification batch (drain
+            # timeout is 0.05s) to be delivered to the callback.
+            await asyncio.sleep(0.2)
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+        asyncio.run(run())
+
+        assert len(received) == 1
+        assert received[0] == {"presentValue": 1, "statusFlags": [False, True, False, False]}

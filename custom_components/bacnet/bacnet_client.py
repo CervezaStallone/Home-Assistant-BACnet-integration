@@ -1520,7 +1520,8 @@ class BACnetClient:
                 while True:
                     # Wait for the first property change from this notification
                     prop_id, value = await scm.get_value()
-                    changes: dict[str, Any] = {str(prop_id): self._coerce_value(value)}
+                    prop_key = self._HYPHEN_TO_CAMEL.get(str(prop_id), str(prop_id))
+                    changes: dict[str, Any] = {prop_key: self._coerce_value(value)}
                     # Yield so the event loop can deliver any other properties
                     # queued from the same ConfirmedCOVNotification, then drain
                     # them — this produces one callback call per notification
@@ -1531,7 +1532,10 @@ class BACnetClient:
                             extra_id, extra_val = await asyncio.wait_for(
                                 scm.get_value(), timeout=0.05
                             )
-                            changes[str(extra_id)] = self._coerce_value(extra_val)
+                            extra_key = self._HYPHEN_TO_CAMEL.get(
+                                str(extra_id), str(extra_id)
+                            )
+                            changes[extra_key] = self._coerce_value(extra_val)
                     except asyncio.TimeoutError:
                         pass
                     _LOGGER.debug("COV notification %s: %s", sub_key, changes)
