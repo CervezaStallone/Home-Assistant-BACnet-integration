@@ -9,6 +9,7 @@ verified without any network.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 
 import pytest
 
@@ -377,8 +378,8 @@ class TestReconnect:
 
         calls: list[tuple] = []
 
-        async def fake_disconnect(self):
-            calls.append(("disconnect",))
+        async def fake_disconnect(self, *, graceful=True):
+            calls.append(("disconnect", graceful))
 
         async def fake_connect(self, bbmd_address=None, bbmd_ttl=900):
             calls.append(("connect", bbmd_address, bbmd_ttl))
@@ -391,7 +392,10 @@ class TestReconnect:
 
         asyncio.run(client.reconnect())
 
-        assert calls[0] == ("disconnect",)
+        # graceful=False: reconnect() is called after a network outage, so
+        # it must not wait ~10s per COV subscription trying to notify a
+        # device that may be unreachable (issue #29).
+        assert calls[0] == ("disconnect", False)
         assert calls[1] == ("connect", "10.0.0.1:47808", 600)
 
     def test_reconnect_defaults_when_never_connected(self, monkeypatch):
@@ -403,8 +407,8 @@ class TestReconnect:
 
         calls: list[tuple] = []
 
-        async def fake_disconnect(self):
-            calls.append(("disconnect",))
+        async def fake_disconnect(self, *, graceful=True):
+            calls.append(("disconnect", graceful))
 
         async def fake_connect(self, bbmd_address=None, bbmd_ttl=900):
             calls.append(("connect", bbmd_address, bbmd_ttl))
@@ -416,8 +420,67 @@ class TestReconnect:
 
         asyncio.run(client.reconnect())
 
-        assert calls[0] == ("disconnect",)
+        assert calls[0] == ("disconnect", False)
         assert calls[1] == ("connect", None, 900)
+
+
+# ---------------------------------------------------------------------------
+# disconnect() COV teardown — issue #29
+# ---------------------------------------------------------------------------
+
+
+class TestDisconnectCovTeardown:
+    """disconnect() had its own inline `task.cancel()` loop for COV cleanup,
+    bypassing the graceful unsubscribe_all_cov()/unsubscribe_all_cov_property()
+    path entirely — the same abandoned-subscription bug as issue #29, just on
+    the full-client-teardown path (ref_count-triggered unload, HA shutdown)
+    instead of the per-entry coordinator path."""
+
+    def test_graceful_disconnect_uses_unsubscribe_all(self, monkeypatch):
+        client = BACnetClient(local_ip="127.0.0.1", local_port=47818)
+        calls: list[str] = []
+
+        async def fake_unsubscribe_all_cov(self):
+            calls.append("cov")
+
+        async def fake_unsubscribe_all_cov_property(self):
+            calls.append("cov_property")
+
+        monkeypatch.setattr(
+            BACnetClient, "unsubscribe_all_cov", fake_unsubscribe_all_cov
+        )
+        monkeypatch.setattr(
+            BACnetClient,
+            "unsubscribe_all_cov_property",
+            fake_unsubscribe_all_cov_property,
+        )
+
+        asyncio.run(client.disconnect())  # graceful=True is the default
+
+        assert calls == ["cov", "cov_property"]
+
+    def test_non_graceful_disconnect_cancels_tasks_directly(self):
+        client = BACnetClient(local_ip="127.0.0.1", local_port=47819)
+
+        async def never_resolves():
+            await asyncio.sleep(10)
+
+        async def run():
+            task = asyncio.create_task(never_resolves())
+            stop_event = asyncio.Event()
+            client._cov_tasks["sub-1"] = task
+            client._cov_stop_events["sub-1"] = stop_event
+
+            await client.disconnect(graceful=False)
+            # task.cancel() only schedules cancellation; let it land.
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+
+            assert task.cancelled()
+            assert client._cov_tasks == {}
+            assert client._cov_stop_events == {}
+
+        asyncio.run(run())
 
 
 # ---------------------------------------------------------------------------
@@ -511,9 +574,15 @@ class TestSubscribeCovProperty:
     def test_successful_subscription_sends_subscribe_request(self):
         client = self._client()
         client._app = _FakeCovApp()
+        from bacpypes3.apdu import SubscribeCOVPropertyRequest
 
-        sub_key = asyncio.run(
-            client.subscribe_cov_property(
+        # subscribe + unsubscribe run in one asyncio.run() call (one event
+        # loop) so the background reader task stays alive between them —
+        # asyncio.run() force-cancels any task still running when its own
+        # loop tears down, which would end the reader task before
+        # unsubscribe_cov_property() ever got to signal it gracefully.
+        async def run():
+            sub_key = await client.subscribe_cov_property(
                 device_address="192.168.1.50",
                 object_type=0,  # analog-input
                 instance=1,
@@ -521,28 +590,27 @@ class TestSubscribeCovProperty:
                 callback=lambda *a: None,
                 lifetime=300,
             )
-        )
 
-        assert sub_key is not None
-        assert len(client._app.requests) == 1
-        from bacpypes3.apdu import SubscribeCOVPropertyRequest
+            assert sub_key is not None
+            assert len(client._app.requests) == 1
+            sent = client._app.requests[0]
+            assert isinstance(sent, SubscribeCOVPropertyRequest)
+            assert str(sent.monitoredPropertyIdentifier.propertyIdentifier) == "units"
+            assert sub_key in client._cov_property_tasks
 
-        sent = client._app.requests[0]
-        assert isinstance(sent, SubscribeCOVPropertyRequest)
-        assert str(sent.monitoredPropertyIdentifier.propertyIdentifier) == "units"
-        assert sub_key in client._cov_property_tasks
+            await client.unsubscribe_cov_property(sub_key)
+            assert sub_key not in client._cov_property_tasks
+            # Regression check for issue #29: unsubscribe_cov_property()
+            # signals the reader task's stop_event so it exits
+            # `async with scm:` without an exception, letting __aexit__
+            # send the device-side cancel APDU instead of abandoning the
+            # subscription (task.cancel() alone would raise
+            # CancelledError inside that block and skip the cancel send).
+            assert len(client._app.requests) == 2
+            sent_cancel = client._app.requests[1]
+            assert isinstance(sent_cancel, SubscribeCOVPropertyRequest)
 
-        asyncio.run(client.unsubscribe_cov_property(sub_key))
-        assert sub_key not in client._cov_property_tasks
-        # task.cancel() raises CancelledError inside the `async with scm:`
-        # block, so __aexit__ sees a non-None exc_details and — matching
-        # SubscriptionContextManager's own base-class behavior, and this
-        # codebase's existing subscribe_cov()/unsubscribe_cov() — skips
-        # sending a device-side cancel APDU. The subscription just expires
-        # naturally on the device after its lifetime. Verified directly
-        # against bacpypes3 during planning; only the original subscribe
-        # request is ever sent here.
-        assert len(client._app.requests) == 1
+        asyncio.run(run())
 
     def test_rejected_subscription_returns_none(self):
         from bacpypes3.apdu import ErrorRejectAbortNack
@@ -635,6 +703,7 @@ class TestCovReaderTaskKeyNormalization:
 
         async def run():
             ready_event = asyncio.Event()
+            stop_event = asyncio.Event()
             task = asyncio.create_task(
                 client._cov_reader_task(
                     addr="192.168.1.50",
@@ -644,6 +713,7 @@ class TestCovReaderTaskKeyNormalization:
                     obj_key="obj-1",
                     callback=lambda obj_key, changes: received.append(changes),
                     ready_event=ready_event,
+                    stop_event=stop_event,
                 )
             )
             await ready_event.wait()
@@ -659,4 +729,77 @@ class TestCovReaderTaskKeyNormalization:
         asyncio.run(run())
 
         assert len(received) == 1
-        assert received[0] == {"presentValue": 1, "statusFlags": [False, True, False, False]}
+        assert received[0] == {
+            "presentValue": 1,
+            "statusFlags": [False, True, False, False],
+        }
+
+
+class _FakeGracefulExitSCM:
+    """Mimics real bacpypes3 SubscriptionContextManager.__aexit__ semantics:
+    it only "sends" the device-side cancel when the context exits without
+    an exception — matching the real library's behavior that motivated
+    issue #29 (a CancelledError raised inside `async with scm:` makes
+    __aexit__ abandon the subscription instead of cancelling it).
+    """
+
+    def __init__(self):
+        self.cancel_sent = False
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        if exc_type is None:
+            self.cancel_sent = True
+        return False
+
+    async def get_value(self):
+        await asyncio.sleep(10)  # never resolves; only stop_event should end the wait
+
+
+class TestCovGracefulUnsubscribe:
+    """Regression test for issue #29: COV subscriptions were left active on
+    the BACnet device after integration reload/unload because
+    unsubscribe_cov() relied on task.cancel(), which raises CancelledError
+    inside the reader task's `async with scm:` block — causing BACpypes3's
+    SubscriptionContextManager.__aexit__() to abandon the context without
+    sending the device-side cancel request. unsubscribe_cov() must instead
+    signal a stop_event so the reader task's loop exits normally."""
+
+    def test_unsubscribe_cov_lets_reader_exit_without_exception(self):
+        client = BACnetClient(local_ip="127.0.0.1", local_port=47816)
+        scm = _FakeGracefulExitSCM()
+        client._app = type(
+            "_FakeApp", (), {"change_of_value": lambda self, *a, **k: scm}
+        )()
+
+        async def run():
+            ready_event = asyncio.Event()
+            stop_event = asyncio.Event()
+            sub_key = "sub-1"
+            task = asyncio.create_task(
+                client._cov_reader_task(
+                    addr="192.168.1.50",
+                    oid="analog-input,1",
+                    lifetime=300,
+                    sub_key=sub_key,
+                    obj_key="obj-1",
+                    callback=lambda *a: None,
+                    ready_event=ready_event,
+                    stop_event=stop_event,
+                )
+            )
+            await ready_event.wait()
+            client._cov_tasks[sub_key] = task
+            client._cov_stop_events[sub_key] = stop_event
+
+            await client.unsubscribe_cov(sub_key)
+
+        asyncio.run(run())
+
+        assert scm.cancel_sent is True
+
+    def test_unsubscribe_unknown_key_is_noop(self):
+        client = BACnetClient(local_ip="127.0.0.1", local_port=47817)
+        asyncio.run(client.unsubscribe_cov("does-not-exist"))  # must not raise

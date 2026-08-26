@@ -13,6 +13,7 @@ Responsibilities:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import logging
 from typing import Any, Callable, Union
@@ -191,6 +192,11 @@ class BACnetClient:
         self._app: _AppType | None = None
         self._cov_tasks: dict[str, asyncio.Task] = {}
         self._cov_property_tasks: dict[str, asyncio.Task] = {}
+        # Signals a reader task to exit its `async with scm:` block normally
+        # (rather than via task.cancel()) so BACpypes3's __aexit__() actually
+        # sends the remote COV-cancellation request (issue #29).
+        self._cov_stop_events: dict[str, asyncio.Event] = {}
+        self._cov_property_stop_events: dict[str, asyncio.Event] = {}
         # Per-device RPM support cache: True = supported (or untested), False = rejected
         self._rpm_supported: dict[str, bool] = {}
         # Last successful connect() parameters — used by reconnect() to
@@ -387,19 +393,38 @@ class BACnetClient:
             _mask_address(bbmd_address) if bbmd_address else "none",
             bbmd_ttl,
         )
-        await self.disconnect()
+        # graceful=False: the network is presumably unreliable here (that's
+        # why we're reconnecting), so waiting up to ~10s per subscription
+        # for a device that may be unreachable would make reconnection
+        # unacceptably slow. New subscriptions made after reconnecting
+        # naturally replace any left stale on the device, which otherwise
+        # expire on their own once their COV lifetime elapses.
+        await self.disconnect(graceful=False)
         await self.connect(bbmd_address=bbmd_address, bbmd_ttl=bbmd_ttl)
 
-    async def disconnect(self) -> None:
-        """Shut down the BACpypes3 application and release the UDP socket."""
-        # Cancel all COV tasks
-        for task in self._cov_tasks.values():
-            task.cancel()
-        self._cov_tasks.clear()
+    async def disconnect(self, *, graceful: bool = True) -> None:
+        """Shut down the BACpypes3 application and release the UDP socket.
 
-        for task in self._cov_property_tasks.values():
-            task.cancel()
-        self._cov_property_tasks.clear()
+        *graceful* (default True) cancels COV subscriptions via
+        unsubscribe_all_cov()/unsubscribe_all_cov_property() so BACpypes3
+        actually notifies the device (issue #29) instead of just
+        cancelling the reader tasks, which abandons the subscriptions on
+        the device until their lifetime expires. Pass graceful=False when
+        the network can't be trusted to respond (see reconnect()).
+        """
+        if graceful:
+            await self.unsubscribe_all_cov()
+            await self.unsubscribe_all_cov_property()
+        else:
+            for task in self._cov_tasks.values():
+                task.cancel()
+            self._cov_tasks.clear()
+            self._cov_stop_events.clear()
+
+            for task in self._cov_property_tasks.values():
+                task.cancel()
+            self._cov_property_tasks.clear()
+            self._cov_property_stop_events.clear()
 
         if self._app is not None:
             try:
@@ -1429,6 +1454,7 @@ class BACnetClient:
         # has entered (i.e. the device acknowledged the SubscribeCOV request).
         # Also set on failure so subscribe_cov() is never left waiting forever.
         ready_event: asyncio.Event = asyncio.Event()
+        stop_event: asyncio.Event = asyncio.Event()
 
         try:
             _LOGGER.debug(
@@ -1437,10 +1463,18 @@ class BACnetClient:
 
             task = asyncio.create_task(
                 self._cov_reader_task(
-                    addr, oid, lifetime, sub_key, obj_key, callback, ready_event
+                    addr,
+                    oid,
+                    lifetime,
+                    sub_key,
+                    obj_key,
+                    callback,
+                    ready_event,
+                    stop_event,
                 )
             )
             self._cov_tasks[sub_key] = task
+            self._cov_stop_events[sub_key] = stop_event
 
             # Wait for the subscription to be confirmed (or to fail) rather
             # than sleeping a fixed 0.5 s.  BACpypes3 enters the async-with
@@ -1462,6 +1496,7 @@ class BACnetClient:
                     except (asyncio.CancelledError, Exception):  # noqa: BLE001
                         pass
                 self._cov_tasks.pop(sub_key, None)
+                self._cov_stop_events.pop(sub_key, None)
                 return None
 
             if task.done():
@@ -1473,6 +1508,7 @@ class BACnetClient:
                     device_address,
                 )
                 self._cov_tasks.pop(sub_key, None)
+                self._cov_stop_events.pop(sub_key, None)
                 return None
 
             _LOGGER.info("COV subscription active for %s:%d", type_str, instance)
@@ -1487,6 +1523,7 @@ class BACnetClient:
                 exc,
             )
             self._cov_tasks.pop(sub_key, None)
+            self._cov_stop_events.pop(sub_key, None)
             return None
 
     async def _cov_reader_task(
@@ -1498,6 +1535,7 @@ class BACnetClient:
         obj_key: str,
         callback: Callable[[str, dict[str, Any]], None],
         ready_event: asyncio.Event,
+        stop_event: asyncio.Event,
     ) -> None:
         """Long-running task that reads from a COV subscription queue.
 
@@ -1512,14 +1550,25 @@ class BACnetClient:
         Batches all property changes queued from a single notification
         into one callback call by yielding briefly after the first value
         and draining any immediately-available follow-up properties.
+
+        *stop_event* lets unsubscribe_cov() end the loop by breaking out
+        (context exits normally) instead of via task.cancel(): BACpypes3's
+        SubscriptionContextManager.__aexit__() only sends the remote
+        unsubscribe request when the context exits without an exception,
+        so a CancelledError raised inside `async with scm:` would abandon
+        the subscription on the device until its lifetime expires (#29).
         """
         try:
             scm = self._app.change_of_value(addr, oid, lifetime=lifetime)
             async with scm:
                 ready_event.set()  # Subscription confirmed — unblock subscribe_cov()
                 while True:
-                    # Wait for the first property change from this notification
-                    prop_id, value = await scm.get_value()
+                    # Wait for the first property change from this notification,
+                    # or for a graceful-stop signal from unsubscribe_cov().
+                    result = await self._get_value_or_stop(scm, stop_event)
+                    if result is None:
+                        break
+                    prop_id, value = result
                     prop_key = self._HYPHEN_TO_CAMEL.get(str(prop_id), str(prop_id))
                     changes: dict[str, Any] = {prop_key: self._coerce_value(value)}
                     # Yield so the event loop can deliver any other properties
@@ -1550,6 +1599,7 @@ class BACnetClient:
                 ready_event.set()  # Unblock subscribe_cov() on failure
             # Clean up stale task reference (handles mid-run / renewal failures)
             self._cov_tasks.pop(sub_key, None)
+            self._cov_stop_events.pop(sub_key, None)
             # Known device-capability rejections are expected — log quietly.
             # Full tracebacks are only useful for unexpected errors.
             _KNOWN_COV_REJECTIONS = (
@@ -1571,19 +1621,63 @@ class BACnetClient:
                 )
 
     async def unsubscribe_cov(self, sub_key: str) -> None:
-        """Cancel a COV subscription by cancelling its reader task.
+        """Cancel a COV subscription, notifying the device before teardown.
 
-        The async-with context manager will send the unsubscribe
-        request when the task is cancelled.
+        Signals the reader task's stop_event so it exits its `async with
+        scm:` block normally, letting BACpypes3 send the remote
+        unsubscribe request — task.cancel() alone raises CancelledError
+        inside that block, which makes BACpypes3 abandon the context
+        without notifying the device (issue #29). Only falls back to
+        cancel() if the graceful exit doesn't finish in time.
         """
         task = self._cov_tasks.pop(sub_key, None)
-        if task is not None and not task.done():
+        stop_event = self._cov_stop_events.pop(sub_key, None)
+        if task is None or task.done():
+            return
+
+        if stop_event is not None:
+            stop_event.set()
+            try:
+                await asyncio.wait_for(asyncio.shield(task), timeout=10.0)
+            except asyncio.TimeoutError:
+                pass
+            except asyncio.CancelledError:
+                pass
+
+        if not task.done():
             task.cancel()
             try:
                 await task
             except asyncio.CancelledError:
                 pass
-            _LOGGER.debug("COV unsubscribed: %s", sub_key)
+        _LOGGER.debug("COV unsubscribed: %s", sub_key)
+
+    @staticmethod
+    async def _get_value_or_stop(
+        scm: SubscriptionContextManager, stop_event: asyncio.Event
+    ) -> tuple[Any, Any] | None:
+        """Await scm.get_value(), or return None if *stop_event* fires first.
+
+        Lets a reader task's while-loop end via a normal `break` — exiting
+        its `async with scm:` block without an exception — so
+        unsubscribe_cov()/unsubscribe_cov_property() can request a clean
+        shutdown that BACpypes3 will actually forward to the device.
+        """
+        get_task = asyncio.ensure_future(scm.get_value())
+        stop_task = asyncio.ensure_future(stop_event.wait())
+        try:
+            done, _ = await asyncio.wait(
+                {get_task, stop_task}, return_when=asyncio.FIRST_COMPLETED
+            )
+            if stop_task in done:
+                return None
+            return get_task.result()
+        finally:
+            for pending_task in (get_task, stop_task):
+                if not pending_task.done():
+                    pending_task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await pending_task
 
     async def unsubscribe_all_cov(self) -> None:
         """Cancel all COV subscriptions."""
@@ -1666,6 +1760,7 @@ class BACnetClient:
         obj_key = f"{object_type}:{instance}"
 
         ready_event: asyncio.Event = asyncio.Event()
+        stop_event: asyncio.Event = asyncio.Event()
 
         try:
             subscriber_process_identifier = self._next_cov_process_id(addr)
@@ -1681,10 +1776,17 @@ class BACnetClient:
 
             task = asyncio.create_task(
                 self._cov_property_reader_task(
-                    scm, sub_key, obj_key, property_name, callback, ready_event
+                    scm,
+                    sub_key,
+                    obj_key,
+                    property_name,
+                    callback,
+                    ready_event,
+                    stop_event,
                 )
             )
             self._cov_property_tasks[sub_key] = task
+            self._cov_property_stop_events[sub_key] = stop_event
 
             try:
                 await asyncio.wait_for(ready_event.wait(), timeout=10.0)
@@ -1703,6 +1805,7 @@ class BACnetClient:
                     except (asyncio.CancelledError, Exception):  # noqa: BLE001
                         pass
                 self._cov_property_tasks.pop(sub_key, None)
+                self._cov_property_stop_events.pop(sub_key, None)
                 return None
 
             if task.done():
@@ -1715,6 +1818,7 @@ class BACnetClient:
                     device_address,
                 )
                 self._cov_property_tasks.pop(sub_key, None)
+                self._cov_property_stop_events.pop(sub_key, None)
                 return None
 
             _LOGGER.info(
@@ -1735,6 +1839,7 @@ class BACnetClient:
                 exc,
             )
             self._cov_property_tasks.pop(sub_key, None)
+            self._cov_property_stop_events.pop(sub_key, None)
             return None
 
     async def _cov_property_reader_task(
@@ -1745,17 +1850,23 @@ class BACnetClient:
         property_name: str,
         callback: Callable[[str, str, Any], None],
         ready_event: asyncio.Event,
+        stop_event: asyncio.Event,
     ) -> None:
         """Long-running task that reads from a COV-Property subscription queue.
 
         Mirrors _cov_reader_task above but for a single monitored property
-        instead of presentValue/statusFlags (issue #26).
+        instead of presentValue/statusFlags (issue #26). See _cov_reader_task
+        for why *stop_event* (rather than task.cancel()) is used to end the
+        loop (issue #29).
         """
         try:
             async with scm:
                 ready_event.set()
                 while True:
-                    prop_id, value = await scm.get_value()
+                    result = await self._get_value_or_stop(scm, stop_event)
+                    if result is None:
+                        break
+                    prop_id, value = result
                     coerced = self._coerce_cov_property_value(property_name, value)
                     _LOGGER.debug(
                         "COV-Property notification %s: %s=%r", sub_key, prop_id, coerced
@@ -1772,6 +1883,7 @@ class BACnetClient:
             if not ready_event.is_set():
                 ready_event.set()
             self._cov_property_tasks.pop(sub_key, None)
+            self._cov_property_stop_events.pop(sub_key, None)
             _LOGGER.debug(
                 "COV-Property not supported by device for %s (falling back to "
                 "ReadProperty refresh): %s",
@@ -1780,15 +1892,32 @@ class BACnetClient:
             )
 
     async def unsubscribe_cov_property(self, sub_key: str) -> None:
-        """Cancel a COV-Property subscription by cancelling its reader task."""
+        """Cancel a COV-Property subscription, notifying the device first.
+
+        See unsubscribe_cov() — the same task.cancel()-abandons-the-context
+        issue (#29) applies to COV-Property subscriptions.
+        """
         task = self._cov_property_tasks.pop(sub_key, None)
-        if task is not None and not task.done():
+        stop_event = self._cov_property_stop_events.pop(sub_key, None)
+        if task is None or task.done():
+            return
+
+        if stop_event is not None:
+            stop_event.set()
+            try:
+                await asyncio.wait_for(asyncio.shield(task), timeout=10.0)
+            except asyncio.TimeoutError:
+                pass
+            except asyncio.CancelledError:
+                pass
+
+        if not task.done():
             task.cancel()
             try:
                 await task
             except asyncio.CancelledError:
                 pass
-            _LOGGER.debug("COV-Property unsubscribed: %s", sub_key)
+        _LOGGER.debug("COV-Property unsubscribed: %s", sub_key)
 
     async def unsubscribe_all_cov_property(self) -> None:
         """Cancel all COV-Property subscriptions."""
