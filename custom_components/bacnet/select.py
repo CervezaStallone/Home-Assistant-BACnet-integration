@@ -79,7 +79,9 @@ class BACnetWritePrioritySelect(
             name=device_name,
             manufacturer=vendor_name,
         )
-        device_info["model"] = model_name if model_name else f"BACnet Device {device_id}"
+        device_info["model"] = (
+            model_name if model_name else f"BACnet Device {device_id}"
+        )
         if fw_version and sw_version:
             device_info["sw_version"] = f"{fw_version} / {sw_version}"
         elif fw_version:

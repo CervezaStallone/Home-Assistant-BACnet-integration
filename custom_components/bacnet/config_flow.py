@@ -172,7 +172,7 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if not self._borrowed_client:
                 try:
                     await self._client.disconnect()
-                except Exception:
+                except Exception:  # noqa: BLE001 — best-effort cleanup, must not raise
                     _LOGGER.debug("Client cleanup error (ignored)")
             else:
                 _LOGGER.debug("Releasing borrowed client (not disconnecting)")
@@ -193,14 +193,14 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if (
                 client is not None
                 and getattr(client, "_local_port", None) == local_port
+                and getattr(client, "_app", None) is not None
             ):
-                if getattr(client, "_app", None) is not None:
-                    _LOGGER.debug(
-                        "Reusing existing BACnet client from entry %s (port %d)",
-                        entry_id,
-                        local_port,
-                    )
-                    return client
+                _LOGGER.debug(
+                    "Reusing existing BACnet client from entry %s (port %d)",
+                    entry_id,
+                    local_port,
+                )
+                return client
         return None
 
     # ------------------------------------------------------------------
@@ -219,12 +219,11 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if local_ip and not _validate_local_ip(local_ip):
                 errors["base"] = "invalid_ip"
 
+            # Accepts IP[:port] or a remote-station "network:instance"
+            # address behind a router (issue #22).
             target_address = user_input.get(CONF_TARGET_ADDRESS, "").strip()
-            if target_address:
-                # Accepts IP[:port] or a remote-station "network:instance"
-                # address behind a router (issue #22).
-                if not _validate_target_address(target_address):
-                    errors[CONF_TARGET_ADDRESS] = "invalid_ip"
+            if target_address and not _validate_target_address(target_address):
+                errors[CONF_TARGET_ADDRESS] = "invalid_ip"
 
             use_bbmd = user_input.get(CONF_USE_BBMD, False)
             bbmd_address = user_input.get(CONF_BBMD_ADDRESS, "").strip()
@@ -383,12 +382,7 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 client = None
                 borrowed = False
             except Exception as exc:
-                _LOGGER.error(
-                    "Discovery failed: %s (%s)",
-                    exc,
-                    type(exc).__name__,
-                    exc_info=True,
-                )
+                _LOGGER.exception("Discovery failed (%s)", type(exc).__name__)
                 errors["base"] = "cannot_connect"
                 # Connection failed — disconnect immediately so the port
                 # is released for the next retry (only own clients).
@@ -558,12 +552,10 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     )
                     errors["base"] = "timeout"
                 except Exception as exc:
-                    _LOGGER.error(
-                        "Failed to read object list from device %s: %s (%s)",
+                    _LOGGER.exception(
+                        "Failed to read object list from device %s (%s)",
                         self._selected_device.get("device_id"),
-                        exc,
                         type(exc).__name__,
-                        exc_info=True,
                     )
                     errors["base"] = "no_objects_found"
 
@@ -600,11 +592,8 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 }
             )
         except Exception as exc:
-            _LOGGER.error(
-                "Failed to build object selection form: %s (%s)",
-                exc,
-                type(exc).__name__,
-                exc_info=True,
+            _LOGGER.exception(
+                "Failed to build object selection form (%s)", type(exc).__name__
             )
             errors["base"] = "unknown"
             return self.async_show_form(
