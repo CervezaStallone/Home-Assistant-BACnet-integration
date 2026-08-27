@@ -40,7 +40,14 @@ jobs:
             const pr = context.payload.pull_request;
             const allowedBases = ["master", "main"];
             const trustedAssociations = ["OWNER", "MEMBER", "COLLABORATOR"];
-            const isTrusted = trustedAssociations.includes(pr.author_association);
+            // Dependabot's whole job is opening PRs that bump versions in
+            // .github/workflows/**. It's not a repo collaborator, so the
+            // author_association check alone would treat every dependency
+            // bump as "workflow tampering from a fork" and auto-close it.
+            const trustedBots = ["dependabot[bot]"];
+            const isTrusted =
+              trustedAssociations.includes(pr.author_association) ||
+              trustedBots.includes(pr.user.login);
 
             async function close(reason) {
               await github.rest.issues.createComment({
