@@ -18,7 +18,8 @@
         "required_approving_review_count": 0,
         "dismiss_stale_reviews_on_push": false,
         "require_code_owner_review": false,
-        "require_last_push_approval": false
+        "require_last_push_approval": false,
+        "required_review_thread_resolution": false
       }
     },
     {
@@ -33,6 +34,12 @@
           },
           {
             "context": "Lint with Ruff"
+          },
+          {
+            "context": "Run pytest (3.12)"
+          },
+          {
+            "context": "Run pytest (3.13)"
           }
         ],
         "strict_required_status_checks_policy": true
