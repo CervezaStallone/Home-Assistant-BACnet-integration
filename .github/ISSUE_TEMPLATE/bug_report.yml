@@ -1,0 +1,101 @@
+name: Bug report
+description: Something in the BACnet integration isn't working as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing, check the [README troubleshooting section](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration#troubleshooting) and search existing issues.
+
+        The fields below are required because almost every bug report on a BACnet integration hinges on the exact HA/integration version and a debug log — without them we usually have to ask and wait for a reply before we can even start.
+
+  - type: input
+    id: ha-version
+    attributes:
+      label: Home Assistant version
+      placeholder: "2026.8.3"
+    validations:
+      required: true
+
+  - type: input
+    id: integration-version
+    attributes:
+      label: BACnet integration version
+      description: HACS → BACnet IP integration → installed version (or the release tag / commit if installed manually)
+      placeholder: "1.0.46-beta.1"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: Home Assistant installation method
+      options:
+        - HACS
+        - Manual (custom_components copy)
+        - Home Assistant OS
+        - Home Assistant Supervised
+        - Home Assistant Container / Docker
+        - Home Assistant Core (venv)
+    validations:
+      required: true
+
+  - type: input
+    id: bacnet-device
+    attributes:
+      label: BACnet device / vendor
+      description: The device or controller you're connecting to, if relevant to the bug
+      placeholder: "e.g. NiagaraAX Station, Lutron Vive, Titan TP-NM-R/2000"
+    validations:
+      required: false
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the bug
+      description: A clear description of what's wrong
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: debug-log
+    attributes:
+      label: Debug log
+      description: |
+        Enable debug logging for `custom_components.bacnet` (Settings → Devices & services → BACnet IP → enable debug logging, or add to `configuration.yaml`), reproduce the issue, then paste the relevant lines here. Mask/replace real IP addresses if you'd rather not share them.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Anything else that might be relevant — network topology, BBMD/router setup, other BACnet tools you've tested with, etc.
+    validations:
+      required: false
