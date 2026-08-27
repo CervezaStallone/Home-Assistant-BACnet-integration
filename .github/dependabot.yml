@@ -1,0 +1,10 @@
+version: 2
+updates:
+  # Only GitHub Actions versions (actions/checkout, setup-python, etc.) —
+  # not a Python ecosystem entry, since bacpypes3's pin lives in
+  # custom_components/bacnet/manifest.json, which Dependabot doesn't
+  # understand as a dependency manifest.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
