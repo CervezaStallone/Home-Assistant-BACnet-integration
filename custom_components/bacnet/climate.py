@@ -20,7 +20,7 @@ temperature sensor as "sensor".
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, ClassVar
 
 from homeassistant.components.climate import (
     ClimateEntity,
@@ -32,13 +32,13 @@ from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+from .bacnet_client import BACnetClient
 from .const import (
     DATA_CLIENT,
     DATA_COORDINATOR,
     DATA_OBJECTS,
     DOMAIN,
 )
-from .bacnet_client import BACnetClient
 from .coordinator import BACnetCoordinator
 from .entity import BACnetEntity
 
@@ -83,7 +83,7 @@ class BACnetClimate(BACnetEntity, ClimateEntity):
         | ClimateEntityFeature.TURN_ON
         | ClimateEntityFeature.TURN_OFF
     )
-    _attr_hvac_modes = [HVACMode.HEAT, HVACMode.OFF]
+    _attr_hvac_modes: ClassVar = [HVACMode.HEAT, HVACMode.OFF]
     _attr_target_temperature_step = 0.5
     _attr_min_temp = 5.0
     _attr_max_temp = 40.0

@@ -16,7 +16,8 @@ import asyncio
 import contextlib
 import hashlib
 import logging
-from typing import Any, Callable, Union
+from collections.abc import Callable
+from typing import Any, ClassVar
 
 from bacpypes3.apdu import ErrorRejectAbortNack, SubscribeCOVPropertyRequest
 from bacpypes3.ipv4.app import ForeignApplication, NormalApplication
@@ -77,7 +78,7 @@ POTENTIALLY_WRITABLE_TYPES: set[int] = {
 }
 
 # Type alias for the application — either Normal or Foreign
-_AppType = Union[NormalApplication, ForeignApplication]
+_AppType = NormalApplication | ForeignApplication
 
 
 class _PropertyCOVSubscriptionContextManager(SubscriptionContextManager):
@@ -304,8 +305,10 @@ class BACnetClient:
             # Transport failed — clean up the app so the port is released.
             try:
                 self._app.close()
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception:
+                _LOGGER.debug(
+                    "Error closing app after transport failure", exc_info=True
+                )
             self._app = None
             raise
 
@@ -492,8 +495,12 @@ class BACnetClient:
                     )
                     if name:
                         device_name = str(name)
-                except Exception:  # noqa: BLE001
-                    pass  # use default name
+                except Exception:
+                    _LOGGER.debug(
+                        "Could not read objectName for device %s, using default name",
+                        device_id,
+                        exc_info=True,
+                    )
 
                 # Read vendor, model, firmware, software version
                 extras = await self._read_device_extras(
@@ -753,7 +760,7 @@ class BACnetClient:
 
         Returns the list of object identifiers, or None on failure.
         """
-        assert self._app is not None  # noqa: S101
+        assert self._app is not None
 
         # --- Strategy 1: bulk read ------------------------------------------
         try:
@@ -1083,7 +1090,7 @@ class BACnetClient:
         except asyncio.CancelledError:
             _LOGGER.warning("Metadata read cancelled for %s:%d", oid, instance)
             raise
-        except (ErrorRejectAbortNack, Exception) as exc:  # noqa: BLE001
+        except (ErrorRejectAbortNack, Exception) as exc:
             _LOGGER.warning(
                 "Failed to read metadata for %s:%d - %s (%s)",
                 oid,
@@ -1493,8 +1500,12 @@ class BACnetClient:
                     task.cancel()
                     try:
                         await task
-                    except (asyncio.CancelledError, Exception):  # noqa: BLE001
-                        pass
+                    except (asyncio.CancelledError, Exception):
+                        _LOGGER.debug(
+                            "Error awaiting cancelled COV task for %s",
+                            sub_key,
+                            exc_info=True,
+                        )
                 self._cov_tasks.pop(sub_key, None)
                 self._cov_stop_events.pop(sub_key, None)
                 return None
@@ -1590,11 +1601,11 @@ class BACnetClient:
                     _LOGGER.debug("COV notification %s: %s", sub_key, changes)
                     try:
                         callback(obj_key, changes)
-                    except Exception:  # noqa: BLE001
+                    except Exception:
                         _LOGGER.exception("Error in COV callback for %s", sub_key)
         except asyncio.CancelledError:
             _LOGGER.debug("COV task cancelled for %s", sub_key)
-        except (ErrorRejectAbortNack, Exception) as exc:  # noqa: BLE001
+        except (ErrorRejectAbortNack, Exception) as exc:
             if not ready_event.is_set():
                 ready_event.set()  # Unblock subscribe_cov() on failure
             # Clean up stale task reference (handles mid-run / renewal failures)
@@ -1802,8 +1813,12 @@ class BACnetClient:
                     task.cancel()
                     try:
                         await task
-                    except (asyncio.CancelledError, Exception):  # noqa: BLE001
-                        pass
+                    except (asyncio.CancelledError, Exception):
+                        _LOGGER.debug(
+                            "Error awaiting cancelled COV task for %s",
+                            sub_key,
+                            exc_info=True,
+                        )
                 self._cov_property_tasks.pop(sub_key, None)
                 self._cov_property_stop_events.pop(sub_key, None)
                 return None
@@ -1873,7 +1888,7 @@ class BACnetClient:
                     )
                     try:
                         callback(obj_key, property_name, coerced)
-                    except Exception:  # noqa: BLE001
+                    except Exception:
                         _LOGGER.exception(
                             "Error in COV-Property callback for %s", sub_key
                         )
@@ -2005,7 +2020,7 @@ class BACnetClient:
     # Object type string - integer mapping
     # ------------------------------------------------------------------
 
-    _TYPE_STR_TO_INT: dict[str, int] = {
+    _TYPE_STR_TO_INT: ClassVar[dict[str, int]] = {
         # camelCase (BACpypes3 internal)
         "analogInput": OBJECT_TYPE_ANALOG_INPUT,
         "analogOutput": OBJECT_TYPE_ANALOG_OUTPUT,
@@ -2029,18 +2044,20 @@ class BACnetClient:
     }
 
     # Property name conversions for ReadPropertyMultiple (RPM uses hyphenated names)
-    _CAMEL_TO_HYPHEN: dict[str, str] = {
+    _CAMEL_TO_HYPHEN: ClassVar[dict[str, str]] = {
         "presentValue": "present-value",
         "statusFlags": "status-flags",
         "outOfService": "out-of-service",
         "priorityArray": "priority-array",
         "covIncrement": "cov-increment",
     }
-    _HYPHEN_TO_CAMEL: dict[str, str] = {v: k for k, v in _CAMEL_TO_HYPHEN.items()}
+    _HYPHEN_TO_CAMEL: ClassVar[dict[str, str]] = {
+        v: k for k, v in _CAMEL_TO_HYPHEN.items()
+    }
 
     # Use hyphenated names for BACpypes3 ObjectIdentifier construction
     # (matching ASHRAE 135 and BACpypes3's native convention)
-    _INT_TO_TYPE_STR: dict[int, str] = {
+    _INT_TO_TYPE_STR: ClassVar[dict[int, str]] = {
         OBJECT_TYPE_ANALOG_INPUT: "analog-input",
         OBJECT_TYPE_ANALOG_OUTPUT: "analog-output",
         OBJECT_TYPE_ANALOG_VALUE: "analog-value",

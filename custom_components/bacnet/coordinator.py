@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, ClassVar
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
@@ -465,7 +465,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     # ------------------------------------------------------------------
 
     # Analog object types that support covIncrement
-    _ANALOG_TYPES = {
+    _ANALOG_TYPES: ClassVar = {
         OBJECT_TYPE_ANALOG_INPUT,
         OBJECT_TYPE_ANALOG_OUTPUT,
         OBJECT_TYPE_ANALOG_VALUE,
@@ -684,7 +684,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return obj_data.get(prop)
 
     # Value-type objects that may or may not have a Priority Array
-    _VALUE_TYPES = {
+    _VALUE_TYPES: ClassVar = {
         OBJECT_TYPE_ANALOG_VALUE,
         OBJECT_TYPE_BINARY_VALUE,
         OBJECT_TYPE_MULTI_STATE_VALUE,

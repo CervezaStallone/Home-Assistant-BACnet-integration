@@ -19,6 +19,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+from .bacnet_client import BACnetClient
 from .const import (
     DATA_CLIENT,
     DATA_COORDINATOR,
@@ -28,7 +29,6 @@ from .const import (
     OBJECT_TYPE_MULTI_STATE_OUTPUT,
     OBJECT_TYPE_MULTI_STATE_VALUE,
 )
-from .bacnet_client import BACnetClient
 from .coordinator import BACnetCoordinator
 from .entity import BACnetEntity
 

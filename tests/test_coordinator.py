@@ -277,7 +277,6 @@ class TestFailureTracking:
     def test_success_resets_counter(self):
         """A successful poll path must reset _consecutive_failures to 0."""
         import asyncio
-
         from unittest.mock import AsyncMock
 
         coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
@@ -299,7 +298,6 @@ class TestReconnectTrigger:
 
     def test_reconnect_called_at_threshold(self):
         import asyncio
-
         from unittest.mock import AsyncMock
 
         coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
@@ -316,7 +314,6 @@ class TestReconnectTrigger:
 
     def test_reconnect_not_called_below_threshold(self):
         import asyncio
-
         from unittest.mock import AsyncMock
 
         coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
@@ -331,7 +328,6 @@ class TestReconnectTrigger:
     def test_reconnect_called_only_once_per_outage(self):
         """Past RECONNECT_THRESHOLD, subsequent failures must NOT re-trigger."""
         import asyncio
-
         from unittest.mock import AsyncMock
 
         coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
@@ -347,7 +343,6 @@ class TestReconnectTrigger:
     def test_reconnect_failure_does_not_crash_coordinator(self):
         """If client.reconnect() raises, _handle_poll_failure must absorb it."""
         import asyncio
-
         from unittest.mock import AsyncMock
 
         coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
@@ -368,7 +363,6 @@ class TestRestoreSubscriptions:
 
     def test_successful_poll_after_reconnect_calls_setup(self):
         import asyncio
-
         from unittest.mock import AsyncMock
 
         coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
@@ -395,7 +389,6 @@ class TestRestoreSubscriptions:
     def test_no_resubscribe_without_reconnect(self):
         """Normal successful polls must NOT rebuild subscriptions every cycle."""
         import asyncio
-
         from unittest.mock import AsyncMock
 
         coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
