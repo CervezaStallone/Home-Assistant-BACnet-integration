@@ -66,6 +66,7 @@ opencode.jsonc
 .sourcegraph/
 .sourcery/
 .llm/
+graphify-out/
 
 # IDE / editors
 .idea/
