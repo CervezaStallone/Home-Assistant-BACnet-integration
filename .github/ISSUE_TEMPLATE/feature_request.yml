@@ -1,0 +1,42 @@
+name: Feature request
+description: Suggest an improvement or new capability for the BACnet integration
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use case / problem
+      description: What are you trying to do, and what's stopping you today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed solution
+      description: What would you like the integration to do instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any workarounds you're using now, or other approaches you thought about
+    validations:
+      required: false
+
+  - type: input
+    id: bacnet-objects
+    attributes:
+      label: BACnet services / object types involved
+      description: If relevant — e.g. a specific object type, property, or BACnet service this touches
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+    validations:
+      required: false
