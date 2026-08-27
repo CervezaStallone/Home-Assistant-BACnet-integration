@@ -1,0 +1,103 @@
+name: PR Triage
+
+# Auto-closes a PR, with a comment explaining why, only for clear-cut
+# disqualifiers that no amount of review will fix as-is:
+#   - targets a branch other than master/main
+#   - touches .github/workflows/** or .github/rulesets/** from someone
+#     without write access (supply-chain risk — a maintainer must
+#     cherry-pick this manually if it's legitimate)
+#   - has zero changed files
+#
+# Everything else — failing checks, incomplete work, style issues — is left
+# alone. Required status checks (see branch protection) already block the
+# merge button for those; closing on top of that would just be hostile to
+# a contributor mid-review.
+#
+# Uses pull_request_target (not pull_request) so it has the permissions to
+# comment/close on PRs from forks, but it never checks out or runs the PR's
+# own code — only reads metadata via the API — so untrusted PR content
+# can't execute with repo permissions.
+on:
+  pull_request_target:
+    types: [opened, reopened, ready_for_review, synchronize]
+
+permissions:
+  pull-requests: write
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  triage:
+    name: Check for auto-close conditions
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate and act
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const allowedBases = ["master", "main"];
+            const trustedAssociations = ["OWNER", "MEMBER", "COLLABORATOR"];
+            const isTrusted = trustedAssociations.includes(pr.author_association);
+
+            async function close(reason) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                body: reason,
+              });
+              await github.rest.pulls.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+                state: "closed",
+              });
+            }
+
+            // 1. Wrong base branch.
+            if (!allowedBases.includes(pr.base.ref)) {
+              await close(
+                `Closing automatically: this PR targets \`${pr.base.ref}\`, but this ` +
+                `repository only accepts PRs against \`master\`. Please rebase onto ` +
+                `\`master\` and open a new PR.`
+              );
+              return;
+            }
+
+            // 2. Zero changed files.
+            if (pr.changed_files === 0) {
+              await close(
+                `Closing automatically: this PR has no changed files. If this was ` +
+                `unintentional, push a commit and reopen.`
+              );
+              return;
+            }
+
+            // 3. Touches workflow/ruleset config from a non-trusted author.
+            if (!isTrusted) {
+              const files = await github.paginate(github.rest.pulls.listFiles, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+                per_page: 100,
+              });
+              const sensitive = files
+                .map((f) => f.filename)
+                .filter((name) => /^\.github\/(workflows|rulesets)\//.test(name));
+
+              if (sensitive.length > 0) {
+                await close(
+                  `Closing automatically: this PR modifies CI/security-sensitive files ` +
+                  `(${sensitive.join(", ")}) and wasn't opened by a maintainer. This is ` +
+                  `blocked to prevent supply-chain attacks via workflow changes from ` +
+                  `forks. If this change is legitimate, a maintainer will need to apply ` +
+                  `it directly or cherry-pick it from your fork.`
+                );
+                return;
+              }
+            }
+
+            core.info("No auto-close conditions matched — leaving PR open for review.");
