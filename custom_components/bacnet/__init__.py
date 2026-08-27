@@ -274,7 +274,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 bbmd_address=bbmd_address if use_bbmd else None,
                 bbmd_ttl=bbmd_ttl,
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             _LOGGER.error("Failed to start BACnet client: %s", exc)
             raise ConfigEntryNotReady(
                 f"Cannot connect to BACnet network: {exc}"
