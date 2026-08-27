@@ -1,6 +1,12 @@
 """Tests for helpers.mask_address."""
 
-from custom_components.bacnet.helpers import mask_address
+from typing import ClassVar
+
+from custom_components.bacnet.helpers import (
+    mask_address,
+    object_key,
+    select_objects_by_key,
+)
 
 
 class TestMaskAddress:
@@ -36,3 +42,33 @@ class TestMaskAddress:
 
     def test_port_variants(self):
         assert mask_address("192.168.0.50:1234") == "192.x.x.50:1234"
+
+
+class TestSelectObjectsByKey:
+    """Object selection filtering shared by config_flow and options_flow (#30)."""
+
+    OBJECTS: ClassVar = [
+        {"object_type": "analog-value", "instance": 1, "object_name": "AV1"},
+        {"object_type": "analog-value", "instance": 2, "object_name": "AV2"},
+        {"object_type": "binary-input", "instance": 5, "object_name": "BI5"},
+    ]
+
+    def test_filters_to_selected_keys_only(self):
+        result = select_objects_by_key(self.OBJECTS, {"analog-value:1"})
+        assert result == [self.OBJECTS[0]]
+
+    def test_preserves_source_order_not_key_order(self):
+        keys = {"binary-input:5", "analog-value:1"}
+        result = select_objects_by_key(self.OBJECTS, keys)
+        assert [object_key(o) for o in result] == ["analog-value:1", "binary-input:5"]
+
+    def test_empty_keys_returns_empty(self):
+        assert select_objects_by_key(self.OBJECTS, set()) == []
+
+    def test_accepts_list_of_keys(self):
+        result = select_objects_by_key(self.OBJECTS, ["analog-value:2"])
+        assert result == [self.OBJECTS[1]]
+
+    def test_unknown_key_ignored(self):
+        result = select_objects_by_key(self.OBJECTS, {"analog-value:999"})
+        assert result == []

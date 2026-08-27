@@ -30,6 +30,7 @@ CONF_SOFTWARE_VERSION = "software_version"
 # Object selection
 CONF_SELECTED_OBJECTS = "selected_objects"
 CONF_SELECT_ALL = "select_all"
+CONF_RESCAN_OBJECTS = "rescan_objects"  # options-flow only, never persisted
 
 # Naming
 CONF_USE_DESCRIPTION = "use_description"

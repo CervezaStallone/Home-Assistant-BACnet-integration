@@ -88,14 +88,20 @@
           "enable_cov": "Enable COV (Change of Value) subscriptions",
           "cov_increment": "COV increment for analog objects",
           "polling_interval": "Polling fallback interval (seconds)",
-          "use_description": "Use description (property id 28) instead of name"
+          "use_description": "Use description (property id 28) instead of name",
+          "rescan_objects": "Rescan device and manage BACnet object selection"
         },
         "data_description": {
           "enable_cov": "When enabled, the integration subscribes to COV notifications. If the device does not support COV or subscription fails, polling is used as fallback.",
           "cov_increment": "Minimum value change on the device before a COV notification is sent (applies to analog objects only). Set to 0 to use the device's default. Example: 0.5 means a notification is sent when the value changes by at least 0.5.",
           "polling_interval": "Interval in seconds for polling when COV is unavailable or disabled.",
-          "use_description": "When checked, entities will be named using the BACnet 'description' property (ID 28) instead of 'objectName' (ID 77)."
+          "use_description": "When checked, entities will be named using the BACnet 'description' property (ID 28) instead of 'objectName' (ID 77).",
+          "rescan_objects": "Rereads the device's current Object_List so you can add objects that weren't selected during setup, or pick up objects added to the device since. Currently imported objects stay selected by default."
         }
+      },
+      "rescan_objects": {
+        "title": "Manage BACnet Objects",
+        "description": "Currently imported objects are pre-selected. Check any additional objects you want to add, or uncheck ones to remove. Domain mapping and COV overrides are preserved for objects that stay selected."
       },
       "domain_mapping": {
         "title": "Domain Mapping",
@@ -104,7 +110,11 @@
     },
     "error": {
       "invalid_polling_interval": "Polling interval must be a positive integer.",
+      "no_objects_found": "No readable BACnet objects were found on this device.",
       "unknown": "An unexpected error occurred."
+    },
+    "abort": {
+      "cannot_connect": "Could not reach the BACnet device to rescan its object list. Make sure the device is online and try again."
     }
   }
 }

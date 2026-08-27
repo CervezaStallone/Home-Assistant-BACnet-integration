@@ -20,21 +20,29 @@ from homeassistant.data_entry_flow import FlowResult
 from .const import (
     CONF_COV_INCREMENT,
     CONF_COV_OVERRIDES,
+    CONF_DEVICE_ADDRESS,
+    CONF_DEVICE_ID,
     CONF_DOMAIN_MAPPING,
     CONF_ENABLE_COV,
     CONF_LIVE_METADATA_PROPERTIES,
     CONF_POLLING_INTERVAL,
+    CONF_RESCAN_OBJECTS,
     CONF_SELECTED_OBJECTS,
     CONF_USE_DESCRIPTION,
+    DATA_CLIENT,
     DEFAULT_COV_INCREMENT,
     DEFAULT_DOMAIN_MAP,
     DEFAULT_ENABLE_COV,
     DEFAULT_LIVE_METADATA_PROPERTIES,
     DEFAULT_POLLING_INTERVAL,
     DEFAULT_USE_DESCRIPTION,
+    DOMAIN,
     LIVE_METADATA_PROPERTY_CHOICES,
     SUPPORTED_DOMAINS,
 )
+from .helpers import object_key as _object_key
+from .helpers import object_label as _object_label
+from .helpers import select_objects_by_key as _select_objects_by_key
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -46,6 +54,7 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
         """Store the config entry so we can read current data + options."""
         self._config_entry = config_entry
         self._options_so_far: dict[str, Any] = {}
+        self._rescanned_objects: list[dict[str, Any]] = []
 
     # ------------------------------------------------------------------
     # Step 1: General options (COV, polling, naming)
@@ -63,11 +72,14 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
             if not isinstance(polling, int) or polling < 1:
                 errors["base"] = "invalid_polling_interval"
 
+            rescan = user_input.pop(CONF_RESCAN_OBJECTS, False)
+
             if not errors:
                 # Merge with existing options so domain mapping is preserved
                 new_options = {**self._config_entry.options, **user_input}
-                # Proceed to domain mapping step
                 self._options_so_far = new_options
+                if rescan:
+                    return await self.async_step_rescan_objects()
                 return await self.async_step_domain_mapping()
 
         # --- Current values (fallback to defaults) ---
@@ -105,11 +117,92 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
                         for p in LIVE_METADATA_PROPERTY_CHOICES
                     }
                 ),
+                vol.Optional(CONF_RESCAN_OBJECTS, default=False): bool,
             }
         )
 
         return self.async_show_form(
             step_id="init",
+            data_schema=schema,
+            errors=errors,
+        )
+
+    # ------------------------------------------------------------------
+    # Optional step: rescan the device's Object_List and update selection
+    # (issue #30 — object selection was previously a one-time setup step)
+    # ------------------------------------------------------------------
+
+    async def async_step_rescan_objects(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Reread the device's Object_List and let the user add/remove objects.
+
+        Reuses the running entry's own BACnet client (it's already connected
+        to this device), so no new socket or discovery step is needed.
+        """
+        errors: dict[str, str] = {}
+        entry_data = self.hass.data.get(DOMAIN, {}).get(self._config_entry.entry_id, {})
+        client = entry_data.get(DATA_CLIENT)
+
+        current_objects: list[dict[str, Any]] = self._config_entry.data.get(
+            CONF_SELECTED_OBJECTS, []
+        )
+        current_keys = {_object_key(obj) for obj in current_objects}
+
+        if user_input is not None:
+            selected_keys = set(user_input.get(CONF_SELECTED_OBJECTS, []))
+            if not selected_keys:
+                errors["base"] = "no_objects_found"
+            else:
+                new_selected = _select_objects_by_key(
+                    self._rescanned_objects, selected_keys
+                )
+                # Persist the updated object list on the entry's data (not
+                # options) before finishing — mirrors how the initial config
+                # flow stores selected_objects. domain_mapping/cov_overrides
+                # for objects that stay selected are untouched; stale entries
+                # for removed objects are harmless leftovers in options.
+                self.hass.config_entries.async_update_entry(
+                    self._config_entry,
+                    data={
+                        **self._config_entry.data,
+                        CONF_SELECTED_OBJECTS: new_selected,
+                    },
+                )
+                return await self.async_step_domain_mapping()
+
+        if client is None:
+            return self.async_abort(reason="cannot_connect")
+
+        try:
+            self._rescanned_objects = await client.read_object_list(
+                device_address=self._config_entry.data.get(CONF_DEVICE_ADDRESS, ""),
+                device_id=self._config_entry.data[CONF_DEVICE_ID],
+            )
+        except Exception:
+            _LOGGER.exception("Failed to rescan BACnet object list")
+            return self.async_abort(reason="cannot_connect")
+
+        if not self._rescanned_objects:
+            errors["base"] = "no_objects_found"
+
+        # Default selection: everything already imported, plus nothing new
+        # (newly discovered objects are opt-in, matching the requested UX).
+        object_options = {
+            _object_key(obj): _object_label(obj) for obj in self._rescanned_objects
+        }
+        default_keys = [k for k in object_options if k in current_keys]
+
+        schema = vol.Schema(
+            {
+                vol.Optional(
+                    CONF_SELECTED_OBJECTS, default=default_keys
+                ): cv.multi_select(object_options),
+            }
+        )
+
+        return self.async_show_form(
+            step_id="rescan_objects",
             data_schema=schema,
             errors=errors,
         )
