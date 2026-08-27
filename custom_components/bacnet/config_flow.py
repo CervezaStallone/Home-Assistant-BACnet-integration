@@ -14,11 +14,10 @@ import ipaddress
 import logging
 from typing import Any
 
+import homeassistant.helpers.config_validation as cv
 import voluptuous as vol
 from bacpypes3.pdu import Address
-
 from homeassistant import config_entries
-import homeassistant.helpers.config_validation as cv
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 
@@ -43,9 +42,11 @@ from .const import (
     DEFAULT_BBMD_TTL,
     DEFAULT_PORT,
     DOMAIN,
-    OBJECT_TYPE_NAMES,
 )
 from .helpers import mask_address as _mask_address
+from .helpers import object_key as _object_key
+from .helpers import object_label as _object_label
+from .helpers import select_objects_by_key as _select_objects_by_key
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -114,19 +115,6 @@ def _validate_bbmd_address(addr: str) -> bool:
     return True
 
 
-def _object_key(obj: dict[str, Any]) -> str:
-    """Build a unique key string for a BACnet object dict."""
-    return f"{obj['object_type']}:{obj['instance']}"
-
-
-def _object_label(obj: dict[str, Any]) -> str:
-    """Build a human-readable label for an object selection checkbox."""
-    type_name = OBJECT_TYPE_NAMES.get(obj["object_type"], f"Type {obj['object_type']}")
-    name = obj.get("object_name", "unnamed")
-    instance = obj["instance"]
-    return f"{type_name} ({instance}) — {name}"
-
-
 # ---------------------------------------------------------------------------
 # Config Flow
 # ---------------------------------------------------------------------------
@@ -184,7 +172,7 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if not self._borrowed_client:
                 try:
                     await self._client.disconnect()
-                except Exception:  # noqa: BLE001
+                except Exception:
                     _LOGGER.debug("Client cleanup error (ignored)")
             else:
                 _LOGGER.debug("Releasing borrowed client (not disconnecting)")
@@ -394,7 +382,7 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     await client.disconnect()
                 client = None
                 borrowed = False
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 _LOGGER.error(
                     "Discovery failed: %s (%s)",
                     exc,
@@ -512,10 +500,9 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "no_objects_found"
             else:
                 # Build the final object list with full metadata
-                selected_objects: list[dict[str, Any]] = []
-                for obj in self._discovered_objects:
-                    if _object_key(obj) in selected_keys:
-                        selected_objects.append(obj)
+                selected_objects = _select_objects_by_key(
+                    self._discovered_objects, selected_keys
+                )
 
                 # Clean up the client used during flow
                 await self._cleanup_client()
@@ -570,7 +557,7 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         self._selected_device.get("device_id"),
                     )
                     errors["base"] = "timeout"
-                except Exception as exc:  # noqa: BLE001
+                except Exception as exc:
                     _LOGGER.error(
                         "Failed to read object list from device %s: %s (%s)",
                         self._selected_device.get("device_id"),
@@ -612,7 +599,7 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     ): cv.multi_select(object_options),
                 }
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             _LOGGER.error(
                 "Failed to build object selection form: %s (%s)",
                 exc,
