@@ -1,0 +1,112 @@
+name: Release
+
+# Gate for publishing a GitHub Release from a version tag. Does NOT re-run
+# the full lint/test/hassfest/hacs suite — branch protection already
+# requires all of that to be green before anything reaches master, so
+# re-running it here would just burn CI minutes checking the same commit
+# twice. Instead this verifies the exact tagged commit actually has those
+# checks recorded as passing, plus the one thing that isn't already
+# guaranteed: that manifest.json's version matches the tag being published.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  checks: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  verify:
+    name: Verify version and required checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Verify manifest.json version matches the tag
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          MANIFEST_VERSION=$(python3 -c "import json; print(json.load(open('custom_components/bacnet/manifest.json'))['version'])")
+          echo "Tag version:      $TAG_VERSION"
+          echo "Manifest version: $MANIFEST_VERSION"
+          if [ "$TAG_VERSION" != "$MANIFEST_VERSION" ]; then
+            echo "::error::Tag v$TAG_VERSION does not match manifest.json version '$MANIFEST_VERSION'. Bump the version in custom_components/bacnet/manifest.json to match before tagging."
+            exit 1
+          fi
+
+      - name: Verify the tagged commit passed all required checks
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const required = [
+              "Lint with Ruff",
+              "Run Hassfest",
+              "Run HACS validation",
+              "Run pytest (3.12)",
+              "Run pytest (3.13)",
+            ];
+            const sha = context.sha;
+
+            // Checks may still be finishing right after the tagged commit
+            // was pushed (e.g. tag pushed moments after the commit). Poll
+            // for a few minutes before giving up.
+            const maxAttempts = 20;
+            const delayMs = 15000;
+
+            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+              const { data } = await github.rest.checks.listForRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: sha,
+                per_page: 100,
+              });
+
+              const byName = new Map(data.check_runs.map((r) => [r.name, r]));
+              const missing = required.filter((name) => !byName.has(name));
+              const pending = required.filter((name) => {
+                const run = byName.get(name);
+                return run && run.status !== "completed";
+              });
+
+              if (missing.length === 0 && pending.length === 0) {
+                const failed = required.filter((name) => byName.get(name).conclusion !== "success");
+                if (failed.length > 0) {
+                  core.setFailed(
+                    `Required check(s) did not pass on ${sha}: ${failed.join(", ")}. ` +
+                    `This commit cannot be released.`
+                  );
+                  return;
+                }
+                core.info(`All required checks passed on ${sha}.`);
+                return;
+              }
+
+              core.info(
+                `Attempt ${attempt}/${maxAttempts}: missing=[${missing.join(", ")}] ` +
+                `pending=[${pending.join(", ")}] — waiting ${delayMs / 1000}s...`
+              );
+              await new Promise((resolve) => setTimeout(resolve, delayMs));
+            }
+
+            core.setFailed(
+              `Timed out waiting for required checks on ${sha}. If this commit was pushed ` +
+              `directly without going through a PR, it may never have run them.`
+            );
+
+  publish:
+    name: Publish release
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Create/update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
