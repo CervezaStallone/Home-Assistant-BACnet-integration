@@ -39,7 +39,7 @@ jobs:
           fi
 
       - name: Verify the tagged commit passed all required checks
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const required = [
