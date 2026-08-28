@@ -241,11 +241,17 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
                 if cov_field_key in user_input:
                     cov_overrides[obj_key] = user_input[cov_field_key]
 
-            # Store in options and create entry
+            # Store in options and create entry. Merge with existing mappings so
+            # objects removed by a rescan keep their custom domain/COV settings —
+            # they are restored if the object is re-selected later (issue #30).
+            # Form values win for objects still selected; stale entries for
+            # removed objects stay as harmless, re-usable leftovers.
+            existing_mapping = self._config_entry.options.get(CONF_DOMAIN_MAPPING, {})
+            existing_cov = self._config_entry.options.get(CONF_COV_OVERRIDES, {})
             final_options = {
                 **self._options_so_far,
-                CONF_DOMAIN_MAPPING: domain_mapping,
-                CONF_COV_OVERRIDES: cov_overrides,
+                CONF_DOMAIN_MAPPING: {**existing_mapping, **domain_mapping},
+                CONF_COV_OVERRIDES: {**existing_cov, **cov_overrides},
             }
             return self.async_create_entry(title="", data=final_options)
 
