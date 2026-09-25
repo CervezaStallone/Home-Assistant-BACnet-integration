@@ -99,16 +99,22 @@ class _SensorEntity(_CoordinatorEntity):
     _attr_state_class = None
 
 
-class _SensorDeviceClass:
+class _SensorDeviceClass(str, Enum):
     TEMPERATURE = "temperature"
     HUMIDITY = "humidity"
     PRESSURE = "pressure"
     POWER = "power"
+    APPARENT_POWER = "apparent_power"
     ENERGY = "energy"
     CURRENT = "current"
     VOLTAGE = "voltage"
     FREQUENCY = "frequency"
     VOLUME_FLOW_RATE = "volume_flow_rate"
+    VOLUME = "volume"
+    SPEED = "speed"
+    ILLUMINANCE = "illuminance"
+    WEIGHT = "weight"
+    DURATION = "duration"
 
 
 class _SensorStateClass:

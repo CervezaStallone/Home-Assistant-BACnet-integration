@@ -150,7 +150,49 @@ SUPPORTED_DOMAINS: list[str] = [
     "switch",
     "number",
     "climate",
+    "select",  # multi-state objects: pick a state by its stateText
 ]
+
+# BACnet engineering units (bacpypes3 hyphenated names) → (HA unit, sensor
+# device class). A device class is only set where HA accepts that unit for
+# it; "parts-per-million" stays generic (CO2, VOC, … all use ppm).
+BACNET_UNITS: dict[str, tuple[str, str | None]] = {
+    "degrees-celsius": ("°C", "temperature"),
+    "degrees-fahrenheit": ("°F", "temperature"),
+    "degrees-kelvin": ("K", "temperature"),
+    "percent": ("%", None),
+    "percent-relative-humidity": ("%", "humidity"),
+    "pascals": ("Pa", "pressure"),
+    "hectopascals": ("hPa", "pressure"),
+    "kilopascals": ("kPa", "pressure"),
+    "bars": ("bar", "pressure"),
+    "pounds-force-per-square-inch": ("psi", "pressure"),
+    "watts": ("W", "power"),
+    "kilowatts": ("kW", "power"),
+    "megawatts": ("MW", "power"),
+    "volt-amperes": ("VA", "apparent_power"),
+    "watt-hours": ("Wh", "energy"),
+    "kilowatt-hours": ("kWh", "energy"),
+    "megawatt-hours": ("MWh", "energy"),
+    "amperes": ("A", "current"),
+    "milliamperes": ("mA", "current"),
+    "volts": ("V", "voltage"),
+    "millivolts": ("mV", "voltage"),
+    "kilovolts": ("kV", "voltage"),
+    "hertz": ("Hz", "frequency"),
+    "liters-per-second": ("L/s", "volume_flow_rate"),
+    "liters-per-minute": ("L/min", "volume_flow_rate"),
+    "cubic-meters-per-hour": ("m³/h", "volume_flow_rate"),
+    "liters": ("L", "volume"),
+    "cubic-meters": ("m³", "volume"),
+    "meters-per-second": ("m/s", "speed"),
+    "luxes": ("lx", "illuminance"),
+    "parts-per-million": ("ppm", None),
+    "kilograms": ("kg", "weight"),
+    "seconds": ("s", "duration"),
+    "minutes": ("min", "duration"),
+    "hours": ("h", "duration"),
+}
 
 # Default mapping: BACnet object type → HA domain
 DEFAULT_DOMAIN_MAP: dict[int, str] = {
