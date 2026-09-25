@@ -72,3 +72,10 @@ class TestSelectObjectsByKey:
     def test_unknown_key_ignored(self):
         result = select_objects_by_key(self.OBJECTS, {"analog-value:999"})
         assert result == []
+
+
+def test_write_priority_options_are_valid_bacnet_priorities():
+    """BACnet priorities are 1-16; anything else is rejected by the device."""
+    from custom_components.bacnet.const import WRITE_PRIORITY_OPTIONS
+
+    assert all(1 <= p <= 16 for p in WRITE_PRIORITY_OPTIONS)

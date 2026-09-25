@@ -31,6 +31,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.restore_state import RestoreEntity
 
 from .bacnet_client import BACnetClient
 from .const import (
@@ -66,7 +67,7 @@ async def async_setup_entry(
         _LOGGER.debug("Added %d BACnet climate entities", len(entities))
 
 
-class BACnetClimate(BACnetEntity, ClimateEntity):
+class BACnetClimate(BACnetEntity, ClimateEntity, RestoreEntity):
     """Representation of a BACnet setpoint object as a HA climate entity.
 
     Maps a single BACnet object (usually an Analog Value/Output used as
@@ -95,6 +96,12 @@ class BACnetClimate(BACnetEntity, ClimateEntity):
         obj: dict[str, Any],
     ) -> None:
         super().__init__(coordinator, entry, obj)
+
+        # True once HA relinquished its priority slot. Can't be derived from
+        # presentValue: after a relinquish the device reports its Relinquish
+        # Default (or a lower-priority command), never None. Restored across
+        # restarts in async_added_to_hass.
+        self._relinquished = False
 
         # Determine temperature unit from BACnet engineering units
         units = obj.get("units", "")
@@ -134,13 +141,19 @@ class BACnetClimate(BACnetEntity, ClimateEntity):
     def hvac_mode(self) -> HVACMode:
         """Return the current HVAC mode.
 
-        HEAT = coordinator has a non-None presentValue for this object
-        OFF  = presentValue is None (setpoint relinquished or device offline)
-
-        Derived entirely from coordinator data so the mode is correct after
-        HA restarts without needing any in-memory flag.
+        OFF = HA relinquished its setpoint, or no presentValue is known
+        HEAT = otherwise
         """
-        return HVACMode.HEAT if self.get_present_value() is not None else HVACMode.OFF
+        if self._relinquished or self.get_present_value() is None:
+            return HVACMode.OFF
+        return HVACMode.HEAT
+
+    async def async_added_to_hass(self) -> None:
+        """Restore whether HA had relinquished its setpoint before restart."""
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is not None and last_state.state == HVACMode.OFF:
+            self._relinquished = True
 
     # ------------------------------------------------------------------
     # Commands
@@ -166,6 +179,7 @@ class BACnetClimate(BACnetEntity, ClimateEntity):
             commandable=self.is_commandable,
         )
         if success:
+            self._relinquished = False
             await self.coordinator.async_request_refresh()
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
@@ -187,6 +201,7 @@ class BACnetClimate(BACnetEntity, ClimateEntity):
                 commandable=self.is_commandable,
             )
             if success:
+                self._relinquished = True
                 await self.coordinator.async_request_refresh()
 
         elif hvac_mode == HVACMode.HEAT:

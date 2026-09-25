@@ -63,6 +63,20 @@ class _CoordinatorEntity:
     def __class_getitem__(cls, item):
         return cls
 
+    @property
+    def available(self) -> bool:
+        return self.coordinator.last_update_success
+
+    async def async_added_to_hass(self) -> None:
+        pass
+
+
+class _RestoreEntity:
+    """Minimal RestoreEntity stub."""
+
+    async def async_get_last_state(self):
+        return None
+
 
 class _DeviceInfo(dict):
     """Stub for HA's DeviceInfo TypedDict — just a dict."""
@@ -183,6 +197,10 @@ _ha_coordinator_mod.CoordinatorEntity = _CoordinatorEntity
 _ha_coordinator_mod.DataUpdateCoordinator = _DataUpdateCoordinator
 _ha_coordinator_mod.UpdateFailed = Exception
 
+
+_ha_restore_state = MagicMock()
+_ha_restore_state.RestoreEntity = _RestoreEntity
+
 _ha_device_registry = MagicMock()
 _ha_device_registry.DeviceInfo = _DeviceInfo
 
@@ -214,9 +232,14 @@ _voluptuous.Schema = dict  # vol.Schema({…}) → just a dict for stub purposes
 
 _ha_flow = MagicMock()
 
+_homeassistant = MagicMock()
+# `from homeassistant import config_entries` resolves via attribute access,
+# not sys.modules — point it at the same stub.
+_homeassistant.config_entries = _ha_config_entries
+
 sys.modules.update(
     {
-        "homeassistant": MagicMock(),
+        "homeassistant": _homeassistant,
         "homeassistant.core": _ha_core,
         "homeassistant.config_entries": _ha_config_entries,
         "homeassistant.const": _ha_const,
@@ -231,6 +254,7 @@ sys.modules.update(
         "homeassistant.helpers": MagicMock(),
         "homeassistant.helpers.update_coordinator": _ha_coordinator_mod,
         "homeassistant.helpers.device_registry": _ha_device_registry,
+        "homeassistant.helpers.restore_state": _ha_restore_state,
         "homeassistant.helpers.entity_platform": MagicMock(),
         "homeassistant.helpers.config_validation": MagicMock(),
         "homeassistant.data_entry_flow": _ha_flow,
@@ -248,6 +272,7 @@ def _make_coordinator(data: dict | None = None) -> MagicMock:
     coord = MagicMock()
     coord.data = data or {}
     coord.device_address = "192.168.1.100"
+    coord.last_update_success = True
     coord.get_object_value.side_effect = lambda key, prop="presentValue": (
         coord.data.get(key, {}).get(prop)
     )
