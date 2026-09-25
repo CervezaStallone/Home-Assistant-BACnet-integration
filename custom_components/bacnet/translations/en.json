@@ -139,6 +139,35 @@
   "exceptions": {
     "write_failed": {
       "message": "The BACnet device rejected the write to {object}. Check the Home Assistant log for the reason (for example a wrong write priority or an object that is not writable)."
+    },
+    "not_a_bacnet_object": {
+      "message": "{entity_id} is not a BACnet object entity of this integration."
+    }
+  },
+  "services": {
+    "relinquish": {
+      "name": "Relinquish",
+      "description": "Release Home Assistant's command on a BACnet object (writes Null at a priority level), so lower priorities or the Relinquish Default take over.",
+      "fields": {
+        "priority": {
+          "name": "Priority",
+          "description": "Priority level to release (1-16). Defaults to the device's Write Priority."
+        }
+      }
+    },
+    "write_value": {
+      "name": "Write value",
+      "description": "Write a value to a BACnet object's present value once, at a chosen priority, without changing the device's Write Priority setting.",
+      "fields": {
+        "value": {
+          "name": "Value",
+          "description": "Value to write. Binary objects: 0 = inactive, 1 = active."
+        },
+        "priority": {
+          "name": "Priority",
+          "description": "Priority level to write at (1-16). Defaults to the device's Write Priority."
+        }
+      }
     }
   }
 }

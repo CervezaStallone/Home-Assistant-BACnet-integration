@@ -308,6 +308,7 @@ sys.modules.update(
         "homeassistant.helpers.restore_state": _ha_restore_state,
         "homeassistant.helpers.entity_platform": MagicMock(),
         "homeassistant.helpers.config_validation": MagicMock(),
+        "homeassistant.helpers.service": MagicMock(),
         "homeassistant.data_entry_flow": _ha_flow,
         "voluptuous": _voluptuous,
     }
