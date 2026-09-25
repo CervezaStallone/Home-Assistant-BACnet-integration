@@ -13,7 +13,9 @@ The coordinator also handles:
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import math
 from datetime import datetime, timedelta, timezone
 from typing import Any, ClassVar
 
@@ -34,6 +36,7 @@ from .const import (
     DOMAIN,
     LIVE_METADATA_BACNET_TO_PROPERTY,
     LIVE_METADATA_PROPERTY_TO_BACNET,
+    MAX_CONCURRENT_REQUESTS,
     MAX_SILENT_FAILURES,
     OBJECT_TYPE_ANALOG_INPUT,
     OBJECT_TYPE_ANALOG_OUTPUT,
@@ -470,77 +473,41 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     }
 
     async def _setup_subscriptions(self) -> None:
-        """Attempt COV subscriptions for all objects. Objects that fail get polled."""
-        self._polled_objects = []
+        """Attempt COV subscriptions for all objects. Objects that fail get polled.
 
+        Runs up to MAX_CONCURRENT_REQUESTS objects in parallel. If none of
+        the first batch gets a subscription, the device evidently doesn't do
+        COV and the rest go straight to polling — otherwise every object
+        would wait out its own subscribe timeout during setup.
+        """
+        self._polled_objects = []
+        semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
+
+        async def _setup(obj: dict[str, Any]) -> bool:
+            async with semaphore:
+                return await self._setup_object_subscription(obj)
+
+        wants_cov = []
         for obj in self.objects:
             obj_key = f"{obj['object_type']}:{obj['instance']}"
-            cov_for_object = self.cov_overrides.get(obj_key, self.enable_cov)
+            if self.cov_overrides.get(obj_key, self.enable_cov):
+                wants_cov.append(obj)
+            else:
+                self._polled_objects.append(obj)
+                _LOGGER.debug("Polling fallback for %s", obj_key)
 
-            if cov_for_object:
-                # For analog objects, write the covIncrement to the device
-                # before subscribing so the device uses the user's threshold.
-                if self.cov_increment > 0 and obj["object_type"] in self._ANALOG_TYPES:
-                    try:
-                        await self.client.write_property(
-                            device_address=self.device_address,
-                            object_type=obj["object_type"],
-                            instance=obj["instance"],
-                            property_name="covIncrement",
-                            value=self.cov_increment,
-                        )
-                        _LOGGER.debug(
-                            "Set covIncrement=%.2f for %s",
-                            self.cov_increment,
-                            obj_key,
-                        )
-                    except Exception:  # noqa: BLE001
-                        _LOGGER.debug(
-                            "Could not write covIncrement for %s (device may "
-                            "not support it — using device default)",
-                            obj_key,
-                        )
-
-                # Live metadata push (issue #26) — opt-in per property since
-                # each one is a SEPARATE COV subscription on the device.
-                # Rejected/unsupported properties simply keep using the
-                # existing poll-cycle/COV-triggered ReadProperty refresh.
-                for prop_key in self.live_metadata_properties:
-                    bacnet_prop = LIVE_METADATA_PROPERTY_TO_BACNET.get(prop_key)
-                    if bacnet_prop is None:
-                        continue
-                    prop_sub_key = await self.client.subscribe_cov_property(
-                        device_address=self.device_address,
-                        object_type=obj["object_type"],
-                        instance=obj["instance"],
-                        property_name=bacnet_prop,
-                        callback=self._handle_cov_property_notification,
-                        lifetime=COV_LIFETIME_SECONDS,
-                    )
-                    if prop_sub_key is not None:
-                        self._cov_property_subscriptions[f"{obj_key}:{prop_key}"] = (
-                            prop_sub_key
-                        )
-                        _LOGGER.debug(
-                            "Live COV-Property active: %s for %s", prop_key, obj_key
-                        )
-
-                sub_key = await self.client.subscribe_cov(
-                    device_address=self.device_address,
-                    object_type=obj["object_type"],
-                    instance=obj["instance"],
-                    callback=self._handle_cov_notification,
-                    lifetime=COV_LIFETIME_SECONDS,
-                )
-                if sub_key is not None:
-                    self._cov_subscriptions[obj_key] = sub_key
-                    _LOGGER.debug("COV active for %s", obj_key)
-                    continue
-
-            # COV disabled (globally or via per-object override) or failed —
-            # add to polling list
-            self._polled_objects.append(obj)
-            _LOGGER.debug("Polling fallback for %s", obj_key)
+        probe = wants_cov[:MAX_CONCURRENT_REQUESTS]
+        rest = wants_cov[MAX_CONCURRENT_REQUESTS:]
+        results = await asyncio.gather(*(_setup(o) for o in probe))
+        if probe and not any(results):
+            _LOGGER.info(
+                "Device %s rejected COV for the first %d objects — polling the rest",
+                self.device_address or "(no address)",
+                len(probe),
+            )
+            self._polled_objects.extend(rest)
+        else:
+            await asyncio.gather(*(_setup(o) for o in rest))
 
         _LOGGER.info(
             "COV subscriptions: %d active, %d polling fallback",
@@ -550,6 +517,89 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         # BACpypes3 change_of_value() context manager handles renewal
         # automatically — no background renewal task needed.
+
+    async def _setup_object_subscription(self, obj: dict[str, Any]) -> bool:
+        """Set up COV (+ optional live metadata) for one object.
+
+        Returns True if the value COV subscription is active; otherwise the
+        object is added to the polling fallback list.
+        """
+        obj_key = f"{obj['object_type']}:{obj['instance']}"
+
+        # For analog objects, set the covIncrement on the device before
+        # subscribing so the device uses the user's threshold.
+        if self.cov_increment > 0 and obj["object_type"] in self._ANALOG_TYPES:
+            await self._ensure_cov_increment(obj, obj_key)
+
+        # Live metadata push (issue #26) — opt-in per property since
+        # each one is a SEPARATE COV subscription on the device.
+        # Rejected/unsupported properties simply keep using the
+        # existing poll-cycle/COV-triggered ReadProperty refresh.
+        for prop_key in self.live_metadata_properties:
+            bacnet_prop = LIVE_METADATA_PROPERTY_TO_BACNET.get(prop_key)
+            if bacnet_prop is None:
+                continue
+            prop_sub_key = await self.client.subscribe_cov_property(
+                device_address=self.device_address,
+                object_type=obj["object_type"],
+                instance=obj["instance"],
+                property_name=bacnet_prop,
+                callback=self._handle_cov_property_notification,
+                lifetime=COV_LIFETIME_SECONDS,
+            )
+            if prop_sub_key is not None:
+                self._cov_property_subscriptions[f"{obj_key}:{prop_key}"] = prop_sub_key
+                _LOGGER.debug("Live COV-Property active: %s for %s", prop_key, obj_key)
+
+        sub_key = await self.client.subscribe_cov(
+            device_address=self.device_address,
+            object_type=obj["object_type"],
+            instance=obj["instance"],
+            callback=self._handle_cov_notification,
+            lifetime=COV_LIFETIME_SECONDS,
+        )
+        if sub_key is not None:
+            self._cov_subscriptions[obj_key] = sub_key
+            _LOGGER.debug("COV active for %s", obj_key)
+            return True
+
+        self._polled_objects.append(obj)
+        _LOGGER.debug("Polling fallback for %s", obj_key)
+        return False
+
+    async def _ensure_cov_increment(self, obj: dict[str, Any], obj_key: str) -> None:
+        """Write covIncrement only if the device holds a different value.
+
+        Setup runs on every reload (options change, metadata change), and
+        many controllers persist covIncrement to non-volatile memory, so an
+        unconditional write wears it out for nothing.
+        """
+        try:
+            current = await self.client.read_property(
+                device_address=self.device_address,
+                object_type=obj["object_type"],
+                instance=obj["instance"],
+                property_name="covIncrement",
+            )
+            # Device stores a float32 REAL — compare with tolerance.
+            if current is not None and math.isclose(
+                float(current), self.cov_increment, rel_tol=1e-6, abs_tol=1e-6
+            ):
+                return
+            await self.client.write_property(
+                device_address=self.device_address,
+                object_type=obj["object_type"],
+                instance=obj["instance"],
+                property_name="covIncrement",
+                value=self.cov_increment,
+            )
+            _LOGGER.debug("Set covIncrement=%.2f for %s", self.cov_increment, obj_key)
+        except Exception:  # noqa: BLE001
+            _LOGGER.debug(
+                "Could not write covIncrement for %s (device may "
+                "not support it — using device default)",
+                obj_key,
+            )
 
     @callback
     def _handle_cov_notification(
