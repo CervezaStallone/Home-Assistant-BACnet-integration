@@ -84,19 +84,30 @@ logger:
 
 ```
 custom_components/bacnet/
-├── __init__.py           # Integration setup & entry point
+├── __init__.py           # Integration setup, shared per-port clients, repair checks
 ├── manifest.json         # Integration metadata (version, dependencies)
-├── config_flow.py        # GUI setup wizard (ConfigFlow / OptionsFlow)
-├── coordinator.py        # DataUpdateCoordinator — polling & COV management
-├── bacnet_client.py      # BACpypes3 wrapper — device discovery & I/O
-├── entity_base.py        # Shared base class for all HA entities
-├── sensor.py             # Sensor entities (Analog/Multi-State Inputs & Values)
-├── binary_sensor.py      # Binary sensor entities (Binary Inputs & Values)
-├── switch.py             # Switch entities (Binary Outputs & Values)
-├── number.py             # Number entities (Analog/Multi-State Outputs & Values)
-├── strings.json          # Translatable UI strings
+├── config_flow.py        # Setup wizard + reconfigure step (ConfigFlow)
+├── options_flow.py       # Options: COV, polling, rescan, per-object customisation
+├── coordinator.py        # DataUpdateCoordinator — polling, COV, metadata refresh
+├── bacnet_client.py      # BACpypes3 wrapper — discovery, (batched) reads, writes, COV
+├── const.py              # Constants, defaults, tuning knobs, unit table
+├── helpers.py            # Shared pure helpers (object keys, default domains, …)
+├── entity.py             # Shared base class + DeviceInfo + write helper
+├── sensor.py             # Sensor entities + diagnostic sensors
+├── binary_sensor.py      # Binary sensor entities
+├── switch.py             # Switch entities
+├── number.py             # Number entities
+├── climate.py            # Climate entities (setpoint + optional temperature object)
+├── select.py             # Write priority select + multi-state selects
+├── button.py             # Refresh-metadata button
+├── services.py           # bacnet.relinquish / bacnet.write_value
+├── services.yaml         # Service descriptions for the UI
+├── repairs.py            # Fix flow for stale domain overrides
+├── diagnostics.py        # Diagnostics download
+├── strings.json          # Translatable UI strings (source)
 └── translations/
-    └── en.json           # English translations
+    ├── en.json           # English — must equal strings.json (tested)
+    └── nl.json           # Dutch — must have the same keys (tested)
 ```
 
 ---
@@ -119,7 +130,17 @@ custom_components/bacnet/
 
 3. **Make your changes** following the [coding standards](#coding-standards) below.
 
-4. **Test your changes** against a real or simulated BACnet device and verify nothing is broken in the Home Assistant UI.
+4. **Test your changes** against a real or simulated BACnet device and verify nothing is broken in the Home Assistant UI. Two automated suites run in CI:
+   ```bash
+   # Unit tests — fast, against stubbed Home Assistant modules
+   pytest
+
+   # Smoke tests — the integration in a real Home Assistant (BACnet faked).
+   # Catches HA API changes the stubs can't see. Needs its own environment:
+   pip install pytest-homeassistant-custom-component "BACpypes3==0.0.99"
+   cd tests_ha && pytest
+   ```
+   CI runs the smoke tests against both the minimum supported and the latest Home Assistant (see `tests_ha/requirements-min.txt`).
 
 5. **Commit** with a clear, concise message:
    ```bash

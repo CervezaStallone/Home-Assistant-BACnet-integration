@@ -11,19 +11,20 @@ import logging
 
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .bacnet_client import MULTI_STATE_TYPES
 from .const import (
-    DATA_COORDINATOR,
     DEFAULT_WRITE_PRIORITY,
     DOMAIN,
     WRITE_PRIORITY_OPTIONS,
 )
 from .coordinator import BACnetCoordinator
+from .entity import BACnetEntity, bacnet_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,8 +37,21 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the write priority select entity for a BACnet device."""
-    coordinator: BACnetCoordinator = hass.data[DOMAIN][entry.entry_id][DATA_COORDINATOR]
-    async_add_entities([BACnetWritePrioritySelect(coordinator, entry)])
+    coordinator: BACnetCoordinator = entry.runtime_data.coordinator
+    entities: list[SelectEntity] = [BACnetWritePrioritySelect(coordinator, entry)]
+    for obj in coordinator.objects:
+        if coordinator.get_domain_for_object(obj) != "select":
+            continue
+        if obj["object_type"] not in MULTI_STATE_TYPES:
+            _LOGGER.warning(
+                "Object %s:%s is mapped to 'select' but is not a multi-state "
+                "object — skipped",
+                obj["object_type"],
+                obj["instance"],
+            )
+            continue
+        entities.append(BACnetMultiStateSelect(coordinator, entry, obj))
+    async_add_entities(entities)
 
 
 class BACnetWritePrioritySelect(
@@ -51,6 +65,8 @@ class BACnetWritePrioritySelect(
     """
 
     _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_translation_key = "write_priority"
     _attr_entity_registry_enabled_default = False
     _attr_icon = "mdi:priority-high"
     _attr_options = _PRIORITY_OPTIONS
@@ -64,31 +80,10 @@ class BACnetWritePrioritySelect(
         self._entry = entry
 
         device_id = entry.data.get("device_id", "unknown")
-        device_name = entry.data.get("device_name", "BACnet Device")
-        vendor_name = entry.data.get("vendor_name", "BACnet")
-        model_name = entry.data.get("model_name", "")
-        fw_version = entry.data.get("firmware_version", "")
-        sw_version = entry.data.get("software_version", "")
-
         self._attr_unique_id = f"{DOMAIN}_{device_id}_write_priority"
-        self._attr_name = "Write Priority"
         self._attr_current_option = str(DEFAULT_WRITE_PRIORITY)
 
-        device_info = DeviceInfo(
-            identifiers={(DOMAIN, str(device_id))},
-            name=device_name,
-            manufacturer=vendor_name,
-        )
-        device_info["model"] = (
-            model_name if model_name else f"BACnet Device {device_id}"
-        )
-        if fw_version and sw_version:
-            device_info["sw_version"] = f"{fw_version} / {sw_version}"
-        elif fw_version:
-            device_info["sw_version"] = fw_version
-        elif sw_version:
-            device_info["sw_version"] = sw_version
-        self._attr_device_info = device_info
+        self._attr_device_info = bacnet_device_info(entry)
 
     async def async_added_to_hass(self) -> None:
         """Restore last priority on startup."""
@@ -118,3 +113,31 @@ class BACnetWritePrioritySelect(
             option,
             self._entry.data.get("device_name", "unknown"),
         )
+
+
+class BACnetMultiStateSelect(BACnetEntity, SelectEntity):
+    """A multi-state object as a select: one option per state.
+
+    Options are the object's stateText labels, or "1".."numberOfStates"
+    when the device has no stateText. BACnet states are 1-based.
+    """
+
+    @property
+    def options(self) -> list[str]:
+        texts = self._obj.get("state_text")
+        if texts:
+            return list(texts)
+        return [str(i) for i in range(1, (self._obj.get("number_of_states") or 0) + 1)]
+
+    @property
+    def current_option(self) -> str | None:
+        value = self.get_present_value()
+        try:
+            index = int(value) - 1
+        except (TypeError, ValueError):
+            return None
+        options = self.options
+        return options[index] if 0 <= index < len(options) else None
+
+    async def async_select_option(self, option: str) -> None:
+        await self.async_write_present_value(self.options.index(option) + 1)

@@ -66,7 +66,9 @@ class TestSensorNativeValue:
             "object_name": "T",
         }
         entity = _sensor(obj, {"0:1": {"presentValue": 23.456}})
-        assert entity.native_value == pytest.approx(23.46)
+        # Full precision in the state; the UI rounds via display precision.
+        assert entity.native_value == 23.456
+        assert entity._attr_suggested_display_precision == 2
 
     def test_analog_none_when_no_data(self):
         obj = {
@@ -391,3 +393,163 @@ class TestEntityBase:
         entity = BACnetSensor(coord, entry, obj)
         assert "99999" in entity._attr_unique_id
         assert "bacnet" in entity._attr_unique_id
+
+
+# ---------------------------------------------------------------------------
+# Availability must follow coordinator outages
+# ---------------------------------------------------------------------------
+
+
+class TestAvailabilityFollowsCoordinator:
+    def test_unavailable_when_last_update_failed(self):
+        obj = {
+            "object_type": 0,
+            "instance": 1,
+            "commandable": False,
+            "object_name": "T",
+        }
+        entity = _sensor(obj, {"0:1": {"presentValue": 23.0}})
+        entity.coordinator.last_update_success = False
+        assert entity.available is False
+
+
+# ---------------------------------------------------------------------------
+# Climate OFF must survive the relinquish-default presentValue
+# ---------------------------------------------------------------------------
+
+
+def _climate_with_client(data):
+    from unittest.mock import AsyncMock, MagicMock
+
+    obj = {"object_type": 2, "instance": 1, "commandable": True, "object_name": "SP"}
+    entity = _climate(obj, data)
+    client = MagicMock()
+    client.relinquish = AsyncMock(return_value=True)
+    client.write_property = AsyncMock(return_value=True)
+    entity.coordinator.async_refresh_object = AsyncMock()
+    entity.coordinator.client = client
+    entity.async_write_ha_state = MagicMock()
+    return entity
+
+
+class TestClimateOffAfterRelinquish:
+    def test_off_after_relinquish_even_with_relinquish_default(self):
+        import asyncio
+
+        from custom_components.bacnet.climate import HVACMode
+
+        # After relinquish the device reports its Relinquish Default, not None.
+        entity = _climate_with_client({"2:1": {"presentValue": 18.0}})
+        asyncio.run(entity.async_set_hvac_mode(HVACMode.OFF))
+        assert entity.hvac_mode == HVACMode.OFF
+
+    def test_set_temperature_turns_back_to_heat(self):
+        import asyncio
+
+        from custom_components.bacnet.climate import HVACMode
+
+        entity = _climate_with_client({"2:1": {"presentValue": 18.0}})
+        asyncio.run(entity.async_set_hvac_mode(HVACMode.OFF))
+        asyncio.run(entity.async_set_temperature(temperature=21.0))
+        assert entity.hvac_mode == HVACMode.HEAT
+
+
+class TestEntityRegistersObjectListener:
+    def test_added_entity_listens_to_its_own_object(self):
+        import asyncio
+        from unittest.mock import MagicMock
+
+        obj = {"object_type": 0, "instance": 1, "object_name": "T"}
+        entity = _sensor(obj, {"0:1": {"presentValue": 1.0}})
+        remove = MagicMock()
+        entity.coordinator.async_add_object_listener.return_value = remove
+        entity.async_write_ha_state = MagicMock()
+
+        asyncio.run(entity.async_added_to_hass())
+
+        key, cb = entity.coordinator.async_add_object_listener.call_args.args
+        assert key == "0:1"
+        cb()
+        entity.async_write_ha_state.assert_called_once()
+        assert remove in entity._on_remove
+
+
+class TestWriteRefreshesOnlyThatObject:
+    def test_switch_write_refreshes_its_object(self):
+        import asyncio
+        from unittest.mock import AsyncMock, MagicMock
+
+        obj = {"object_type": 4, "instance": 2, "commandable": True, "object_name": "S"}
+        entity = _switch(obj)
+        client = MagicMock()
+        client.write_property = AsyncMock(return_value=True)
+        entity.coordinator.client = client
+        entity.coordinator.async_refresh_object = AsyncMock()
+        entity.coordinator.async_request_refresh = AsyncMock()
+
+        asyncio.run(entity.async_turn_on())
+
+        entity.coordinator.async_refresh_object.assert_awaited_once_with(obj)
+        entity.coordinator.async_request_refresh.assert_not_awaited()
+
+
+class TestSensorPrecision:
+    def _value(self, pv):
+        obj = {"object_type": 0, "instance": 1, "object_name": "T"}
+        return _sensor(obj, {"0:1": {"presentValue": pv}}).native_value
+
+    def test_float32_noise_is_stripped(self):
+        assert self._value(23.456000328063965) == 23.456
+
+    def test_small_values_are_not_rounded_away(self):
+        assert self._value(0.00123) == 0.00123
+
+    def test_large_counter_keeps_decimals(self):
+        assert self._value(123456.7) == 123456.7
+
+
+class TestUnrecordedAttributes:
+    def test_static_bacnet_attributes_are_not_recorded(self):
+        from custom_components.bacnet.entity import BACnetEntity
+
+        assert {
+            "bacnet_object_type",
+            "bacnet_instance",
+            "bacnet_commandable",
+            "bacnet_units",
+            "bacnet_description",
+            "bacnet_update_method",
+            "bacnet_cov_increment",
+        } <= BACnetEntity._unrecorded_attributes
+        # Status flags change at runtime and are worth keeping in history.
+        assert "bacnet_status_flags" not in BACnetEntity._unrecorded_attributes
+
+
+class TestSharedDeviceInfo:
+    def test_select_and_button_share_entity_device_info(self):
+        from custom_components.bacnet.button import BACnetRefreshMetadataButton
+        from custom_components.bacnet.select import BACnetWritePrioritySelect
+
+        obj = {"object_type": 0, "instance": 1, "object_name": "T"}
+        sensor = _sensor(obj)
+        coord, entry = sensor.coordinator, sensor._entry
+        expected = sensor._attr_device_info
+        assert expected["sw_version"] == "2.3 / 1.0"
+        assert BACnetWritePrioritySelect(coord, entry)._attr_device_info == expected
+        assert BACnetRefreshMetadataButton(coord, entry)._attr_device_info == expected
+
+
+class TestFaultFlagAvailability:
+    def _entity(self, flags):
+        obj = {"object_type": 0, "instance": 1, "object_name": "T"}
+        return _sensor(obj, {"0:1": {"presentValue": 1.0, "statusFlags": flags}})
+
+    def test_fault_flag_makes_entity_unavailable(self):
+        # statusFlags = [in_alarm, fault, overridden, out_of_service]
+        assert self._entity([False, True, False, False]).available is False
+
+    @pytest.mark.parametrize(
+        "flags", [[True, False, False, False], [False, False, True, True], None]
+    )
+    def test_other_flags_keep_entity_available(self, flags):
+        assert self._entity(flags).available is True

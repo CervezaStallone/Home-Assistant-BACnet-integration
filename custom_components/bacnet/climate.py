@@ -12,9 +12,9 @@ The entity provides:
   - Target temperature: read/write presentValue (with Priority Array)
   - HVAC mode: heating-only by default (can be extended)
 
-For full multi-point HVAC mapping, the user should use the domain_mapping
-to assign the setpoint object to "climate", and leave the actual room
-temperature sensor as "sensor".
+Map the setpoint object to "climate" in the options, and pick the room
+temperature object there as its temperature sensor; without one, the
+setpoint's own value is shown as the current temperature.
 """
 
 from __future__ import annotations
@@ -31,14 +31,8 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.restore_state import RestoreEntity
 
-from .bacnet_client import BACnetClient
-from .const import (
-    DATA_CLIENT,
-    DATA_COORDINATOR,
-    DATA_OBJECTS,
-    DOMAIN,
-)
 from .coordinator import BACnetCoordinator
 from .entity import BACnetEntity
 
@@ -51,9 +45,8 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up BACnet climate entities from a config entry."""
-    data = hass.data[DOMAIN][entry.entry_id]
-    coordinator: BACnetCoordinator = data[DATA_COORDINATOR]
-    objects: list[dict[str, Any]] = data[DATA_OBJECTS]
+    coordinator: BACnetCoordinator = entry.runtime_data.coordinator
+    objects: list[dict[str, Any]] = coordinator.objects
 
     entities: list[BACnetClimate] = []
     for obj in objects:
@@ -66,7 +59,7 @@ async def async_setup_entry(
         _LOGGER.debug("Added %d BACnet climate entities", len(entities))
 
 
-class BACnetClimate(BACnetEntity, ClimateEntity):
+class BACnetClimate(BACnetEntity, ClimateEntity, RestoreEntity):
     """Representation of a BACnet setpoint object as a HA climate entity.
 
     Maps a single BACnet object (usually an Analog Value/Output used as
@@ -96,6 +89,12 @@ class BACnetClimate(BACnetEntity, ClimateEntity):
     ) -> None:
         super().__init__(coordinator, entry, obj)
 
+        # True once HA relinquished its priority slot. Can't be derived from
+        # presentValue: after a relinquish the device reports its Relinquish
+        # Default (or a lower-priority command), never None. Restored across
+        # restarts in async_added_to_hass.
+        self._relinquished = False
+
         # Determine temperature unit from BACnet engineering units
         units = obj.get("units", "")
         if "fahrenheit" in str(units).lower():
@@ -105,42 +104,68 @@ class BACnetClimate(BACnetEntity, ClimateEntity):
         else:
             self._attr_temperature_unit = UnitOfTemperature.CELSIUS
 
+        # The setpoint's own limits (minPresValue/maxPresValue) when known.
+        if obj.get("min_value") is not None:
+            self._attr_min_temp = obj["min_value"]
+        if obj.get("max_value") is not None:
+            self._attr_max_temp = obj["max_value"]
+
     # ------------------------------------------------------------------
     # State properties
     # ------------------------------------------------------------------
 
     @property
-    def current_temperature(self) -> float | None:
-        """Return the current temperature reading.
+    def _temperature_source(self) -> str | None:
+        """obj_key of the object providing the room temperature, if configured."""
+        return self.coordinator.climate_temperature_sources.get(self._obj_key)
 
-        Since this entity maps a setpoint object, current_temperature
-        reflects the setpoint's presentValue. For a true room temperature,
-        the user should create a separate sensor entity.
-        """
-        value = self.get_present_value()
-        if value is None:
-            return None
+    @staticmethod
+    def _as_temperature(value: Any) -> float | None:
         try:
-            return round(float(value), 1)
+            return round(float(value), 1) if value is not None else None
         except (ValueError, TypeError):
             return None
 
     @property
+    def current_temperature(self) -> float | None:
+        """Return the room temperature.
+
+        Comes from the temperature object chosen in the options, or — when
+        none is configured — falls back to the setpoint's own presentValue.
+        """
+        source = self._temperature_source
+        if source is None:
+            return self.target_temperature
+        return self._as_temperature(self.coordinator.get_object_value(source))
+
+    @property
     def target_temperature(self) -> float | None:
         """Return the target temperature (setpoint)."""
-        return self.current_temperature
+        return self._as_temperature(self.get_present_value())
 
     @property
     def hvac_mode(self) -> HVACMode:
         """Return the current HVAC mode.
 
-        HEAT = coordinator has a non-None presentValue for this object
-        OFF  = presentValue is None (setpoint relinquished or device offline)
-
-        Derived entirely from coordinator data so the mode is correct after
-        HA restarts without needing any in-memory flag.
+        OFF = HA relinquished its setpoint, or no presentValue is known
+        HEAT = otherwise
         """
-        return HVACMode.HEAT if self.get_present_value() is not None else HVACMode.OFF
+        if self._relinquished or self.get_present_value() is None:
+            return HVACMode.OFF
+        return HVACMode.HEAT
+
+    async def async_added_to_hass(self) -> None:
+        """Restore the relinquished flag; also follow the temperature object."""
+        await super().async_added_to_hass()
+        if self._temperature_source is not None:
+            self.async_on_remove(
+                self.coordinator.async_add_object_listener(
+                    self._temperature_source, self.async_write_ha_state
+                )
+            )
+        last_state = await self.async_get_last_state()
+        if last_state is not None and last_state.state == HVACMode.OFF:
+            self._relinquished = True
 
     # ------------------------------------------------------------------
     # Commands
@@ -154,19 +179,8 @@ class BACnetClimate(BACnetEntity, ClimateEntity):
         temperature = kwargs.get(ATTR_TEMPERATURE)
         if temperature is None:
             return
-
-        client: BACnetClient = self.hass.data[DOMAIN][self._entry.entry_id][DATA_CLIENT]
-        success = await client.write_property(
-            device_address=self.coordinator.device_address,
-            object_type=self._object_type,
-            instance=self._instance,
-            property_name="presentValue",
-            value=float(temperature),
-            priority=self.coordinator.write_priority,
-            commandable=self.is_commandable,
-        )
-        if success:
-            await self.coordinator.async_request_refresh()
+        await self.async_write_present_value(float(temperature))
+        self._relinquished = False
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set HVAC mode.
@@ -176,18 +190,14 @@ class BACnetClimate(BACnetEntity, ClimateEntity):
               releasing the override and allowing the Relinquish Default to
               take effect on the BACnet device.
         """
-        client: BACnetClient = self.hass.data[DOMAIN][self._entry.entry_id][DATA_CLIENT]
-
         if hvac_mode == HVACMode.OFF:
-            success = await client.relinquish(
-                device_address=self.coordinator.device_address,
-                object_type=self._object_type,
-                instance=self._instance,
-                priority=self.coordinator.write_priority,
-                commandable=self.is_commandable,
-            )
-            if success:
-                await self.coordinator.async_request_refresh()
+            # Flag first: the post-write refresh renders the new state.
+            self._relinquished = True
+            try:
+                await self.async_write_present_value(None)
+            except Exception:
+                self._relinquished = False
+                raise
 
         elif hvac_mode == HVACMode.HEAT:
             # Re-activate: write the current target temperature (if known)

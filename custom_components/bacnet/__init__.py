@@ -16,45 +16,41 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import homeassistant.helpers.config_validation as cv
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import issue_registry as ir
 
 from .const import (
     CONF_BBMD_ADDRESS,
     CONF_BBMD_TTL,
+    CONF_CLIMATE_TEMPERATURE_SOURCES,
     CONF_COV_INCREMENT,
     CONF_COV_OVERRIDES,
     CONF_DOMAIN_MAPPING,
     CONF_ENABLE_COV,
-    CONF_FIRMWARE_VERSION,
     CONF_LIVE_METADATA_PROPERTIES,
     CONF_LOCAL_IP,
     CONF_LOCAL_PORT,
-    CONF_MODEL_NAME,
     CONF_POLLING_INTERVAL,
     CONF_SELECTED_OBJECTS,
-    CONF_SOFTWARE_VERSION,
     CONF_USE_BBMD,
     CONF_USE_DESCRIPTION,
-    CONF_VENDOR_NAME,
-    DATA_CLIENT,
-    DATA_COORDINATOR,
-    DATA_DEVICE_INFO,
-    DATA_OBJECTS,
-    DATA_UNSUB,
     DEFAULT_COV_INCREMENT,
-    DEFAULT_DOMAIN_MAP,
     DEFAULT_ENABLE_COV,
     DEFAULT_LIVE_METADATA_PROPERTIES,
     DEFAULT_POLLING_INTERVAL,
     DEFAULT_USE_DESCRIPTION,
     DOMAIN,
-    OBJECT_TYPE_ANALOG_VALUE,
-    OBJECT_TYPE_BINARY_VALUE,
-    OBJECT_TYPE_MULTI_STATE_VALUE,
+)
+from .helpers import (
+    default_domain_for,
+    object_key,
+    object_label,
+    stale_domain_overrides,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -71,37 +67,18 @@ PLATFORMS: list[Platform] = [
 ]
 
 
+# Config entries only — no YAML configuration.
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
+
 # ---------------------------------------------------------------------------
 # Setup helpers
 # ---------------------------------------------------------------------------
 
 
-# Value-type objects that need commandability check before assigning domain
-_VALUE_TYPES = {
-    OBJECT_TYPE_ANALOG_VALUE,
-    OBJECT_TYPE_BINARY_VALUE,
-    OBJECT_TYPE_MULTI_STATE_VALUE,
-}
-
-
 def _domain_for_object(obj: dict, domain_overrides: dict[str, str]) -> str:
-    """Return the HA domain for a BACnet object, applying commandable-aware defaults.
-
-    Mirrors coordinator._default_domain_for() so that _get_platforms_in_use()
-    and the coordinator always agree on which domain an object belongs to.
-    Must stay in sync with BACnetCoordinator._default_domain_for().
-    """
-    obj_key = f"{obj['object_type']}:{obj['instance']}"
-    if obj_key in domain_overrides:
-        return domain_overrides[obj_key]
-    obj_type = obj["object_type"]
-    if obj_type in _VALUE_TYPES:
-        commandable = obj.get("commandable", False)
-        if obj_type == OBJECT_TYPE_BINARY_VALUE:
-            return "switch" if commandable else "binary_sensor"
-        # AV and MSV
-        return "number" if commandable else "sensor"
-    return DEFAULT_DOMAIN_MAP.get(obj_type, "sensor")
+    """Return the HA domain for a BACnet object, applying user overrides."""
+    return domain_overrides.get(object_key(obj)) or default_domain_for(obj)
 
 
 def _get_platforms_in_use(
@@ -202,8 +179,56 @@ def _migrate_unique_ids(
 
 
 # ---------------------------------------------------------------------------
+# Repairs
+# ---------------------------------------------------------------------------
+
+
+def _async_check_stale_overrides(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    objects: list[dict[str, Any]],
+    domain_overrides: dict[str, str],
+) -> None:
+    """Raise (or clear) a fixable issue for overrides left by the options-flow bug.
+
+    Not auto-removed: the domain mapping is the user's, so they confirm the
+    cleanup in Settings → Repairs (see repairs.py).
+    """
+    issue_id = f"stale_domain_overrides_{entry.entry_id}"
+    stale = set(stale_domain_overrides(objects, domain_overrides))
+    if not stale:
+        ir.async_delete_issue(hass, DOMAIN, issue_id)
+        return
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        issue_id,
+        is_fixable=True,
+        severity=ir.IssueSeverity.WARNING,
+        translation_key="stale_domain_overrides",
+        translation_placeholders={
+            "device": entry.data.get("device_name", "BACnet Device"),
+            "objects": ", ".join(
+                f"{object_label(o)} → {domain_overrides[object_key(o)]}"
+                for o in objects
+                if object_key(o) in stale
+            ),
+        },
+        data={"entry_id": entry.entry_id},
+    )
+
+
+# ---------------------------------------------------------------------------
 # Integration lifecycle
 # ---------------------------------------------------------------------------
+
+
+async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+    """Register the integration-wide services (once, not per entry)."""
+    from .services import async_setup_services  # noqa: WPS433
+
+    async_setup_services(hass)
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -216,12 +241,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     1. Create a BACnetClient and connect it to the network.
     2. Optionally register as a Foreign Device with a BBMD.
     3. Build the data coordinator for COV + polling fallback.
-    4. Store runtime references in hass.data so platforms can access them.
+    4. Store runtime references in entry.runtime_data for the platforms.
     5. Forward setup to the required platform files.
     """
     # Lazy import to avoid loading BACpypes3 at integration discovery time
     from .bacnet_client import BACnetClient  # noqa: WPS433
-    from .coordinator import BACnetCoordinator  # noqa: WPS433
+    from .coordinator import BACnetCoordinator, BACnetRuntimeData  # noqa: WPS433
 
     hass.data.setdefault(DOMAIN, {})
 
@@ -246,6 +271,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     cov_increment: float = entry.options.get(CONF_COV_INCREMENT, DEFAULT_COV_INCREMENT)
     live_metadata_properties: list[str] = entry.options.get(
         CONF_LIVE_METADATA_PROPERTIES, DEFAULT_LIVE_METADATA_PROPERTIES
+    )
+    climate_temperature_sources: dict[str, str] = entry.options.get(
+        CONF_CLIMATE_TEMPERATURE_SOURCES, {}
     )
 
     # ---- 2. Get or create a shared BACnet client for this port ----
@@ -295,44 +323,41 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry=entry,
         cov_increment=cov_increment,
         live_metadata_properties=live_metadata_properties,
+        climate_temperature_sources=climate_temperature_sources,
     )
 
-    # Perform the first data refresh so entities have initial state
-    await coordinator.async_config_entry_first_refresh()
+    # Perform the first data refresh so entities have initial state. On
+    # failure HA never calls async_unload_entry, so undo this setup here —
+    # otherwise the shared socket's ref_count (and any COV subscription
+    # already created on it) leaks on every retry.
+    try:
+        await coordinator.async_config_entry_first_refresh()
+    except BaseException:
+        await coordinator.async_shutdown()
+        await _async_release_client(hass, client)
+        raise
 
     # ---- 5. Store runtime data ----
-    hass.data[DOMAIN][entry.entry_id] = {
-        DATA_CLIENT: client,
-        DATA_COORDINATOR: coordinator,
-        DATA_OBJECTS: selected_objects,
-        DATA_DEVICE_INFO: {
-            "device_id": entry.data.get("device_id"),
-            "device_name": entry.data.get("device_name", "BACnet Device"),
-            "device_address": entry.data.get("device_address", ""),
-            "vendor_name": entry.data.get(CONF_VENDOR_NAME, ""),
-            "model_name": entry.data.get(CONF_MODEL_NAME, ""),
-            "firmware_version": entry.data.get(CONF_FIRMWARE_VERSION, ""),
-            "software_version": entry.data.get(CONF_SOFTWARE_VERSION, ""),
-        },
-        DATA_UNSUB: [],
-    }
+    entry.runtime_data = BACnetRuntimeData(coordinator=coordinator)
 
     # ---- 6. Migrate legacy unique_ids (1.0.17 → 1.0.18+ format) ----
     # Must run before platforms load so entities find the migrated registry entries.
     _migrate_unique_ids(hass, entry, entry.data.get("device_id"))
 
+    _async_check_stale_overrides(hass, entry, selected_objects, domain_overrides)
+
     # ---- 7. Forward to platforms ----
     needed_platforms = _get_platforms_in_use(selected_objects, domain_overrides)
-    # SELECT (write priority) and BUTTON (metadata refresh) are device-level,
-    # not object-dependent.
-    for device_level_platform in (Platform.SELECT, Platform.BUTTON):
+    # SELECT (write priority), BUTTON (metadata refresh) and SENSOR
+    # (diagnostics) are device-level, not object-dependent.
+    for device_level_platform in (Platform.SELECT, Platform.BUTTON, Platform.SENSOR):
         if device_level_platform not in needed_platforms:
             needed_platforms.append(device_level_platform)
+    entry.runtime_data.platforms = needed_platforms
     await hass.config_entries.async_forward_entry_setups(entry, needed_platforms)
 
     # ---- 8. Listen for option changes ----
-    unsub = entry.add_update_listener(_async_options_updated)
-    hass.data[DOMAIN][entry.entry_id][DATA_UNSUB].append(unsub)
+    entry.async_on_unload(entry.add_update_listener(_async_options_updated))
 
     _LOGGER.info(
         "BACnet integration setup complete for device '%s' with %d objects",
@@ -350,63 +375,52 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     - COV subscriptions
     - Polling tasks
     - BACnet network connection
-    - hass.data references
     """
-    entry_data = hass.data[DOMAIN].get(entry.entry_id)
-    if entry_data is None:
+    runtime_data = getattr(entry, "runtime_data", None)
+    if runtime_data is None:
         return True
 
-    # Determine which platforms were loaded
-    domain_overrides: dict[str, str] = entry.options.get(CONF_DOMAIN_MAPPING, {})
-    selected_objects = entry_data.get(DATA_OBJECTS, [])
-    needed_platforms = _get_platforms_in_use(selected_objects, domain_overrides)
-    for device_level_platform in (Platform.SELECT, Platform.BUTTON):
-        if device_level_platform not in needed_platforms:
-            needed_platforms.append(device_level_platform)
-
-    # Unload platforms
+    # Unload platforms (the update listener is removed via async_on_unload)
     unload_ok = await hass.config_entries.async_unload_platforms(
-        entry, needed_platforms
+        entry, runtime_data.platforms
     )
 
     if unload_ok:
-        # Cancel update listener subscriptions
-        for unsub in entry_data.get(DATA_UNSUB, []):
-            unsub()
-
         # Shut down coordinator — cancels only this entry's COV subscriptions
-        coordinator = entry_data.get(DATA_COORDINATOR)
-        if coordinator is not None:
-            await coordinator.async_shutdown()
+        coordinator = runtime_data.coordinator
+        await coordinator.async_shutdown()
 
-        # Release the shared client reference.  Only disconnect the underlying
-        # UDP socket when the last config entry using this port is unloaded.
-        client = entry_data.get(DATA_CLIENT)
-        if client is not None:
-            local_port = entry.data.get(CONF_LOCAL_PORT, 47808)
-            port_clients = hass.data[DOMAIN].get("_port_clients", {})
-            if local_port in port_clients:
-                port_clients[local_port]["ref_count"] -= 1
-                if port_clients[local_port]["ref_count"] <= 0:
-                    port_clients.pop(local_port)
-                    await client.disconnect()
-                    _LOGGER.debug(
-                        "Disconnected shared BACnet client on port %d", local_port
-                    )
-                else:
-                    _LOGGER.debug(
-                        "Released client reference for port %d (ref_count=%d remaining)",
-                        local_port,
-                        port_clients[local_port]["ref_count"],
-                    )
-            else:
-                # Fallback for entries created before shared-client support
-                await client.disconnect()
+        await _async_release_client(hass, coordinator.client)
 
-        hass.data[DOMAIN].pop(entry.entry_id)
         _LOGGER.info("BACnet integration unloaded for entry %s", entry.entry_id)
 
     return unload_ok
+
+
+async def _async_release_client(hass: HomeAssistant, client: Any) -> None:
+    """Drop one reference to a shared per-port client; disconnect the last one."""
+    if client is None:
+        return
+    # The client's own port, not entry.data: a reconfigure may have changed
+    # the configured port before this reload.
+    local_port = client.local_port
+    port_clients = hass.data[DOMAIN].get("_port_clients", {})
+    shared = port_clients.get(local_port)
+    if shared is None or shared["client"] is not client:
+        # Fallback for entries created before shared-client support
+        await client.disconnect()
+        return
+    shared["ref_count"] -= 1
+    if shared["ref_count"] <= 0:
+        port_clients.pop(local_port)
+        await client.disconnect()
+        _LOGGER.debug("Disconnected shared BACnet client on port %d", local_port)
+    else:
+        _LOGGER.debug(
+            "Released client reference for port %d (ref_count=%d remaining)",
+            local_port,
+            shared["ref_count"],
+        )
 
 
 async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -418,3 +432,8 @@ async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> Non
     """
     _LOGGER.debug("Options updated for BACnet entry %s — reloading", entry.entry_id)
     await hass.config_entries.async_reload(entry.entry_id)
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Drop this entry's repair issue so it can't outlive the device."""
+    ir.async_delete_issue(hass, DOMAIN, f"stale_domain_overrides_{entry.entry_id}")

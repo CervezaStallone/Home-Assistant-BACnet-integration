@@ -45,6 +45,26 @@
           "device_name": "Name for this device in Home Assistant. Pre-filled with the BACnet objectName.",
           "selected_objects": "Check the objects you want to monitor or control in Home Assistant."
         }
+      },
+      "reconfigure": {
+        "title": "Reconfigure BACnet connection",
+        "description": "Change the network settings or the address of this BACnet device. Entities, their history and all options are kept; the integration reloads with the new settings.",
+        "data": {
+          "local_ip": "Local IP address (bind)",
+          "local_port": "BACnet/IP port",
+          "use_bbmd": "Enable BBMD / Foreign Device Registration",
+          "bbmd_address": "BBMD address (IP:port)",
+          "bbmd_ttl": "Foreign Device TTL (seconds)",
+          "device_address": "Device address"
+        },
+        "data_description": {
+          "local_ip": "The IP address of this Home Assistant server's network interface to bind to. Include the subnet prefix (e.g. 192.168.1.100/24) so broadcasts (Who-Is discovery) work — without it, discovery on the local subnet will fail. This is NOT the BACnet device address. Leave empty for auto-detect.",
+          "local_port": "Default BACnet/IP port is 47808 (0xBAC0).",
+          "use_bbmd": "Enable this if BACnet devices are on another subnet/VLAN and a BBMD is available.",
+          "bbmd_address": "IP address and port of the BBMD (e.g. 192.168.2.1:47808).",
+          "bbmd_ttl": "Time-to-live for the Foreign Device Registration in seconds.",
+          "device_address": "IP address (and optional port) of the BACnet device, e.g. 192.168.1.50 or 192.168.1.50:47808, or a routed address such as 20000:1."
+        }
       }
     },
     "error": {
@@ -62,42 +82,134 @@
       "reconfigure_successful": "Reconfiguration was successful."
     }
   },
+  "entity": {
+    "select": {
+      "write_priority": {
+        "name": "Write Priority",
+        "state": {
+          "8": "8 – Manual Operator",
+          "9": "9",
+          "12": "12",
+          "13": "13",
+          "14": "14",
+          "15": "15",
+          "16": "16 – Default (Lowest)"
+        }
+      }
+    },
+    "button": {
+      "refresh_metadata": {
+        "name": "Refresh object metadata"
+      }
+    },
+    "sensor": {
+      "last_successful_poll": {
+        "name": "Last successful poll"
+      },
+      "cov_subscriptions": {
+        "name": "COV subscriptions"
+      },
+      "consecutive_failed_polls": {
+        "name": "Consecutive failed polls"
+      }
+    }
+  },
   "options": {
     "step": {
       "init": {
         "title": "BACnet Integration Options",
-        "description": "Configure update behaviour, entity naming, and domain mapping for this device.",
+        "description": "Configure update behaviour, entity naming and per-object settings for this device.",
         "data": {
           "enable_cov": "Enable COV (Change of Value) subscriptions",
           "cov_increment": "COV increment for analog objects",
-          "polling_interval": "Polling fallback interval (seconds)",
+          "polling_interval": "Polling interval (seconds)",
           "use_description": "Use description (property id 28) instead of name",
-          "rescan_objects": "Rescan device and manage BACnet object selection"
+          "rescan_objects": "Rescan device and manage BACnet object selection",
+          "live_metadata_properties": "Live metadata properties"
         },
         "data_description": {
           "enable_cov": "When enabled, the integration subscribes to COV notifications. If the device does not support COV or subscription fails, polling is used as fallback.",
           "cov_increment": "Minimum value change on the device before a COV notification is sent (applies to analog objects only). Set to 0 to use the device's default. Example: 0.5 means a notification is sent when the value changes by at least 0.5.",
-          "polling_interval": "Interval in seconds for polling when COV is unavailable or disabled.",
+          "polling_interval": "How often all objects are polled, in seconds (minimum 10). Polling always runs; COV only adds faster updates in between.",
           "use_description": "When checked, entities will be named using the BACnet 'description' property (ID 28) instead of 'objectName' (ID 77).",
-          "rescan_objects": "Rereads the device's current Object_List so you can add objects that weren't selected during setup, or pick up objects added to the device since. Currently imported objects stay selected by default."
+          "rescan_objects": "Rereads the device's current Object_List so you can add objects that weren't selected during setup, or pick up objects added to the device since. Currently imported objects stay selected by default.",
+          "live_metadata_properties": "Properties that get their own live COV-Property subscription instead of the periodic re-read. Each one is an extra subscription on the device, and not every device supports it."
         }
       },
       "rescan_objects": {
         "title": "Manage BACnet Objects",
-        "description": "Currently imported objects are pre-selected. Check any additional objects you want to add, or uncheck ones to remove. Domain mapping and COV overrides are preserved for objects that stay selected."
+        "description": "Currently imported objects are pre-selected. Check any additional objects you want to add, or uncheck ones to remove. Per-object settings are preserved for objects that stay selected."
       },
       "domain_mapping": {
-        "title": "Domain Mapping",
-        "description": "Override the default Home Assistant domain for individual BACnet objects. For example, map an Analog Value to 'number' instead of 'sensor' if you need write access. Select the desired domain for each object below."
+        "title": "Customize objects",
+        "description": "Tick the BACnet objects whose entity type, COV setting or climate temperature sensor you want to change. Objects that already have a custom setting are ticked. Unticked objects use the defaults.",
+        "data": {
+          "customize_objects": "Objects to customize"
+        }
+      },
+      "customize_objects": {
+        "title": "Customize objects",
+        "description": "Per object: the Home Assistant entity type, whether COV is used, and — for objects that are already a climate entity — which object provides the room temperature. Changed an object to climate just now? Save, then open the options again to pick its temperature sensor."
       }
     },
     "error": {
-      "invalid_polling_interval": "Polling interval must be a positive integer.",
+      "invalid_polling_interval": "The polling interval must be at least 10 seconds.",
       "no_objects_found": "No readable BACnet objects were found on this device.",
       "unknown": "An unexpected error occurred."
     },
     "abort": {
       "cannot_connect": "Could not reach the BACnet device to rescan its object list. Make sure the device is online and try again."
+    }
+  },
+  "issues": {
+    "stale_domain_overrides": {
+      "title": "Incorrect entity types on {device}",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Reset incorrect entity types",
+            "description": "An earlier version of this integration saved an entity type for these BACnet objects that ignores whether the object is commandable:\n\n{objects}\n\nNon-commandable objects set to a writable type (switch, number) reject every write; commandable objects stuck on a read-only type (sensor) can't be controlled. Confirm to remove these overrides. The objects return to their correct default type and the integration reloads. If you chose one of these types deliberately, set it again in the integration options."
+          }
+        }
+      }
+    },
+    "device_unreachable": {
+      "title": "{device} is not responding",
+      "description": "Home Assistant has not received data from the BACnet device {device} for several polls, and reconnecting did not help. Its entities are unavailable until it answers again.\n\nCheck that the device is powered and on the network, that its address is still correct (you can change it via Reconfigure), and — when a BBMD is used — that the BBMD is reachable. This message disappears by itself once the device responds."
+    }
+  },
+  "exceptions": {
+    "write_failed": {
+      "message": "The BACnet device rejected the write to {object}. Check the Home Assistant log for the reason (for example a wrong write priority or an object that is not writable)."
+    },
+    "not_a_bacnet_object": {
+      "message": "{entity_id} is not a BACnet object entity of this integration."
+    }
+  },
+  "services": {
+    "relinquish": {
+      "name": "Relinquish",
+      "description": "Release Home Assistant's command on a BACnet object (writes Null at a priority level), so lower priorities or the Relinquish Default take over.",
+      "fields": {
+        "priority": {
+          "name": "Priority",
+          "description": "Priority level to release (1-16). Defaults to the device's Write Priority."
+        }
+      }
+    },
+    "write_value": {
+      "name": "Write value",
+      "description": "Write a value to a BACnet object's present value once, at a chosen priority, without changing the device's Write Priority setting.",
+      "fields": {
+        "value": {
+          "name": "Value",
+          "description": "Value to write. Binary objects: 0 = inactive, 1 = active."
+        },
+        "priority": {
+          "name": "Priority",
+          "description": "Priority level to write at (1-16). Defaults to the device's Write Priority."
+        }
+      }
     }
   }
 }

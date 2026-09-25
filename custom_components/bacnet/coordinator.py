@@ -13,12 +13,17 @@ The coordinator also handles:
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import math
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, ClassVar
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .bacnet_client import BACnetClient
@@ -26,7 +31,6 @@ from .const import (
     CONF_SELECTED_OBJECTS,
     COV_METADATA_CHECK_INTERVAL,
     DEFAULT_COV_INCREMENT,
-    DEFAULT_DOMAIN_MAP,
     DEFAULT_ENABLE_COV,
     DEFAULT_METADATA_REFRESH_INTERVAL,
     DEFAULT_POLLING_INTERVAL,
@@ -35,20 +39,45 @@ from .const import (
     DOMAIN,
     LIVE_METADATA_BACNET_TO_PROPERTY,
     LIVE_METADATA_PROPERTY_TO_BACNET,
+    MAX_CONCURRENT_REQUESTS,
     MAX_SILENT_FAILURES,
+    METADATA_PERSIST_DELAY,
     OBJECT_TYPE_ANALOG_INPUT,
     OBJECT_TYPE_ANALOG_OUTPUT,
     OBJECT_TYPE_ANALOG_VALUE,
-    OBJECT_TYPE_BINARY_VALUE,
-    OBJECT_TYPE_MULTI_STATE_VALUE,
     RECONNECT_THRESHOLD,
 )
+from .helpers import default_domain_for, mask_address
 
 _LOGGER = logging.getLogger(__name__)
+
+# Stored object metadata that a refresh may update. Keys a read doesn't
+# return (e.g. state_text on an analog object) are never touched.
+_METADATA_KEYS = (
+    "object_name",
+    "description",
+    "units",
+    "commandable",
+    "state_text",
+    "number_of_states",
+    "min_value",
+    "max_value",
+    "resolution",
+)
 
 # COV subscription lifetime.  BACpypes3's change_of_value() context manager
 # automatically renews the subscription before it expires.
 COV_LIFETIME_SECONDS = 300
+
+
+@dataclass
+class BACnetRuntimeData:
+    """What a loaded config entry keeps in entry.runtime_data."""
+
+    coordinator: BACnetCoordinator
+    # Platforms forwarded at setup — unload must use exactly these, even if
+    # entry.data changed since (a metadata persist reloads with new data).
+    platforms: list = field(default_factory=list)
 
 
 class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -76,6 +105,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         entry: ConfigEntry | None = None,
         cov_increment: float = DEFAULT_COV_INCREMENT,
         live_metadata_properties: list[str] | None = None,
+        climate_temperature_sources: dict[str, str] | None = None,
     ) -> None:
         """Initialise the coordinator.
 
@@ -95,6 +125,9 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 description, units) get a live SubscribeCOVProperty
                 subscription instead of the periodic/COV-triggered
                 ReadProperty refresh. Empty by default (issue #26).
+            climate_temperature_sources: climate obj_key → obj_key of the
+                object whose presentValue is that climate's current
+                temperature (options flow).
         """
         self.client = client
         self.objects = objects
@@ -106,6 +139,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.entry = entry
         self.cov_increment = cov_increment
         self.live_metadata_properties = live_metadata_properties or []
+        self.climate_temperature_sources = climate_temperature_sources or {}
         self.write_priority: int = DEFAULT_WRITE_PRIORITY
 
         # Track which objects have active COV and which need polling
@@ -114,6 +148,10 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             str, str
         ] = {}  # "obj_key:prop" → sub_key
         self._polled_objects: list[dict[str, Any]] = []
+
+        # Per-object listeners for COV pushes (obj_key → callbacks), so a
+        # notification refreshes only the entity it concerns.
+        self._object_listeners: dict[str, set[Callable[[], None]]] = {}
 
         # Outage-recovery state (issue #18).
         # _consecutive_failures counts polls in a row that returned no usable
@@ -124,11 +162,17 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # after a reconnect so the next successful poll re-creates COV subs.
         self._consecutive_failures: int = 0
         self._needs_resubscribe: bool = False
+        self.last_successful_poll: datetime | None = None
+        # Repair issues persist across restarts, so assume one may exist
+        # until the first successful poll has cleared it.
+        self._outage_issue_raised: bool = True
 
         # Metadata refresh (issue #26). Skip an immediate refresh right after
         # setup — the config flow just read fresh metadata during discovery.
         self._last_metadata_refresh: datetime = datetime.now(timezone.utc)
         self._last_object_metadata_check: dict[str, datetime] = {}
+        self._metadata_task: asyncio.Task | None = None
+        self._persist_handle: asyncio.TimerHandle | None = None
 
         # Device address for reads/writes (from config entry data)
         self.device_address: str = ""
@@ -192,6 +236,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 device_address=self.device_address,
                 objects=self.objects,
                 property_names=["presentValue", "statusFlags"],
+                device_id=self.entry.data.get("device_id") if self.entry else None,
             )
             data.update(polled)
         except Exception as exc:  # noqa: BLE001
@@ -209,6 +254,10 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # BACpypes3 timeouts surface as None values rather than exceptions.
         if self._poll_yielded_data(polled):
             self._consecutive_failures = 0
+            self.last_successful_poll = datetime.now(timezone.utc)
+            if self._outage_issue_raised:
+                ir.async_delete_issue(self.hass, DOMAIN, self._outage_issue_id)
+                self._outage_issue_raised = False
             # After a reconnect, rebuild COV subscriptions once the device is
             # confirmed reachable again.
             if self._needs_resubscribe:
@@ -217,13 +266,42 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # Piggyback the metadata refresh on this same successful cycle
             # rather than a dedicated timer — the device is already confirmed
             # reachable, so this is the cheapest point to check for changes.
+            # Runs in the background: a sweep is several reads per object and
+            # must not hold up this poll (or writes waiting on a refresh).
             elapsed = datetime.now(timezone.utc) - self._last_metadata_refresh
-            if elapsed >= timedelta(seconds=DEFAULT_METADATA_REFRESH_INTERVAL):
-                await self.async_refresh_metadata()
+            sweep_running = (
+                self._metadata_task is not None and not self._metadata_task.done()
+            )
+            if (
+                elapsed >= timedelta(seconds=DEFAULT_METADATA_REFRESH_INTERVAL)
+                and not sweep_running
+            ):
+                self._last_metadata_refresh = datetime.now(timezone.utc)
+                self._metadata_task = self.hass.async_create_background_task(
+                    self.async_refresh_metadata(), name=f"{self.name} metadata sweep"
+                )
         else:
             await self._handle_poll_failure()
 
         return data
+
+    @property
+    def _outage_issue_id(self) -> str:
+        return f"device_unreachable_{self.entry.entry_id if self.entry else 'unknown'}"
+
+    def diagnostics_summary(self) -> dict[str, Any]:
+        """Health figures for the diagnostics download and diagnostic sensors."""
+        return {
+            "objects": len(self.objects),
+            "cov_subscriptions": len(self._cov_subscriptions),
+            "cov_property_subscriptions": len(self._cov_property_subscriptions),
+            "polled_objects": len(self._polled_objects),
+            "consecutive_failed_polls": self._consecutive_failures,
+            "last_update_success": self.last_update_success,
+            "last_successful_poll": self.last_successful_poll,
+            "write_priority": self.write_priority,
+            "polling_interval": self.polling_interval,
+        }
 
     @staticmethod
     def _poll_yielded_data(
@@ -251,7 +329,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         failures = self._consecutive_failures
         _LOGGER.warning(
             "BACnet device %s unresponsive (%d consecutive failed polls)",
-            self.device_address or "(no address)",
+            mask_address(self.device_address),
             failures,
         )
 
@@ -260,6 +338,22 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "Attempting BACnet client reconnect after %d failed polls",
                 failures,
             )
+            # Past a brief blip: tell the user in Settings → Repairs.
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                self._outage_issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.ERROR,
+                translation_key="device_unreachable",
+                translation_placeholders={
+                    "device": (
+                        self.entry.data.get("device_name") if self.entry else None
+                    )
+                    or "BACnet device",
+                },
+            )
+            self._outage_issue_raised = True
             try:
                 await self.client.reconnect()
                 self._needs_resubscribe = True
@@ -271,7 +365,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         if failures >= MAX_SILENT_FAILURES:
             raise UpdateFailed(
-                f"BACnet device {self.device_address or '(no address)'} not "
+                f"BACnet device {mask_address(self.device_address)} not "
                 f"responding ({failures} consecutive failed polls)"
             )
 
@@ -298,8 +392,8 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     @staticmethod
     def _diff_metadata(obj: dict[str, Any], fresh: dict[str, Any]) -> dict[str, Any]:
-        """Return the object_name/description/units/commandable fields that
-        differ between *obj* and *fresh* (empty dict if nothing changed).
+        """Return the _METADATA_KEYS fields that differ between *obj* and
+        *fresh* (empty dict if nothing changed).
 
         Deliberately does NOT mutate *obj*. self.objects is the SAME list
         of dicts as entry.data[CONF_SELECTED_OBJECTS] (assigned once by
@@ -314,8 +408,8 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         _replace_object().
         """
         changed: dict[str, Any] = {}
-        for key in ("object_name", "description", "units", "commandable"):
-            if obj.get(key) != fresh.get(key):
+        for key in _METADATA_KEYS:
+            if key in fresh and obj.get(key) != fresh[key]:
                 changed[key] = fresh[key]
         return changed
 
@@ -335,8 +429,12 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         A reload (not just an in-place dict mutation) is required because HA
         sensor entities read units/device_class once at __init__. Reuses the
         same options-update-listener path already used when the user edits
-        options.
+        options. Persists self.objects as a whole, so it also covers any
+        change still waiting in _schedule_metadata_persist().
         """
+        if self._persist_handle is not None:
+            self._persist_handle.cancel()
+            self._persist_handle = None
         if self.entry is None:
             return
         _LOGGER.info("BACnet object metadata changed on device — reloading entry")
@@ -345,8 +443,19 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             data={**self.entry.data, CONF_SELECTED_OBJECTS: self.objects},
         )
 
+    def _schedule_metadata_persist(self) -> None:
+        """Persist after METADATA_PERSIST_DELAY, coalescing COV-triggered changes.
+
+        COV-triggered checks find changes one object at a time; persisting
+        each immediately would reload the entry once per changed object.
+        """
+        if self._persist_handle is None:
+            self._persist_handle = self.hass.loop.call_later(
+                METADATA_PERSIST_DELAY, self._persist_metadata_change
+            )
+
     async def async_refresh_metadata(self) -> bool:
-        """Re-read objectName/description/units/commandable for every object.
+        """Re-read the metadata of every object (one batched client call).
 
         Safety-net sweep for polling-only objects, which never produce a COV
         notification to trigger the cheaper per-object check below. Runs on
@@ -356,51 +465,39 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         Returns True if any object's metadata changed.
         """
         self._last_metadata_refresh = datetime.now(timezone.utc)
-        new_objects: list[dict[str, Any]] = []
-        changed = False
+        snapshot = self.objects
+        try:
+            fresh_by_key = await self.client.read_objects_metadata(
+                self.device_address, snapshot
+            )
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.debug("Metadata refresh failed: %s", exc)
+            return False
 
-        for obj in self.objects:
-            try:
-                fresh = await self.client.refresh_object_metadata(
-                    device_address=self.device_address,
-                    object_type=obj["object_type"],
-                    instance=obj["instance"],
-                    current_commandable=obj.get("commandable", False),
-                    current_object_name=obj.get("object_name"),
-                    current_description=obj.get("description"),
-                    current_units=obj.get("units"),
-                )
-            except Exception as exc:  # noqa: BLE001
-                _LOGGER.debug(
-                    "Metadata refresh failed for %s:%s: %s",
+        all_updates = []
+        for obj in snapshot:
+            fresh = fresh_by_key.get(f"{obj['object_type']}:{obj['instance']}")
+            updates = self._diff_metadata(obj, fresh) if fresh else {}
+            for key, value in updates.items():
+                _LOGGER.info(
+                    "BACnet object %s:%s metadata changed: %s %r → %r",
                     obj["object_type"],
                     obj["instance"],
-                    exc,
+                    key,
+                    obj.get(key),
+                    value,
                 )
-                new_objects.append(obj)
-                continue
+            all_updates.append(updates)
 
-            if fresh is None:
-                new_objects.append(obj)
-                continue
-
-            updates = self._diff_metadata(obj, fresh)
+        # Apply onto the CURRENT list, not the snapshot: a COV-triggered
+        # check may have replaced self.objects while this sweep was awaiting.
+        changed = False
+        for obj, updates in zip(snapshot, all_updates, strict=True):
             if updates:
-                for key, value in updates.items():
-                    _LOGGER.info(
-                        "BACnet object %s:%s metadata changed: %s %r → %r",
-                        obj["object_type"],
-                        obj["instance"],
-                        key,
-                        obj.get(key),
-                        value,
-                    )
-                obj = {**obj, **updates}
+                self._replace_object(f"{obj['object_type']}:{obj['instance']}", updates)
                 changed = True
-            new_objects.append(obj)
 
         if changed:
-            self.objects = new_objects
             self._persist_metadata_change()
 
         return changed
@@ -458,7 +555,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 value,
             )
         self._replace_object(obj_key, updates)
-        self._persist_metadata_change()
+        self._schedule_metadata_persist()
 
     # ------------------------------------------------------------------
     # COV subscription management
@@ -472,77 +569,41 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     }
 
     async def _setup_subscriptions(self) -> None:
-        """Attempt COV subscriptions for all objects. Objects that fail get polled."""
-        self._polled_objects = []
+        """Attempt COV subscriptions for all objects. Objects that fail get polled.
 
+        Runs up to MAX_CONCURRENT_REQUESTS objects in parallel. If none of
+        the first batch gets a subscription, the device evidently doesn't do
+        COV and the rest go straight to polling — otherwise every object
+        would wait out its own subscribe timeout during setup.
+        """
+        self._polled_objects = []
+        semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
+
+        async def _setup(obj: dict[str, Any]) -> bool:
+            async with semaphore:
+                return await self._setup_object_subscription(obj)
+
+        wants_cov = []
         for obj in self.objects:
             obj_key = f"{obj['object_type']}:{obj['instance']}"
-            cov_for_object = self.cov_overrides.get(obj_key, self.enable_cov)
+            if self.cov_overrides.get(obj_key, self.enable_cov):
+                wants_cov.append(obj)
+            else:
+                self._polled_objects.append(obj)
+                _LOGGER.debug("Polling fallback for %s", obj_key)
 
-            if cov_for_object:
-                # For analog objects, write the covIncrement to the device
-                # before subscribing so the device uses the user's threshold.
-                if self.cov_increment > 0 and obj["object_type"] in self._ANALOG_TYPES:
-                    try:
-                        await self.client.write_property(
-                            device_address=self.device_address,
-                            object_type=obj["object_type"],
-                            instance=obj["instance"],
-                            property_name="covIncrement",
-                            value=self.cov_increment,
-                        )
-                        _LOGGER.debug(
-                            "Set covIncrement=%.2f for %s",
-                            self.cov_increment,
-                            obj_key,
-                        )
-                    except Exception:  # noqa: BLE001
-                        _LOGGER.debug(
-                            "Could not write covIncrement for %s (device may "
-                            "not support it — using device default)",
-                            obj_key,
-                        )
-
-                # Live metadata push (issue #26) — opt-in per property since
-                # each one is a SEPARATE COV subscription on the device.
-                # Rejected/unsupported properties simply keep using the
-                # existing poll-cycle/COV-triggered ReadProperty refresh.
-                for prop_key in self.live_metadata_properties:
-                    bacnet_prop = LIVE_METADATA_PROPERTY_TO_BACNET.get(prop_key)
-                    if bacnet_prop is None:
-                        continue
-                    prop_sub_key = await self.client.subscribe_cov_property(
-                        device_address=self.device_address,
-                        object_type=obj["object_type"],
-                        instance=obj["instance"],
-                        property_name=bacnet_prop,
-                        callback=self._handle_cov_property_notification,
-                        lifetime=COV_LIFETIME_SECONDS,
-                    )
-                    if prop_sub_key is not None:
-                        self._cov_property_subscriptions[f"{obj_key}:{prop_key}"] = (
-                            prop_sub_key
-                        )
-                        _LOGGER.debug(
-                            "Live COV-Property active: %s for %s", prop_key, obj_key
-                        )
-
-                sub_key = await self.client.subscribe_cov(
-                    device_address=self.device_address,
-                    object_type=obj["object_type"],
-                    instance=obj["instance"],
-                    callback=self._handle_cov_notification,
-                    lifetime=COV_LIFETIME_SECONDS,
-                )
-                if sub_key is not None:
-                    self._cov_subscriptions[obj_key] = sub_key
-                    _LOGGER.debug("COV active for %s", obj_key)
-                    continue
-
-            # COV disabled (globally or via per-object override) or failed —
-            # add to polling list
-            self._polled_objects.append(obj)
-            _LOGGER.debug("Polling fallback for %s", obj_key)
+        probe = wants_cov[:MAX_CONCURRENT_REQUESTS]
+        rest = wants_cov[MAX_CONCURRENT_REQUESTS:]
+        results = await asyncio.gather(*(_setup(o) for o in probe))
+        if probe and not any(results):
+            _LOGGER.info(
+                "Device %s rejected COV for the first %d objects — polling the rest",
+                mask_address(self.device_address),
+                len(probe),
+            )
+            self._polled_objects.extend(rest)
+        else:
+            await asyncio.gather(*(_setup(o) for o in rest))
 
         _LOGGER.info(
             "COV subscriptions: %d active, %d polling fallback",
@@ -552,6 +613,89 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         # BACpypes3 change_of_value() context manager handles renewal
         # automatically — no background renewal task needed.
+
+    async def _setup_object_subscription(self, obj: dict[str, Any]) -> bool:
+        """Set up COV (+ optional live metadata) for one object.
+
+        Returns True if the value COV subscription is active; otherwise the
+        object is added to the polling fallback list.
+        """
+        obj_key = f"{obj['object_type']}:{obj['instance']}"
+
+        # For analog objects, set the covIncrement on the device before
+        # subscribing so the device uses the user's threshold.
+        if self.cov_increment > 0 and obj["object_type"] in self._ANALOG_TYPES:
+            await self._ensure_cov_increment(obj, obj_key)
+
+        # Live metadata push (issue #26) — opt-in per property since
+        # each one is a SEPARATE COV subscription on the device.
+        # Rejected/unsupported properties simply keep using the
+        # existing poll-cycle/COV-triggered ReadProperty refresh.
+        for prop_key in self.live_metadata_properties:
+            bacnet_prop = LIVE_METADATA_PROPERTY_TO_BACNET.get(prop_key)
+            if bacnet_prop is None:
+                continue
+            prop_sub_key = await self.client.subscribe_cov_property(
+                device_address=self.device_address,
+                object_type=obj["object_type"],
+                instance=obj["instance"],
+                property_name=bacnet_prop,
+                callback=self._handle_cov_property_notification,
+                lifetime=COV_LIFETIME_SECONDS,
+            )
+            if prop_sub_key is not None:
+                self._cov_property_subscriptions[f"{obj_key}:{prop_key}"] = prop_sub_key
+                _LOGGER.debug("Live COV-Property active: %s for %s", prop_key, obj_key)
+
+        sub_key = await self.client.subscribe_cov(
+            device_address=self.device_address,
+            object_type=obj["object_type"],
+            instance=obj["instance"],
+            callback=self._handle_cov_notification,
+            lifetime=COV_LIFETIME_SECONDS,
+        )
+        if sub_key is not None:
+            self._cov_subscriptions[obj_key] = sub_key
+            _LOGGER.debug("COV active for %s", obj_key)
+            return True
+
+        self._polled_objects.append(obj)
+        _LOGGER.debug("Polling fallback for %s", obj_key)
+        return False
+
+    async def _ensure_cov_increment(self, obj: dict[str, Any], obj_key: str) -> None:
+        """Write covIncrement only if the device holds a different value.
+
+        Setup runs on every reload (options change, metadata change), and
+        many controllers persist covIncrement to non-volatile memory, so an
+        unconditional write wears it out for nothing.
+        """
+        try:
+            current = await self.client.read_property(
+                device_address=self.device_address,
+                object_type=obj["object_type"],
+                instance=obj["instance"],
+                property_name="covIncrement",
+            )
+            # Device stores a float32 REAL — compare with tolerance.
+            if current is not None and math.isclose(
+                float(current), self.cov_increment, rel_tol=1e-6, abs_tol=1e-6
+            ):
+                return
+            await self.client.write_property(
+                device_address=self.device_address,
+                object_type=obj["object_type"],
+                instance=obj["instance"],
+                property_name="covIncrement",
+                value=self.cov_increment,
+            )
+            _LOGGER.debug("Set covIncrement=%.2f for %s", self.cov_increment, obj_key)
+        except Exception:  # noqa: BLE001
+            _LOGGER.debug(
+                "Could not write covIncrement for %s (device may "
+                "not support it — using device default)",
+                obj_key,
+            )
 
     @callback
     def _handle_cov_notification(
@@ -563,11 +707,11 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         change is received.  We merge the changed properties into our
         data dict and tell HA to update affected entities.
 
-        IMPORTANT: We update self.data directly and notify listeners
-        instead of using async_set_updated_data(), because the latter
-        resets the polling timer.  If COV notifications arrive frequently,
-        that would prevent the scheduled _async_update_data poll from
-        ever firing.
+        IMPORTANT: We update self.data directly and notify only this
+        object's listeners instead of using async_set_updated_data(): that
+        resets the polling timer (frequent COV would starve the scheduled
+        poll) and would re-render every entity of the device for a change
+        to one object.
 
         Args:
             obj_key: Object identifier string ("object_type:instance").
@@ -577,17 +721,55 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self.data is None:
             return
 
-        data = dict(self.data)
-        if obj_key in data:
-            data[obj_key].update(changed_values)
-        else:
-            data[obj_key] = changed_values
-
-        # Update data and notify listeners WITHOUT resetting the poll timer.
-        self.data = data
-        self.async_update_listeners()
-
+        self._merge_object_data(obj_key, changed_values)
         self._maybe_schedule_metadata_check(obj_key)
+
+    def _merge_object_data(self, obj_key: str, values: dict[str, Any]) -> None:
+        """Merge *values* into one object's data and notify only its listeners."""
+        # New outer AND inner dict: the previous snapshot stays untouched.
+        self.data = {
+            **(self.data or {}),
+            obj_key: {**(self.data or {}).get(obj_key, {}), **values},
+        }
+        for update_callback in list(self._object_listeners.get(obj_key, ())):
+            update_callback()
+
+    async def async_refresh_object(self, obj: dict[str, Any]) -> None:
+        """Re-read one object after a write instead of polling the whole device.
+
+        Falls back to a regular (debounced) full refresh when the read
+        returns nothing, so a flaky read never leaves a stale state behind.
+        """
+        obj_key = f"{obj['object_type']}:{obj['instance']}"
+        try:
+            polled = await self.client.poll_objects(
+                device_address=self.device_address,
+                objects=[obj],
+                property_names=["presentValue", "statusFlags"],
+            )
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.debug("Post-write read failed for %s: %s", obj_key, exc)
+            polled = None
+
+        values = (polled or {}).get(obj_key)
+        if not values or values.get("presentValue") is None:
+            await self.async_request_refresh()
+            return
+        self._merge_object_data(obj_key, values)
+
+    @callback
+    def async_add_object_listener(
+        self, obj_key: str, update_callback: Callable[[], None]
+    ) -> Callable[[], None]:
+        """Call *update_callback* on COV pushes for *obj_key*; returns remover."""
+        listeners = self._object_listeners.setdefault(obj_key, set())
+        listeners.add(update_callback)
+
+        @callback
+        def remove() -> None:
+            listeners.discard(update_callback)
+
+        return remove
 
     def _maybe_schedule_metadata_check(self, obj_key: str) -> None:
         """Schedule a COV-triggered metadata check for *obj_key*, throttled.
@@ -647,7 +829,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             value,
         )
         self._replace_object(obj_key, {internal_key: value})
-        self._persist_metadata_change()
+        self._schedule_metadata_persist()
 
     # ------------------------------------------------------------------
     # Shutdown
@@ -660,6 +842,14 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         shared BACnetClient (used by multiple coordinators on the same port)
         is not disrupted when one config entry is unloaded.
         """
+        if self._metadata_task is not None and not self._metadata_task.done():
+            self._metadata_task.cancel()
+        # Dropped, not flushed: the device still holds the new metadata, so
+        # the next coordinator picks it up on its first check.
+        if self._persist_handle is not None:
+            self._persist_handle.cancel()
+            self._persist_handle = None
+
         for sub_key in list(self._cov_subscriptions.values()):
             await self.client.unsubscribe_cov(sub_key)
         self._cov_subscriptions.clear()
@@ -683,13 +873,6 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         obj_data = self.data.get(obj_key, {})
         return obj_data.get(prop)
 
-    # Value-type objects that may or may not have a Priority Array
-    _VALUE_TYPES: ClassVar = {
-        OBJECT_TYPE_ANALOG_VALUE,
-        OBJECT_TYPE_BINARY_VALUE,
-        OBJECT_TYPE_MULTI_STATE_VALUE,
-    }
-
     def get_domain_for_object(self, obj: dict[str, Any]) -> str:
         """Determine the HA domain for a BACnet object, respecting user overrides.
 
@@ -703,16 +886,10 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return self.domain_overrides[obj_key]
         return self._default_domain_for(obj)
 
-    def _default_domain_for(self, obj: dict[str, Any]) -> str:
+    @staticmethod
+    def _default_domain_for(obj: dict[str, Any]) -> str:
         """Return the default HA domain for a BACnet object based on type + commandability."""
-        obj_type = obj["object_type"]
-        if obj_type in self._VALUE_TYPES:
-            commandable = obj.get("commandable", False)
-            if obj_type == OBJECT_TYPE_BINARY_VALUE:
-                return "switch" if commandable else "binary_sensor"
-            if obj_type in {OBJECT_TYPE_ANALOG_VALUE, OBJECT_TYPE_MULTI_STATE_VALUE}:
-                return "number" if commandable else "sensor"
-        return DEFAULT_DOMAIN_MAP.get(obj_type, "sensor")
+        return default_domain_for(obj)
 
     def get_entity_name(self, obj: dict[str, Any]) -> str:
         """Return the entity display name, respecting the use_description option."""

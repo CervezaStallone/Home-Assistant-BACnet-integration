@@ -43,6 +43,13 @@ CONF_COV_INCREMENT = "cov_increment"
 # Domain mapping
 CONF_DOMAIN_MAPPING = "domain_mapping"
 
+# Options-flow only, never persisted: which objects to customise.
+CONF_CUSTOMIZE_OBJECTS = "customize_objects"
+
+# Climate objects whose current temperature comes from another selected
+# object (climate obj_key -> temperature obj_key).
+CONF_CLIMATE_TEMPERATURE_SOURCES = "climate_temperature_sources"
+
 # Per-object COV override (obj_key -> bool). Objects with no entry fall back
 # to the device-wide CONF_ENABLE_COV value.
 CONF_COV_OVERRIDES = "cov_overrides"
@@ -53,6 +60,9 @@ CONF_COV_OVERRIDES = "cov_overrides"
 DEFAULT_PORT = 47808  # 0xBAC0 — standard BACnet/IP port
 DEFAULT_BBMD_TTL = 900  # seconds (15 min)
 DEFAULT_POLLING_INTERVAL = 30  # seconds
+# Polling always runs (COV only adds faster updates in between), so a very
+# short interval loads every device and the network for little gain.
+MIN_POLLING_INTERVAL = 10  # seconds
 DEFAULT_ENABLE_COV = True
 DEFAULT_USE_DESCRIPTION = False
 DEFAULT_COV_INCREMENT = 0.1  # default COV increment for analog objects
@@ -66,6 +76,16 @@ DEFAULT_COV_INCREMENT = 0.1  # default COV increment for analog objects
 MAX_SILENT_FAILURES = 3
 RECONNECT_THRESHOLD = 10
 
+# Network load limits per device.
+# RPM_MAX_OBJECTS caps one ReadPropertyMultiple request; larger requests can
+# exceed a controller's max APDU / segmentation support. On a size-related
+# abort the per-device chunk size is halved automatically.
+# MAX_CONCURRENT_REQUESTS caps parallel individual requests (fallback reads,
+# COV subscribes, metadata reads) — small controllers only handle a few
+# outstanding confirmed requests at a time.
+RPM_MAX_OBJECTS = 25
+MAX_CONCURRENT_REQUESTS = 4
+
 # Static object metadata (objectName, description, units, commandable) has no
 # COV/push mechanism in BACnet — a device-side edit is only visible on a fresh
 # ReadProperty. Two refresh paths pick that up (issue #26):
@@ -75,6 +95,9 @@ RECONNECT_THRESHOLD = 10
 #      doesn't cause a metadata re-read on every notification.
 #   2. Periodic sweep: the safety net for polling-only objects, which never
 #      produce a COV notification to trigger off of.
+# COV-triggered metadata changes arriving within this window are persisted
+# together — one config-entry reload instead of one per object.
+METADATA_PERSIST_DELAY = 5  # seconds
 COV_METADATA_CHECK_INTERVAL = 300  # seconds (5 min) — per-object COV throttle
 DEFAULT_METADATA_REFRESH_INTERVAL = 3600  # seconds (1 hour) — polled-object sweep
 
@@ -134,7 +157,49 @@ SUPPORTED_DOMAINS: list[str] = [
     "switch",
     "number",
     "climate",
+    "select",  # multi-state objects: pick a state by its stateText
 ]
+
+# BACnet engineering units (bacpypes3 hyphenated names) → (HA unit, sensor
+# device class). A device class is only set where HA accepts that unit for
+# it; "parts-per-million" stays generic (CO2, VOC, … all use ppm).
+BACNET_UNITS: dict[str, tuple[str, str | None]] = {
+    "degrees-celsius": ("°C", "temperature"),
+    "degrees-fahrenheit": ("°F", "temperature"),
+    "degrees-kelvin": ("K", "temperature"),
+    "percent": ("%", None),
+    "percent-relative-humidity": ("%", "humidity"),
+    "pascals": ("Pa", "pressure"),
+    "hectopascals": ("hPa", "pressure"),
+    "kilopascals": ("kPa", "pressure"),
+    "bars": ("bar", "pressure"),
+    "pounds-force-per-square-inch": ("psi", "pressure"),
+    "watts": ("W", "power"),
+    "kilowatts": ("kW", "power"),
+    "megawatts": ("MW", "power"),
+    "volt-amperes": ("VA", "apparent_power"),
+    "watt-hours": ("Wh", "energy"),
+    "kilowatt-hours": ("kWh", "energy"),
+    "megawatt-hours": ("MWh", "energy"),
+    "amperes": ("A", "current"),
+    "milliamperes": ("mA", "current"),
+    "volts": ("V", "voltage"),
+    "millivolts": ("mV", "voltage"),
+    "kilovolts": ("kV", "voltage"),
+    "hertz": ("Hz", "frequency"),
+    "liters-per-second": ("L/s", "volume_flow_rate"),
+    "liters-per-minute": ("L/min", "volume_flow_rate"),
+    "cubic-meters-per-hour": ("m³/h", "volume_flow_rate"),
+    "liters": ("L", "volume"),
+    "cubic-meters": ("m³", "volume"),
+    "meters-per-second": ("m/s", "speed"),
+    "luxes": ("lx", "illuminance"),
+    "parts-per-million": ("ppm", None),
+    "kilograms": ("kg", "weight"),
+    "seconds": ("s", "duration"),
+    "minutes": ("min", "duration"),
+    "hours": ("h", "duration"),
+}
 
 # Default mapping: BACnet object type → HA domain
 DEFAULT_DOMAIN_MAP: dict[int, str] = {
@@ -170,18 +235,4 @@ PROP_POLARITY = 84
 # ---------------------------------------------------------------------------
 DEFAULT_WRITE_PRIORITY = 16  # Lowest priority — safe default
 CONF_WRITE_PRIORITY = "write_priority"
-WRITE_PRIORITY_OPTIONS: list[int] = [8, 9, 12, 13, 14, 15, 16, 17]
-
-# ---------------------------------------------------------------------------
-# Data keys stored in hass.data[DOMAIN][entry_id]
-# ---------------------------------------------------------------------------
-DATA_CLIENT = "client"
-DATA_COORDINATOR = "coordinator"
-DATA_OBJECTS = "objects"
-DATA_DEVICE_INFO = "device_info"
-DATA_UNSUB = "unsub"
-
-# ---------------------------------------------------------------------------
-# Events / signals
-# ---------------------------------------------------------------------------
-SIGNAL_BACNET_COV_UPDATE = f"{DOMAIN}_cov_update"
+WRITE_PRIORITY_OPTIONS: list[int] = [8, 9, 12, 13, 14, 15, 16]  # BACnet: 1-16

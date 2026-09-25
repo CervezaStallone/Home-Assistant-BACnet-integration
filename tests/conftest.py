@@ -32,6 +32,7 @@ class _DataUpdateCoordinator:
         self.hass = hass
         self.name = name
         self.data = None
+        self.last_update_success = True
         self._listeners: dict = {}
 
     # Allow DataUpdateCoordinator[SomeType] generic syntax (Python 3.9+)
@@ -63,6 +64,23 @@ class _CoordinatorEntity:
     def __class_getitem__(cls, item):
         return cls
 
+    @property
+    def available(self) -> bool:
+        return self.coordinator.last_update_success
+
+    async def async_added_to_hass(self) -> None:
+        pass
+
+    def async_on_remove(self, func) -> None:
+        self.__dict__.setdefault("_on_remove", []).append(func)
+
+
+class _RestoreEntity:
+    """Minimal RestoreEntity stub."""
+
+    async def async_get_last_state(self):
+        return None
+
 
 class _DeviceInfo(dict):
     """Stub for HA's DeviceInfo TypedDict — just a dict."""
@@ -76,22 +94,29 @@ class _DeviceInfo(dict):
 # ---------------------------------------------------------------------------
 
 
-class _SensorEntity(_CoordinatorEntity):
+class _SensorEntity:
     _attr_device_class = None
     _attr_native_unit_of_measurement = None
     _attr_state_class = None
 
 
-class _SensorDeviceClass:
+class _SensorDeviceClass(str, Enum):
     TEMPERATURE = "temperature"
     HUMIDITY = "humidity"
     PRESSURE = "pressure"
     POWER = "power"
+    APPARENT_POWER = "apparent_power"
     ENERGY = "energy"
     CURRENT = "current"
     VOLTAGE = "voltage"
     FREQUENCY = "frequency"
     VOLUME_FLOW_RATE = "volume_flow_rate"
+    VOLUME = "volume"
+    SPEED = "speed"
+    ILLUMINANCE = "illuminance"
+    WEIGHT = "weight"
+    DURATION = "duration"
+    TIMESTAMP = "timestamp"
 
 
 class _SensorStateClass:
@@ -143,6 +168,11 @@ class _ClimateEntity(_CoordinatorEntity):
     _attr_temperature_unit: str | None = None
 
 
+class _EntityCategory(str, Enum):
+    CONFIG = "config"
+    DIAGNOSTIC = "diagnostic"
+
+
 class _Platform(str, Enum):
     SENSOR = "sensor"
     BINARY_SENSOR = "binary_sensor"
@@ -153,8 +183,13 @@ class _Platform(str, Enum):
     BUTTON = "button"
 
 
-class _ButtonEntity(_CoordinatorEntity):
+class _ButtonEntity:
     pass
+
+
+class _SelectEntity:
+    _attr_options: list | None = None
+    _attr_current_option: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -170,18 +205,72 @@ _ha_config_entries = MagicMock()
 _ha_config_entries.ConfigEntry = MagicMock
 _ha_config_entries.OptionsFlow = object  # options_flow inherits from this
 
+
+class _ConfigFlow:
+    """Minimal ConfigFlow stub (accepts the domain= class keyword)."""
+
+    def __init_subclass__(cls, domain=None, **kwargs):
+        super().__init_subclass__(**kwargs)
+
+
+_ha_config_entries.ConfigFlow = _ConfigFlow
+
 _ha_const = MagicMock()
 _ha_const.Platform = _Platform
 _ha_const.ATTR_TEMPERATURE = "temperature"
 _ha_const.UnitOfTemperature = _UnitOfTemperature
+_ha_const.EntityCategory = _EntityCategory
+
+
+class _HomeAssistantError(Exception):
+    """Stub accepting HA's translation kwargs."""
+
+    def __init__(
+        self,
+        *args,
+        translation_domain=None,
+        translation_key=None,
+        translation_placeholders=None,
+    ):
+        super().__init__(*args)
+        self.translation_key = translation_key
+        self.translation_placeholders = translation_placeholders
+
 
 _ha_exceptions = MagicMock()
 _ha_exceptions.ConfigEntryNotReady = Exception
+_ha_exceptions.HomeAssistantError = _HomeAssistantError
 
 _ha_coordinator_mod = MagicMock()
 _ha_coordinator_mod.CoordinatorEntity = _CoordinatorEntity
 _ha_coordinator_mod.DataUpdateCoordinator = _DataUpdateCoordinator
 _ha_coordinator_mod.UpdateFailed = Exception
+
+
+class _RepairsFlow:
+    """Minimal RepairsFlow stub."""
+
+    hass: Any = None
+
+    def async_show_form(self, *, step_id, **kwargs):
+        return {"type": "form", "step_id": step_id}
+
+    def async_create_entry(self, *, data, **kwargs):
+        return {"type": "create_entry", "data": data}
+
+
+def _async_redact_data(data, to_redact):
+    return {k: ("**REDACTED**" if k in to_redact else v) for k, v in data.items()}
+
+
+_ha_diagnostics_mod = MagicMock()
+_ha_diagnostics_mod.async_redact_data = _async_redact_data
+
+_ha_repairs_mod = MagicMock()
+_ha_repairs_mod.RepairsFlow = _RepairsFlow
+
+_ha_restore_state = MagicMock()
+_ha_restore_state.RestoreEntity = _RestoreEntity
 
 _ha_device_registry = MagicMock()
 _ha_device_registry.DeviceInfo = _DeviceInfo
@@ -209,14 +298,22 @@ _ha_climate_mod.HVACMode = _HVACMode
 _ha_button_mod = MagicMock()
 _ha_button_mod.ButtonEntity = _ButtonEntity
 
+_ha_select_mod = MagicMock()
+_ha_select_mod.SelectEntity = _SelectEntity
+
 _voluptuous = MagicMock()
 _voluptuous.Schema = dict  # vol.Schema({…}) → just a dict for stub purposes
 
 _ha_flow = MagicMock()
 
+_homeassistant = MagicMock()
+# `from homeassistant import config_entries` resolves via attribute access,
+# not sys.modules — point it at the same stub.
+_homeassistant.config_entries = _ha_config_entries
+
 sys.modules.update(
     {
-        "homeassistant": MagicMock(),
+        "homeassistant": _homeassistant,
         "homeassistant.core": _ha_core,
         "homeassistant.config_entries": _ha_config_entries,
         "homeassistant.const": _ha_const,
@@ -228,11 +325,17 @@ sys.modules.update(
         "homeassistant.components.number": _ha_number_mod,
         "homeassistant.components.climate": _ha_climate_mod,
         "homeassistant.components.button": _ha_button_mod,
+        "homeassistant.components.select": _ha_select_mod,
+        "homeassistant.components.repairs": _ha_repairs_mod,
+        "homeassistant.components.diagnostics": _ha_diagnostics_mod,
         "homeassistant.helpers": MagicMock(),
         "homeassistant.helpers.update_coordinator": _ha_coordinator_mod,
         "homeassistant.helpers.device_registry": _ha_device_registry,
+        "homeassistant.helpers.restore_state": _ha_restore_state,
         "homeassistant.helpers.entity_platform": MagicMock(),
         "homeassistant.helpers.config_validation": MagicMock(),
+        "homeassistant.helpers.service": MagicMock(),
+        "homeassistant.helpers.target": MagicMock(),
         "homeassistant.data_entry_flow": _ha_flow,
         "voluptuous": _voluptuous,
     }
@@ -248,6 +351,8 @@ def _make_coordinator(data: dict | None = None) -> MagicMock:
     coord = MagicMock()
     coord.data = data or {}
     coord.device_address = "192.168.1.100"
+    coord.last_update_success = True
+    coord.climate_temperature_sources = {}
     coord.get_object_value.side_effect = lambda key, prop="presentValue": (
         coord.data.get(key, {}).get(prop)
     )

@@ -5,6 +5,7 @@ Provides a multi-step GUI configuration:
   Step 1 (user)          – Network settings: local IP/port, BBMD/Foreign Device config
   Step 2 (discovery)     – Who-Is device discovery, user selects one device
   Step 3 (select_objects)– Read object list from device, user picks objects with "Select All"
+  reconfigure            – Change network settings / device address of an entry
 """
 
 from __future__ import annotations
@@ -38,7 +39,6 @@ from .const import (
     CONF_TARGET_DEVICE_ID,
     CONF_USE_BBMD,
     CONF_VENDOR_NAME,
-    DATA_CLIENT,
     DEFAULT_BBMD_TTL,
     DEFAULT_PORT,
     DOMAIN,
@@ -115,6 +115,27 @@ def _validate_bbmd_address(addr: str) -> bool:
     return True
 
 
+def _network_errors(user_input: dict[str, Any]) -> dict[str, str]:
+    """Validate the network fields shared by the user and reconfigure steps."""
+    errors: dict[str, str] = {}
+    local_ip = user_input.get(CONF_LOCAL_IP, "").strip()
+    if local_ip and not _validate_local_ip(local_ip):
+        errors["base"] = "invalid_ip"
+
+    # Accepts IP[:port] or a remote-station "network:instance" address
+    # behind a router (issue #22).
+    target_address = user_input.get(CONF_TARGET_ADDRESS, "").strip()
+    if target_address and not _validate_target_address(target_address):
+        errors[CONF_TARGET_ADDRESS] = "invalid_ip"
+
+    bbmd_address = user_input.get(CONF_BBMD_ADDRESS, "").strip()
+    if user_input.get(CONF_USE_BBMD, False) and not _validate_bbmd_address(
+        bbmd_address
+    ):
+        errors[CONF_BBMD_ADDRESS] = "invalid_ip"
+    return errors
+
+
 # ---------------------------------------------------------------------------
 # Config Flow
 # ---------------------------------------------------------------------------
@@ -182,25 +203,15 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def _find_existing_client(self, local_port: int):
         """Return an already-connected BACnetClient bound to *local_port*, if any.
 
-        When a config entry is already loaded for the same BACnet/IP network
-        its client is stored in ``hass.data[DOMAIN][entry_id][DATA_CLIENT]``.
-        We can safely reuse it for discovery / object reads, avoiding a
-        duplicate UDP bind on the same port.
+        Loaded config entries share one client per local port (see
+        ``hass.data[DOMAIN]["_port_clients"]`` in __init__.py). Reusing it
+        for discovery / object reads avoids a duplicate UDP bind.
         """
-        domain_data = self.hass.data.get(DOMAIN, {})
-        for entry_id, entry_data in domain_data.items():
-            client = entry_data.get(DATA_CLIENT)
-            if (
-                client is not None
-                and getattr(client, "_local_port", None) == local_port
-                and getattr(client, "_app", None) is not None
-            ):
-                _LOGGER.debug(
-                    "Reusing existing BACnet client from entry %s (port %d)",
-                    entry_id,
-                    local_port,
-                )
-                return client
+        shared = self.hass.data.get(DOMAIN, {}).get("_port_clients", {}).get(local_port)
+        client = shared["client"] if shared else None
+        if client is not None and getattr(client, "_app", None) is not None:
+            _LOGGER.debug("Reusing existing BACnet client (port %d)", local_port)
+            return client
         return None
 
     # ------------------------------------------------------------------
@@ -215,20 +226,11 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             # --- Validate inputs ---
+            errors = _network_errors(user_input)
             local_ip = user_input.get(CONF_LOCAL_IP, "").strip()
-            if local_ip and not _validate_local_ip(local_ip):
-                errors["base"] = "invalid_ip"
-
-            # Accepts IP[:port] or a remote-station "network:instance"
-            # address behind a router (issue #22).
             target_address = user_input.get(CONF_TARGET_ADDRESS, "").strip()
-            if target_address and not _validate_target_address(target_address):
-                errors[CONF_TARGET_ADDRESS] = "invalid_ip"
-
             use_bbmd = user_input.get(CONF_USE_BBMD, False)
             bbmd_address = user_input.get(CONF_BBMD_ADDRESS, "").strip()
-            if use_bbmd and not _validate_bbmd_address(bbmd_address):
-                errors[CONF_BBMD_ADDRESS] = "invalid_ip"
 
             if not errors:
                 # Store network config and move to discovery
@@ -606,6 +608,71 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="select_objects",
             data_schema=schema,
             errors=errors,
+        )
+
+    # ------------------------------------------------------------------
+    # Reconfigure: change network settings / device address in place
+    # ------------------------------------------------------------------
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Change local IP/port, BBMD and the device address without re-adding.
+
+        Entities, their history and all options are kept; the entry reloads
+        with the new settings.
+        """
+        entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            errors = _network_errors(user_input)
+            device_address = user_input.get(CONF_DEVICE_ADDRESS, "").strip()
+            if not device_address or not _validate_target_address(device_address):
+                errors[CONF_DEVICE_ADDRESS] = "invalid_ip"
+            if not errors:
+                use_bbmd = user_input.get(CONF_USE_BBMD, False)
+                return self.async_update_reload_and_abort(
+                    entry,
+                    data={
+                        **entry.data,
+                        CONF_LOCAL_IP: user_input.get(CONF_LOCAL_IP, "").strip(),
+                        CONF_LOCAL_PORT: user_input.get(CONF_LOCAL_PORT, DEFAULT_PORT),
+                        CONF_USE_BBMD: use_bbmd,
+                        CONF_BBMD_ADDRESS: user_input.get(CONF_BBMD_ADDRESS, "").strip()
+                        if use_bbmd
+                        else "",
+                        CONF_BBMD_TTL: user_input.get(CONF_BBMD_TTL, DEFAULT_BBMD_TTL),
+                        CONF_DEVICE_ADDRESS: device_address,
+                    },
+                    reason="reconfigure_successful",
+                )
+
+        current = {**entry.data, **(user_input or {})}
+        schema = vol.Schema(
+            {
+                vol.Optional(
+                    CONF_LOCAL_IP, default=current.get(CONF_LOCAL_IP, "")
+                ): str,
+                vol.Optional(
+                    CONF_LOCAL_PORT, default=current.get(CONF_LOCAL_PORT, DEFAULT_PORT)
+                ): vol.Coerce(int),
+                vol.Required(
+                    CONF_DEVICE_ADDRESS, default=current.get(CONF_DEVICE_ADDRESS, "")
+                ): str,
+                vol.Optional(
+                    CONF_USE_BBMD, default=current.get(CONF_USE_BBMD, False)
+                ): bool,
+                vol.Optional(
+                    CONF_BBMD_ADDRESS, default=current.get(CONF_BBMD_ADDRESS, "")
+                ): str,
+                vol.Optional(
+                    CONF_BBMD_TTL, default=current.get(CONF_BBMD_TTL, DEFAULT_BBMD_TTL)
+                ): vol.Coerce(int),
+            }
+        )
+        return self.async_show_form(
+            step_id="reconfigure", data_schema=schema, errors=errors
         )
 
     # ------------------------------------------------------------------
