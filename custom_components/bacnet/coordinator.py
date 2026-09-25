@@ -58,6 +58,7 @@ _METADATA_KEYS = (
     "units",
     "commandable",
     "state_text",
+    "number_of_states",
     "min_value",
     "max_value",
     "resolution",

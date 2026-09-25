@@ -211,6 +211,17 @@ class BACnetEntity(CoordinatorEntity[BACnetCoordinator]):
             self.coordinator, self._obj, value, label=self._attr_name
         )
 
+    def state_text_for(self, value: Any) -> str | None:
+        """Return the stateText label for a 1-based multi-state value."""
+        texts = self._obj.get("state_text")
+        try:
+            index = int(value) - 1
+        except (TypeError, ValueError):
+            return None
+        if texts and 0 <= index < len(texts):
+            return texts[index]
+        return None
+
     def get_present_value(self) -> Any:
         """Return the current presentValue from the coordinator data."""
         return self.coordinator.get_object_value(self._obj_key, "presentValue")
@@ -234,6 +245,10 @@ class BACnetEntity(CoordinatorEntity[BACnetCoordinator]):
             attrs["bacnet_units"] = self._obj["units"]
         if self._obj.get("description"):
             attrs["bacnet_description"] = self._obj["description"]
+
+        state_text = self.state_text_for(self.get_present_value())
+        if state_text is not None:
+            attrs["bacnet_state_text"] = state_text
 
         status_flags = self.get_status_flags()
         if status_flags is not None:

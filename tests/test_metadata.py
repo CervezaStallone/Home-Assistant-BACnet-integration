@@ -30,6 +30,7 @@ _DEVICE = {
         "description": "",
         "present-value": 2,
         "state-text": ["Off", "Heat", "Cool"],
+        "number-of-states": 3,
         "priority-array": [None] * 16,
     },
     ("analog-value", 3): {
@@ -95,6 +96,7 @@ class TestBatchedMetadata:
             0.1,
         )
         assert result["19:2"]["state_text"] == ["Off", "Heat", "Cool"]
+        assert result["19:2"]["number_of_states"] == 3
 
     def test_commandable_from_priority_array(self):
         _, result = _read(_FakeDevice(rpm=True))

@@ -20,6 +20,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
+    BACNET_UNITS,
     OBJECT_TYPE_MULTI_STATE_INPUT,
     OBJECT_TYPE_MULTI_STATE_OUTPUT,
     OBJECT_TYPE_MULTI_STATE_VALUE,
@@ -28,25 +29,6 @@ from .coordinator import BACnetCoordinator
 from .entity import BACnetEntity
 
 _LOGGER = logging.getLogger(__name__)
-
-# BACnet units → HA native unit string (for number entities).
-# Keys are hyphenated strings as returned by BACpypes3's EngineeringUnits.__str__().
-_UNIT_NATIVE: dict[str, str] = {
-    "degrees-celsius": "°C",
-    "degrees-fahrenheit": "°F",
-    "percent": "%",
-    "percent-relative-humidity": "%",
-    "pascals": "Pa",
-    "hectopascals": "hPa",
-    "kilopascals": "kPa",
-    "watts": "W",
-    "kilowatts": "kW",
-    "kilowatt-hours": "kWh",
-    "amperes": "A",
-    "volts": "V",
-    "hertz": "Hz",
-    "liters-per-second": "L/s",
-}
 
 
 async def async_setup_entry(
@@ -89,11 +71,12 @@ class BACnetNumber(BACnetEntity, NumberEntity):
         super().__init__(coordinator, entry, obj)
 
         # Set native unit from BACnet units
-        units = obj.get("units")
-        if units:
-            self._attr_native_unit_of_measurement = _UNIT_NATIVE.get(units)
+        self._attr_native_unit_of_measurement = BACNET_UNITS.get(
+            obj.get("units") or "", (None, None)
+        )[0]
 
-        # Set sensible min/max based on object type
+        # Limits: the device's own minPresValue/maxPresValue/resolution or
+        # numberOfStates when known, otherwise wide type-based defaults.
         if obj["object_type"] in {
             OBJECT_TYPE_MULTI_STATE_INPUT,
             OBJECT_TYPE_MULTI_STATE_OUTPUT,
@@ -101,13 +84,19 @@ class BACnetNumber(BACnetEntity, NumberEntity):
         }:
             # Multi-state values are 1-based unsigned integers
             self._attr_native_min_value = 1
-            self._attr_native_max_value = 255  # Common maximum for multi-state
+            self._attr_native_max_value = obj.get("number_of_states") or 255
             self._attr_native_step = 1.0
         else:
-            # Analog values — wide range, BACnet uses IEEE 754 floats
-            self._attr_native_min_value = -1_000_000
-            self._attr_native_max_value = 1_000_000
-            self._attr_native_step = 0.1
+            # Analog values — BACnet uses IEEE 754 floats
+            min_value = obj.get("min_value")
+            max_value = obj.get("max_value")
+            self._attr_native_min_value = (
+                min_value if min_value is not None else -1_000_000
+            )
+            self._attr_native_max_value = (
+                max_value if max_value is not None else 1_000_000
+            )
+            self._attr_native_step = obj.get("resolution") or 0.1
 
     @property
     def native_value(self) -> float | None:

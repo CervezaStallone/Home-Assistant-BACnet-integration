@@ -104,6 +104,12 @@ class BACnetClimate(BACnetEntity, ClimateEntity, RestoreEntity):
         else:
             self._attr_temperature_unit = UnitOfTemperature.CELSIUS
 
+        # The setpoint's own limits (minPresValue/maxPresValue) when known.
+        if obj.get("min_value") is not None:
+            self._attr_min_temp = obj["min_value"]
+        if obj.get("max_value") is not None:
+            self._attr_max_temp = obj["max_value"]
+
     # ------------------------------------------------------------------
     # State properties
     # ------------------------------------------------------------------

@@ -1063,7 +1063,7 @@ class BACnetClient:
         if obj_type in POTENTIALLY_WRITABLE_TYPES:
             props.append("priorityArray")
         if obj_type in MULTI_STATE_TYPES:
-            props.append("stateText")
+            props += ["numberOfStates", "stateText"]
         return props
 
     async def _try_rpm_metadata(
@@ -1181,6 +1181,9 @@ class BACnetClient:
             metadata["max_value"] = _pick("maxPresValue", "max_value", float)
             metadata["resolution"] = _pick("resolution", "resolution", float)
         if obj_type in MULTI_STATE_TYPES:
+            metadata["number_of_states"] = _pick(
+                "numberOfStates", "number_of_states", int
+            )
             metadata["state_text"] = _pick(
                 "stateText", "state_text", lambda v: [str(x) for x in v]
             )
@@ -2223,6 +2226,7 @@ class BACnetClient:
         "covIncrement": "cov-increment",
         "objectName": "object-name",
         "stateText": "state-text",
+        "numberOfStates": "number-of-states",
         "minPresValue": "min-pres-value",
         "maxPresValue": "max-pres-value",
     }

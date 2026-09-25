@@ -17,13 +17,14 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .bacnet_client import MULTI_STATE_TYPES
 from .const import (
     DEFAULT_WRITE_PRIORITY,
     DOMAIN,
     WRITE_PRIORITY_OPTIONS,
 )
 from .coordinator import BACnetCoordinator
-from .entity import bacnet_device_info
+from .entity import BACnetEntity, bacnet_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -37,7 +38,20 @@ async def async_setup_entry(
 ) -> None:
     """Set up the write priority select entity for a BACnet device."""
     coordinator: BACnetCoordinator = entry.runtime_data.coordinator
-    async_add_entities([BACnetWritePrioritySelect(coordinator, entry)])
+    entities: list[SelectEntity] = [BACnetWritePrioritySelect(coordinator, entry)]
+    for obj in coordinator.objects:
+        if coordinator.get_domain_for_object(obj) != "select":
+            continue
+        if obj["object_type"] not in MULTI_STATE_TYPES:
+            _LOGGER.warning(
+                "Object %s:%s is mapped to 'select' but is not a multi-state "
+                "object — skipped",
+                obj["object_type"],
+                obj["instance"],
+            )
+            continue
+        entities.append(BACnetMultiStateSelect(coordinator, entry, obj))
+    async_add_entities(entities)
 
 
 class BACnetWritePrioritySelect(
@@ -99,3 +113,31 @@ class BACnetWritePrioritySelect(
             option,
             self._entry.data.get("device_name", "unknown"),
         )
+
+
+class BACnetMultiStateSelect(BACnetEntity, SelectEntity):
+    """A multi-state object as a select: one option per state.
+
+    Options are the object's stateText labels, or "1".."numberOfStates"
+    when the device has no stateText. BACnet states are 1-based.
+    """
+
+    @property
+    def options(self) -> list[str]:
+        texts = self._obj.get("state_text")
+        if texts:
+            return list(texts)
+        return [str(i) for i in range(1, (self._obj.get("number_of_states") or 0) + 1)]
+
+    @property
+    def current_option(self) -> str | None:
+        value = self.get_present_value()
+        try:
+            index = int(value) - 1
+        except (TypeError, ValueError):
+            return None
+        options = self.options
+        return options[index] if 0 <= index < len(options) else None
+
+    async def async_select_option(self, option: str) -> None:
+        await self.async_write_present_value(self.options.index(option) + 1)

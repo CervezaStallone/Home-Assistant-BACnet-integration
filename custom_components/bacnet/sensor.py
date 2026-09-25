@@ -23,6 +23,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
+    BACNET_UNITS,
     OBJECT_TYPE_ANALOG_INPUT,
     OBJECT_TYPE_ANALOG_OUTPUT,
     OBJECT_TYPE_ANALOG_VALUE,
@@ -31,44 +32,6 @@ from .coordinator import BACnetCoordinator
 from .entity import BACnetEntity
 
 _LOGGER = logging.getLogger(__name__)
-
-# BACnet engineering units → HA sensor device class mapping (subset).
-# Keys are the hyphenated strings returned by BACpypes3's EngineeringUnits.__str__().
-# "percent" (BACnet unit 98) is a generic percentage — do NOT map it to HUMIDITY.
-# Only "percent-relative-humidity" (unit 29) explicitly denotes relative humidity.
-_UNIT_DEVICE_CLASS: dict[str, SensorDeviceClass] = {
-    "degrees-celsius": SensorDeviceClass.TEMPERATURE,
-    "degrees-fahrenheit": SensorDeviceClass.TEMPERATURE,
-    "percent-relative-humidity": SensorDeviceClass.HUMIDITY,
-    "pascals": SensorDeviceClass.PRESSURE,
-    "hectopascals": SensorDeviceClass.PRESSURE,
-    "kilopascals": SensorDeviceClass.PRESSURE,
-    "watts": SensorDeviceClass.POWER,
-    "kilowatts": SensorDeviceClass.POWER,
-    "kilowatt-hours": SensorDeviceClass.ENERGY,
-    "amperes": SensorDeviceClass.CURRENT,
-    "volts": SensorDeviceClass.VOLTAGE,
-    "hertz": SensorDeviceClass.FREQUENCY,
-    "liters-per-second": SensorDeviceClass.VOLUME_FLOW_RATE,
-}
-
-# BACnet units → HA native unit string
-_UNIT_NATIVE: dict[str, str] = {
-    "degrees-celsius": "°C",
-    "degrees-fahrenheit": "°F",
-    "percent": "%",
-    "percent-relative-humidity": "%",
-    "pascals": "Pa",
-    "hectopascals": "hPa",
-    "kilopascals": "kPa",
-    "watts": "W",
-    "kilowatts": "kW",
-    "kilowatt-hours": "kWh",
-    "amperes": "A",
-    "volts": "V",
-    "hertz": "Hz",
-    "liters-per-second": "L/s",
-}
 
 
 async def async_setup_entry(
@@ -103,10 +66,11 @@ class BACnetSensor(BACnetEntity, SensorEntity):
         super().__init__(coordinator, entry, obj)
 
         # Determine device class and native unit from BACnet units
-        units = obj.get("units")
-        if units:
-            self._attr_device_class = _UNIT_DEVICE_CLASS.get(units)
-            self._attr_native_unit_of_measurement = _UNIT_NATIVE.get(units)
+        unit, device_class = BACNET_UNITS.get(obj.get("units") or "", (None, None))
+        self._attr_native_unit_of_measurement = unit
+        self._attr_device_class = (
+            SensorDeviceClass(device_class) if device_class else None
+        )
 
         # Analog types get measurement state class for statistics support
         if obj["object_type"] in {
