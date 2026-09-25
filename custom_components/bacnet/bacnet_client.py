@@ -79,6 +79,21 @@ POTENTIALLY_WRITABLE_TYPES: set[int] = {
     OBJECT_TYPE_MULTI_STATE_VALUE,
 }
 
+ANALOG_TYPES: set[int] = {
+    OBJECT_TYPE_ANALOG_INPUT,
+    OBJECT_TYPE_ANALOG_OUTPUT,
+    OBJECT_TYPE_ANALOG_VALUE,
+}
+MULTI_STATE_TYPES: set[int] = {
+    OBJECT_TYPE_MULTI_STATE_INPUT,
+    OBJECT_TYPE_MULTI_STATE_OUTPUT,
+    OBJECT_TYPE_MULTI_STATE_VALUE,
+}
+
+# Metadata RPM carries up to 8 properties per object (incl. priorityArray
+# and stateText lists), so it starts with far fewer objects per request.
+RPM_METADATA_MAX_OBJECTS = 5
+
 # Rejection reasons meaning "this device has no ReadPropertyMultiple at all".
 # Any other rejection (segmentation-not-supported, buffer-overflow, …) is
 # treated as "request too large" and answered by shrinking the chunk size.
@@ -214,6 +229,7 @@ class BACnetClient:
         # Per-device RPM chunk size (objects per request), shrunk on
         # size-related aborts.
         self._rpm_chunk_size: dict[str, int] = {}
+        self._rpm_metadata_chunk_size: dict[str, int] = {}
         # Last successful connect() parameters — used by reconnect() to
         # re-register with the BBMD after a network outage (issue #18).
         # BBMD foreign device registration has a TTL (default 900s); once it
@@ -924,7 +940,8 @@ class BACnetClient:
             type(object_list).__name__,
         )
 
-        # 2. Iterate and read metadata for each supported object type
+        # 2. Collect the supported objects, then read their metadata in batch
+        wanted: list[dict[str, Any]] = []
         for oid in object_list:
             try:
                 obj_type_str, instance = oid
@@ -947,36 +964,14 @@ class BACnetClient:
                     "Skipping unsupported object type: %s (int=%s)", oid, obj_type_int
                 )
                 continue
+            wanted.append({"object_type": obj_type_int, "instance": int(instance)})
 
-            try:
-                obj_info = await self._read_object_metadata(
-                    addr, oid, obj_type_int, instance
-                )
-                if obj_info is not None:
-                    objects.append(obj_info)
-                    _LOGGER.debug(
-                        "Read metadata for %s:%d — name=%s",
-                        oid,
-                        instance,
-                        obj_info.get("object_name", "?"),
-                    )
-                else:
-                    _LOGGER.warning(
-                        "Metadata read returned None for %s:%d", oid, instance
-                    )
-            except asyncio.CancelledError:
-                _LOGGER.warning("Metadata read cancelled for %s:%d", oid, instance)
-                # Return whatever we have so far rather than losing everything
-                break
-            except (ErrorRejectAbortNack, Exception) as exc:  # noqa: BLE001
-                _LOGGER.warning(
-                    "Unexpected error reading metadata for %s:%d — %s (%s)",
-                    oid,
-                    instance,
-                    exc,
-                    type(exc).__name__,
-                )
-                continue
+        metadata = await self.read_objects_metadata(device_address, wanted)
+        objects = [
+            metadata[key]
+            for key in (f"{o['object_type']}:{o['instance']}" for o in wanted)
+            if metadata.get(key) is not None
+        ]
 
         _LOGGER.info(
             "Read %d supported objects from device %s (%d)",
@@ -996,129 +991,200 @@ class BACnetClient:
         current_description: str | None = None,
         current_units: str | None = None,
     ) -> dict[str, Any] | None:
-        """Re-read objectName/description/units/commandable for one known object.
+        """Re-read the metadata of one known object (issue #26).
 
-        Used by the coordinator to pick up metadata edited on the device after
-        initial discovery (issue #26). Targets a single object directly instead
-        of walking the device's objectList like read_object_list() does, since
-        the object identity is already known.
+        The current_* values are the object's currently-known values, kept
+        when a read comes back empty (see _build_metadata). Returns the same
+        dict shape as read_object_list() entries, or None on failure.
+        """
+        if self._app is None:
+            raise RuntimeError("Client not connected")
+        known = {
+            "object_type": object_type,
+            "instance": instance,
+            "commandable": current_commandable,
+            "object_name": current_object_name,
+            "description": current_description,
+            "units": current_units,
+        }
+        result = await self.read_objects_metadata(device_address, [known])
+        return result.get(f"{object_type}:{instance}")
 
-        current_commandable/current_object_name/current_description/
-        current_units: the object's currently-known values, used to avoid
-        spuriously flipping any of them on a transient read failure (see
-        _read_object_metadata).
+    async def read_objects_metadata(
+        self, device_address: str, objects: list[dict[str, Any]]
+    ) -> dict[str, dict[str, Any] | None]:
+        """Read metadata for many objects with as few round-trips as possible.
 
-        Returns the same dict shape as read_object_list() entries, or None on
-        failure.
+        *objects* are object dicts (at least object_type/instance); any
+        already-known metadata in them is kept when a read comes back empty.
+        Uses ReadPropertyMultiple in chunks (RPM_METADATA_MAX_OBJECTS, shrunk
+        on size-related rejections); a failed chunk falls back to individual
+        reads, up to MAX_CONCURRENT_REQUESTS objects in parallel.
+
+        Returns {"type:instance": metadata dict, or None if unreadable}.
         """
         if self._app is None:
             raise RuntimeError("Client not connected")
         addr = Address(device_address)
-        type_str = self._int_to_object_type_str(object_type)
-        oid = ObjectIdentifier((type_str, instance))
-        return await self._read_object_metadata(
-            addr,
-            oid,
-            object_type,
-            instance,
-            current_commandable=current_commandable,
-            current_object_name=current_object_name,
-            current_description=current_description,
-            current_units=current_units,
+        result: dict[str, dict[str, Any] | None] = {}
+        failed: list[dict[str, Any]] = []
+
+        chunk_size = self._rpm_metadata_chunk_size.get(
+            device_address, RPM_METADATA_MAX_OBJECTS
         )
+        for start in range(0, len(objects), chunk_size):
+            chunk = objects[start : start + chunk_size]
+            raw = None
+            if self._rpm_supported.get(device_address, True):
+                raw = await self._try_rpm_metadata(addr, device_address, chunk)
+            if raw is None:
+                failed.extend(chunk)
+                continue
+            for obj in chunk:
+                key = f"{obj['object_type']}:{obj['instance']}"
+                result[key] = self._build_metadata(obj, raw.get(key, {}))
 
-    async def _read_object_metadata(
-        self,
-        addr: Address,
-        oid: ObjectIdentifier,
-        obj_type: int,
-        instance: int,
-        current_commandable: bool = False,
-        current_object_name: str | None = None,
-        current_description: str | None = None,
-        current_units: str | None = None,
-    ) -> dict[str, Any] | None:
-        """Read metadata properties for one BACnet object.
+        semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 
-        Returns a dict suitable for storage in the config entry, or None on failure.
+        async def _individual(obj: dict[str, Any]) -> None:
+            async with semaphore:
+                key = f"{obj['object_type']}:{obj['instance']}"
+                result[key] = await self._read_metadata_individually(addr, obj)
+
+        await asyncio.gather(*(_individual(o) for o in failed))
+        return result
+
+    @staticmethod
+    def _metadata_properties(obj_type: int) -> list[str]:
+        """BACnet properties worth reading as metadata for *obj_type*."""
+        props = ["objectName", "description", "presentValue"]
+        if obj_type in ANALOG_TYPES:
+            props += ["units", "minPresValue", "maxPresValue", "resolution"]
+        if obj_type in POTENTIALLY_WRITABLE_TYPES:
+            props.append("priorityArray")
+        if obj_type in MULTI_STATE_TYPES:
+            props.append("stateText")
+        return props
+
+    async def _try_rpm_metadata(
+        self, addr: Address, device_address: str, objects: list[dict[str, Any]]
+    ) -> dict[str, dict[str, Any]] | None:
+        """One RPM for a chunk's metadata; None if the request failed.
+
+        Per-property errors (e.g. an optional property the object lacks)
+        come back as None values rather than failing the chunk.
         """
+        param_list: list = []
+        for obj in objects:
+            type_str = self._INT_TO_TYPE_STR.get(obj["object_type"])
+            if type_str is None:
+                continue
+            param_list.append(f"{type_str},{obj['instance']}")
+            param_list.append(
+                [
+                    self._CAMEL_TO_HYPHEN.get(p, p)
+                    for p in self._metadata_properties(obj["object_type"])
+                ]
+            )
+        if not param_list:
+            return {}
         try:
-            # Read commonly needed properties individually (safer than RPM for
-            # devices that don't support ReadPropertyMultiple)
-            #
-            # _safe_read() returns None both when a property genuinely doesn't
-            # exist AND on a transient timeout/error — the two are
-            # indistinguishable here. Falling back to a placeholder/empty value
-            # on every such None used to make a flaky read look like the device
-            # changed, which triggered a spurious config-entry reload each time
-            # (issue #27 — this originally only guarded `commandable` below,
-            # but object_name/description/units suffered the identical bug and
-            # kept the reload loop alive after that fix). Keep the
-            # previously-known value instead when the read comes back empty.
-            object_name_raw = await self._safe_read(addr, oid, "objectName")
-            object_name = (
-                object_name_raw
-                if object_name_raw is not None
-                else (current_object_name or f"Object {instance}")
+            results = await asyncio.wait_for(
+                self._app.read_property_multiple(addr, param_list), timeout=30.0
             )
-            description_raw = await self._safe_read(addr, oid, "description")
-            description = (
-                description_raw
-                if description_raw is not None
-                else (current_description or "")
+        except asyncio.TimeoutError:
+            return None
+        except ErrorRejectAbortNack as exc:
+            self._handle_rpm_rejection(
+                device_address, len(objects), exc, self._rpm_metadata_chunk_size
             )
-            units = await self._safe_read(addr, oid, "units")
-            if units is None:
-                units = current_units
-            present_value = await self._safe_read(addr, oid, "presentValue")
-
+            return None
+        except Exception as exc:  # noqa: BLE001
             _LOGGER.debug(
-                "Raw values for %s:%d — name=%r, desc=%r, units=%r, pv=%r (type=%s)",
-                oid,
-                instance,
-                object_name,
-                description,
-                units,
-                present_value,
-                type(present_value).__name__ if present_value is not None else "None",
+                "Metadata RPM error for %s: %s", _mask_address(device_address), exc
             )
+            return None
 
-            # Determine if this object is commandable (has a Priority Array)
-            commandable = obj_type in COMMANDABLE_TYPES
-            if obj_type in POTENTIALLY_WRITABLE_TYPES:
-                # Try to read priority array - if it exists the object is commandable.
-                # _safe_read() returns None both when the property genuinely
-                # doesn't exist AND on a transient timeout/error — the two are
-                # indistinguishable here. Downgrading commandable to False on
-                # every such None used to make a flaky read look like the
-                # device changed, which triggered a spurious config-entry
-                # reload each time (issue #27). Keep the previously-known
-                # state instead when the probe comes back empty.
-                pa = await self._safe_read(addr, oid, "priorityArray")
-                commandable = pa is not None or current_commandable
+        raw: dict[str, dict[str, Any]] = {}
+        for obj_id, prop_id, _arr_idx, value in results:
+            obj_type_int = self._object_type_str_to_int(str(obj_id[0]))
+            if obj_type_int is None:
+                continue
+            prop = self._HYPHEN_TO_CAMEL.get(str(prop_id), str(prop_id))
+            raw.setdefault(f"{obj_type_int}:{int(obj_id[1])}", {})[prop] = (
+                None if isinstance(value, BaseException) else value
+            )
+        return raw
 
-            return {
-                "object_type": int(obj_type),
-                "instance": int(instance),
-                "object_name": str(object_name),
-                "description": str(description),
-                "units": str(units) if units is not None else None,
-                "present_value": self._coerce_value(present_value),
-                "commandable": bool(commandable),
+    async def _read_metadata_individually(
+        self, addr: Address, obj: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        """Read one object's metadata with one ReadProperty per property."""
+        oid = ObjectIdentifier(
+            (self._int_to_object_type_str(obj["object_type"]), obj["instance"])
+        )
+        try:
+            raw = {
+                prop: await self._safe_read(addr, oid, prop)
+                for prop in self._metadata_properties(obj["object_type"])
             }
         except asyncio.CancelledError:
-            _LOGGER.warning("Metadata read cancelled for %s:%d", oid, instance)
             raise
         except (ErrorRejectAbortNack, Exception) as exc:
             _LOGGER.warning(
-                "Failed to read metadata for %s:%d - %s (%s)",
+                "Failed to read metadata for %s - %s (%s)",
                 oid,
-                instance,
                 exc,
                 type(exc).__name__,
                 exc_info=True,
             )
             return None
+        return self._build_metadata(obj, raw)
+
+    def _build_metadata(
+        self, known: dict[str, Any], raw: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Turn raw property values into the stored object dict.
+
+        A missing property (None) is indistinguishable from a transient read
+        failure, so the previously-known value in *known* is kept instead of
+        a placeholder. Falling back on every None used to make a flaky read
+        look like a device-side change and reload the entry (issue #27).
+        """
+        obj_type = known["object_type"]
+        instance = known["instance"]
+
+        def _pick(prop: str, key: str, convert, default=None):
+            value = raw.get(prop)
+            return convert(value) if value is not None else known.get(key, default)
+
+        # Output types always have a Priority Array; Value types only if the
+        # probe finds one. A failed probe keeps the known state (issue #27).
+        commandable = obj_type in COMMANDABLE_TYPES or (
+            obj_type in POTENTIALLY_WRITABLE_TYPES
+            and (
+                raw.get("priorityArray") is not None or known.get("commandable", False)
+            )
+        )
+        metadata: dict[str, Any] = {
+            "object_type": int(obj_type),
+            "instance": int(instance),
+            "object_name": _pick("objectName", "object_name", str)
+            or f"Object {instance}",
+            "description": _pick("description", "description", str) or "",
+            "units": _pick("units", "units", str),
+            "present_value": self._coerce_value(raw.get("presentValue")),
+            "commandable": bool(commandable),
+        }
+        if obj_type in ANALOG_TYPES:
+            metadata["min_value"] = _pick("minPresValue", "min_value", float)
+            metadata["max_value"] = _pick("maxPresValue", "max_value", float)
+            metadata["resolution"] = _pick("resolution", "resolution", float)
+        if obj_type in MULTI_STATE_TYPES:
+            metadata["state_text"] = _pick(
+                "stateText", "state_text", lambda v: [str(x) for x in v]
+            )
+        return metadata
 
     async def _safe_read(
         self, addr: Address, oid: ObjectIdentifier, prop_name: str
@@ -1315,13 +1381,18 @@ class BACnetClient:
         return name is not None
 
     def _handle_rpm_rejection(
-        self, device_address: str, chunk_len: int, exc: ErrorRejectAbortNack
+        self,
+        device_address: str,
+        chunk_len: int,
+        exc: ErrorRejectAbortNack,
+        chunk_sizes: dict[str, int] | None = None,
     ) -> None:
         """Shrink the RPM chunk size, or disable RPM when it can't work at all."""
         reason = str(getattr(exc, "reason", exc))
         if reason not in _RPM_UNSUPPORTED_REASONS and chunk_len > 1:
             new_size = max(1, chunk_len // 2)
-            self._rpm_chunk_size[device_address] = new_size
+            sizes = self._rpm_chunk_size if chunk_sizes is None else chunk_sizes
+            sizes[device_address] = new_size
             _LOGGER.info(
                 "Device %s rejected a %d-object ReadPropertyMultiple (%s) — "
                 "retrying with %d objects per request",
@@ -1819,7 +1890,7 @@ class BACnetClient:
     def _coerce_cov_property_value(property_name: str, value: Any) -> Any:
         """Coerce a COV-Property notification value for storage.
 
-        Mirrors how _read_object_metadata() coerces the same properties.
+        Mirrors how _build_metadata() coerces the same properties.
         "units" must stay the hyphenated string form (e.g.
         "degrees-celsius") — EngineeringUnits is an int subclass, so the
         generic _coerce_value() path would silently return a bare integer
@@ -2150,6 +2221,10 @@ class BACnetClient:
         "outOfService": "out-of-service",
         "priorityArray": "priority-array",
         "covIncrement": "cov-increment",
+        "objectName": "object-name",
+        "stateText": "state-text",
+        "minPresValue": "min-pres-value",
+        "maxPresValue": "max-pres-value",
     }
     _HYPHEN_TO_CAMEL: ClassVar[dict[str, str]] = {
         v: k for k, v in _CAMEL_TO_HYPHEN.items()

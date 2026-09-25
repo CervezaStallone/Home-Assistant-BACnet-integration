@@ -19,6 +19,24 @@ from custom_components.bacnet.const import (
 from custom_components.bacnet.coordinator import BACnetCoordinator
 
 
+def _batch_metadata(coord, per_object):
+    """Mock client.read_objects_metadata from a per-object AsyncMock."""
+    from unittest.mock import AsyncMock
+
+    async def _batch(device_address, objects):
+        result = {}
+        for obj in objects:
+            key = f"{obj['object_type']}:{obj['instance']}"
+            result[key] = await per_object(
+                device_address=device_address,
+                object_type=obj["object_type"],
+                instance=obj["instance"],
+            )
+        return result
+
+    coord.client.read_objects_metadata = AsyncMock(side_effect=_batch)
+
+
 def _make_coordinator(
     objects=None, domain_overrides=None, cov_overrides=None, enable_cov=True
 ):
@@ -509,13 +527,16 @@ class TestRefreshMetadata:
             "commandable": False,
         }
         coord = _make_coordinator(objects=[obj])
-        coord.client.refresh_object_metadata = AsyncMock(
-            return_value={
-                "object_name": "New Name",
-                "description": "",
-                "units": "degrees-celsius",
-                "commandable": False,
-            }
+        _batch_metadata(
+            coord,
+            AsyncMock(
+                return_value={
+                    "object_name": "New Name",
+                    "description": "",
+                    "units": "degrees-celsius",
+                    "commandable": False,
+                }
+            ),
         )
 
         changed = asyncio.run(coord.async_refresh_metadata())
@@ -540,7 +561,7 @@ class TestRefreshMetadata:
             "commandable": False,
         }
         coord = _make_coordinator(objects=[obj])
-        coord.client.refresh_object_metadata = AsyncMock(return_value=dict(obj))
+        _batch_metadata(coord, AsyncMock(return_value=dict(obj)))
 
         changed = asyncio.run(coord.async_refresh_metadata())
 
@@ -553,7 +574,7 @@ class TestRefreshMetadata:
 
         obj = {"object_type": 0, "instance": 1, "object_name": "Same"}
         coord = _make_coordinator(objects=[obj])
-        coord.client.refresh_object_metadata = AsyncMock(return_value=None)
+        _batch_metadata(coord, AsyncMock(return_value=None))
 
         changed = asyncio.run(coord.async_refresh_metadata())
 
@@ -566,9 +587,7 @@ class TestRefreshMetadata:
 
         obj = {"object_type": 0, "instance": 1}
         coord = _make_coordinator(objects=[obj])
-        coord.client.refresh_object_metadata = AsyncMock(
-            side_effect=RuntimeError("boom")
-        )
+        _batch_metadata(coord, AsyncMock(side_effect=RuntimeError("boom")))
 
         changed = asyncio.run(coord.async_refresh_metadata())
 
@@ -901,8 +920,9 @@ class TestMetadataChangeTriggersRealReload:
         coord.entry.data[CONF_SELECTED_OBJECTS] = coord.objects
         pre_change_entry_data = dict(coord.entry.data)
 
-        coord.client.refresh_object_metadata = AsyncMock(
-            return_value={"object_name": "Old", "units": "degrees-celsius"}
+        _batch_metadata(
+            coord,
+            AsyncMock(return_value={"object_name": "Old", "units": "degrees-celsius"}),
         )
 
         asyncio.run(coord.async_refresh_metadata())
@@ -1127,39 +1147,37 @@ class TestMetadataSweepBackground:
         asyncio.run(coord.async_shutdown())
         task.cancel.assert_called_once()
 
-    def test_sweep_reads_objects_in_parallel_and_keeps_order(self):
+    def test_sweep_reads_all_objects_in_one_batch_call(self):
         import asyncio
         from unittest.mock import AsyncMock
-
-        from custom_components.bacnet.const import MAX_CONCURRENT_REQUESTS
 
         objects = [
             {"object_type": 0, "instance": i, "object_name": f"o{i}"} for i in range(12)
         ]
         coord = _make_coordinator(objects=objects)
         coord.entry.data = {**coord.entry.data, CONF_SELECTED_OBJECTS: objects}
-        state = {"in_flight": 0, "peak": 0}
-
-        async def refresh(**kwargs):
-            state["in_flight"] += 1
-            state["peak"] = max(state["peak"], state["in_flight"])
-            await asyncio.sleep(0.001)
-            state["in_flight"] -= 1
-            return {
-                "object_type": 0,
-                "instance": kwargs["instance"],
-                "object_name": f"new{kwargs['instance']}",
-                "description": None,
-                "units": None,
-                "commandable": False,
+        coord.client.read_objects_metadata = AsyncMock(
+            return_value={
+                f"0:{i}": {**objects[i], "object_name": f"new{i}"} for i in range(12)
             }
-
-        coord.client.refresh_object_metadata = AsyncMock(side_effect=refresh)
+        )
         assert asyncio.run(coord.async_refresh_metadata()) is True
-        assert 1 < state["peak"] <= MAX_CONCURRENT_REQUESTS
+        coord.client.read_objects_metadata.assert_awaited_once()
         assert [o["object_name"] for o in coord.objects] == [
             f"new{i}" for i in range(12)
         ]
+
+    def test_new_metadata_fields_are_diffed(self):
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        obj = {"object_type": 19, "instance": 1, "object_name": "Mode"}
+        coord = _make_coordinator(objects=[obj])
+        coord.client.read_objects_metadata = AsyncMock(
+            return_value={"19:1": {**obj, "state_text": ["Off", "On"]}}
+        )
+        assert asyncio.run(coord.async_refresh_metadata()) is True
+        assert coord.objects[0]["state_text"] == ["Off", "On"]
 
 
 # ---------------------------------------------------------------------------
