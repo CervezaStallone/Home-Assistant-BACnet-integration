@@ -14,6 +14,7 @@ import logging
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -158,6 +159,35 @@ class BACnetEntity(CoordinatorEntity[BACnetCoordinator]):
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    async def async_write_present_value(self, value: Any) -> None:
+        """Write presentValue at the device's write priority (None = relinquish).
+
+        Raises HomeAssistantError when the device rejects the write, so the
+        UI shows an error instead of silently keeping the old state. On
+        success only this object is re-read.
+        """
+        client = self.coordinator.client
+        target = {
+            "device_address": self.coordinator.device_address,
+            "object_type": self._object_type,
+            "instance": self._instance,
+            "priority": self.coordinator.write_priority,
+            "commandable": self.is_commandable,
+        }
+        if value is None:
+            success = await client.relinquish(**target)
+        else:
+            success = await client.write_property(
+                property_name="presentValue", value=value, **target
+            )
+        if not success:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="write_failed",
+                translation_placeholders={"object": self._attr_name or self._obj_key},
+            )
+        await self.coordinator.async_refresh_object(self._obj)
 
     def get_present_value(self) -> Any:
         """Return the current presentValue from the coordinator data."""

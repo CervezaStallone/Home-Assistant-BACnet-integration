@@ -11,6 +11,7 @@ import logging
 
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
@@ -50,6 +51,8 @@ class BACnetWritePrioritySelect(
     """
 
     _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_translation_key = "write_priority"
     _attr_entity_registry_enabled_default = False
     _attr_icon = "mdi:priority-high"
     _attr_options = _PRIORITY_OPTIONS
@@ -64,7 +67,6 @@ class BACnetWritePrioritySelect(
 
         device_id = entry.data.get("device_id", "unknown")
         self._attr_unique_id = f"{DOMAIN}_{device_id}_write_priority"
-        self._attr_name = "Write Priority"
         self._attr_current_option = str(DEFAULT_WRITE_PRIORITY)
 
         self._attr_device_info = bacnet_device_info(entry)

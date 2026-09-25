@@ -19,7 +19,6 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .bacnet_client import BACnetClient
 from .const import (
     OBJECT_TYPE_MULTI_STATE_INPUT,
     OBJECT_TYPE_MULTI_STATE_OUTPUT,
@@ -126,24 +125,6 @@ class BACnetNumber(BACnetEntity, NumberEntity):
 
         For commandable objects (outputs), this writes at the configured
         priority in the Priority Array. For non-commandable writable objects,
-        priority is ignored by the BACnet device.
+        priority is not sent.
         """
-        client: BACnetClient = self.coordinator.client
-        success = await client.write_property(
-            device_address=self.coordinator.device_address,
-            object_type=self._object_type,
-            instance=self._instance,
-            property_name="presentValue",
-            value=value,
-            priority=self.coordinator.write_priority,
-            commandable=self.is_commandable,
-        )
-        if success:
-            await self.coordinator.async_refresh_object(self._obj)
-        else:
-            _LOGGER.error(
-                "Failed to write %.2f to %s:%d",
-                value,
-                self._object_type,
-                self._instance,
-            )
+        await self.async_write_present_value(value)

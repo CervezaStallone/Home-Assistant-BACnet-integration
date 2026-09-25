@@ -11,6 +11,7 @@ import logging
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -36,6 +37,8 @@ class BACnetRefreshMetadataButton(CoordinatorEntity[BACnetCoordinator], ButtonEn
     """Button that forces an immediate object-metadata refresh from the device."""
 
     _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_translation_key = "refresh_metadata"
     _attr_icon = "mdi:refresh"
 
     def __init__(self, coordinator: BACnetCoordinator, entry: ConfigEntry) -> None:
@@ -44,7 +47,6 @@ class BACnetRefreshMetadataButton(CoordinatorEntity[BACnetCoordinator], ButtonEn
 
         device_id = entry.data.get("device_id", "unknown")
         self._attr_unique_id = f"{DOMAIN}_{device_id}_refresh_metadata"
-        self._attr_name = "Refresh Object Metadata"
 
         self._attr_device_info = bacnet_device_info(entry)
 
