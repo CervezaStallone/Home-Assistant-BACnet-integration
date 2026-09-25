@@ -118,7 +118,7 @@
     "step": {
       "init": {
         "title": "BACnet Integration Options",
-        "description": "Configure update behaviour, entity naming, and domain mapping for this device.",
+        "description": "Configure update behaviour, entity naming and per-object settings for this device.",
         "data": {
           "enable_cov": "Enable COV (Change of Value) subscriptions",
           "cov_increment": "COV increment for analog objects",
@@ -138,7 +138,7 @@
       },
       "rescan_objects": {
         "title": "Manage BACnet Objects",
-        "description": "Currently imported objects are pre-selected. Check any additional objects you want to add, or uncheck ones to remove. Domain mapping and COV overrides are preserved for objects that stay selected."
+        "description": "Currently imported objects are pre-selected. Check any additional objects you want to add, or uncheck ones to remove. Per-object settings are preserved for objects that stay selected."
       },
       "domain_mapping": {
         "title": "Customize objects",
