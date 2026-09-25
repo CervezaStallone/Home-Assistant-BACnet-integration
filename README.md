@@ -45,10 +45,17 @@ In plain terms: if your building has BACnet controllers, thermostats, sensors, o
 - **Device identity** — automatically reads vendor name, model, and firmware version from the device
 - **Custom device naming** — choose your own device name during setup
 - **Flexible entity naming** — use BACnet `objectName` or `description` for display names
-- **Domain mapping** — override default entity types per object (e.g. make a sensor into a number)
+- **Per-object customization** — override the entity type or COV setting of individual objects (e.g. make a sensor into a number)
 - **Selective import** — only import the objects you actually need
 - **Configurable write priority** — per-device select entity to change the BACnet write priority (disabled by default)
-- **Automatic outage recovery** — detects network outages and reconnects the BACnet client automatically
+- **Relinquish & one-off writes** — `bacnet.relinquish` and `bacnet.write_value` services for full Priority Array control
+- **Device limits & state texts** — number limits from `minPresValue`/`maxPresValue`/`resolution`, multi-state objects as a select with their `stateText` labels
+- **Climate with a real room temperature** — pair a setpoint with a separate temperature object
+- **Automatic outage recovery** — detects network outages, reconnects automatically and tells you in Repairs when a device stays unreachable
+- **Reconfigure** — change IP, port, BBMD or the device address without re-adding the integration
+- **Diagnostics** — a diagnostics download and health sensors for troubleshooting
+- **Efficient on the network** — batched ReadPropertyMultiple reads that adapt to what the device can handle
+- **English and Dutch** user interface
 
 ---
 
@@ -67,6 +74,8 @@ In plain terms: if your building has BACnet controllers, thermostats, sensors, o
 | Multi-State Value | Sensor | Auto-detected |
 
 > Value objects may or may not support writes — the integration auto-detects this by checking for a Priority Array during discovery.
+>
+> Any object type can be changed to another entity type per object (see [Customize objects](#customize-objects)). Multi-state objects can also become a **select** that shows their `stateText` labels (e.g. *Off / Heat / Cool*).
 
 ---
 
@@ -124,30 +133,45 @@ After setup, click **Configure** on the integration card to adjust:
 |---|---|---|
 | **Enable COV** | Use Change of Value subscriptions for real-time updates | On |
 | **COV increment** | Minimum value change before a COV notification is sent (analog objects only). Set to `0` to use the device default. | `0.1` |
-| **Polling interval** | How often to poll objects without COV support (in seconds) | `30` |
+| **Polling interval** | How often all objects are polled, in seconds (minimum 10). Polling always runs — COV only adds faster updates in between. | `30` |
 | **Use description** | Show BACnet `description` (property 28) instead of `objectName` as entity name | Off |
-| **Domain mapping** | Change the HA entity type per object (e.g. sensor → number, switch → binary_sensor) | Auto |
-| **Per-object COV override** | Override **Enable COV** for an individual object — shown as a checkbox next to its domain mapping. Objects with no override use the device-wide **Enable COV** setting. | Follows **Enable COV** |
 | **Live metadata properties** | Opt-in per property (`object_name`, `description`, `units`) for a *live* push update via BACnet's SubscribeCOVProperty service, instead of periodic re-reads. Each one is a separate COV subscription on the device — leave off unless you need instant updates and know your device supports it. | None |
+| **Rescan device** | Re-read the device's object list to add or remove objects | — |
 
-Changes take effect immediately — the integration reloads automatically.
+After this page comes [Customize objects](#customize-objects). Changes take effect immediately — the integration reloads automatically.
+
+### Customize objects
+
+The second options page lists your objects by name. Tick the ones you want to change — objects that already have a custom setting are ticked. The next page shows, for just those objects:
+
+- **type** — the Home Assistant entity type (`sensor`, `binary_sensor`, `switch`, `number`, `climate`, or `select` for multi-state objects)
+- **COV** — use COV for this object, overriding the device-wide **Enable COV** setting
+- **temperature sensor** (climate objects only) — the object that provides the room temperature. Without one, the climate entity shows its setpoint as the current temperature. Just changed an object to climate? Save, then open the options again to pick its sensor.
+
+Unticked objects use the defaults. Settings of objects you remove with a rescan are remembered and come back if you add the object again.
+
+> The default type depends on whether a Value object is commandable: a non-commandable Binary Value is a `binary_sensor`, a commandable one a `switch`. Versions before 1.0.47 could save the wrong type when you saved the options; if that happened, a **Repairs** message offers to reset those objects.
+
+### Reconfigure
+
+To change the local IP address, port, BBMD settings or the device's address, open the integration's **⋮** menu and choose **Reconfigure**. Entities, their history and all options are kept.
 
 ### Write Priority entity
 
-A **Write Priority** select entity is added to every BACnet device. It is **disabled by default** to keep dashboards clean.
+A **Write Priority** select entity (under *Configuration* on the device page) is added to every BACnet device. It is **disabled by default** to keep dashboards clean.
 
 To use it:
 1. Go to **Settings → Devices & Services → BACnet** → your device
 2. Find the **Write Priority** entity and enable it
 3. Use the dropdown to select your desired priority level
 
-Available levels: `8` (Manual Operator), `9`, `12`, `13`, `14`, `15`, `16` (default — lowest), `17`
+Available levels: `8` (Manual Operator), `9`, `12`, `13`, `14`, `15`, `16` (default — lowest)
 
 > BACnet Priority Array levels run 1–16. Priority 16 is the safest default. Use level 8 if your BAS requires Manual Operator override. The selected priority persists across HA restarts.
 
 ### Live metadata properties
 
-By default, changes to an object's `objectName`, `description`, or `units` on the BACnet device are picked up automatically within about an hour (or sooner if the object also has active COV traffic) — see [issue #26](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/issues/26). No action is needed for this baseline behavior.
+By default, changes to an object's metadata on the BACnet device (`objectName`, `description`, `units`, `stateText`, limits) are picked up automatically within about an hour (or sooner if the object also has active COV traffic) — see [issue #26](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/issues/26). No action is needed for this baseline behavior. The **Refresh object metadata** button (under *Configuration* on the device page) checks immediately.
 
 If you need those changes reflected immediately, enable one or more properties under **Live metadata properties** in **Configure**. This uses BACnet's `SubscribeCOVProperty` service (ASHRAE 135-2012 Addendum ar) to get a live push the moment the property changes on the device — but:
 
@@ -170,6 +194,25 @@ Every entity exposes additional BACnet metadata as state attributes:
 | `bacnet_status_flags` | BACnet status flags array |
 | `bacnet_update_method` | How this entity is updated: `COV` or `polling` |
 | `bacnet_cov_increment` | Configured COV sensitivity (analog objects with active COV only) |
+| `bacnet_state_text` | The `stateText` label of the current state (multi-state objects only) |
+
+Only `bacnet_status_flags` and `bacnet_state_text` are stored in the recorder history — the other attributes don't change and aren't stored again with every state change.
+
+An entity is **unavailable** when the device doesn't respond, or when the object's status flags report **FAULT** (the device itself says the value is unreliable). In-alarm, overridden and out-of-service objects stay available.
+
+Analog sensors keep the full precision of the device value; Home Assistant shows 2 decimals by default, which you can change per entity.
+
+### Diagnostic sensors
+
+Every device also gets diagnostic sensors (under *Diagnostic* on the device page):
+
+| Sensor | Enabled by default |
+|---|---|
+| Last successful poll | Yes |
+| COV subscriptions | No |
+| Consecutive failed polls | No |
+
+They stay available while the device is offline, which is exactly when they're useful.
 
 ---
 
@@ -193,11 +236,31 @@ This information appears in the Home Assistant device registry, so you can see e
 All writes to commandable objects use the BACnet **Priority Array** (ASHRAE 135):
 
 - **Turn ON / Set value** → writes at the configured priority level (default: 16)
-- **Turn OFF** → writes `inactive` (0) at the same priority level
+- **Turn OFF** → writes `inactive` (0) at the same priority level — this *commands* the output off, it doesn't release it
+- **Climate → Off** → relinquishes the setpoint (writes Null), so the device's own schedule or Relinquish Default takes over
 
-The priority level is controlled by the **Write Priority** select entity on the device (disabled by default — see [Configuration options](#configuration-options) above).
+The priority level is controlled by the **Write Priority** select entity on the device (disabled by default — see [Configuration options](#configuration-options) above). Number entities use the object's `minPresValue`, `maxPresValue` and `resolution` as limits and step when the device provides them.
+
+If the device rejects a write, Home Assistant shows an error message instead of silently keeping the old state.
 
 Binary outputs use the `Enumerated` BACnet type (`0 = inactive`, `1 = active`), compliant with ASHRAE 135.
+
+### Services
+
+| Service | What it does |
+|---|---|
+| `bacnet.relinquish` | Release Home Assistant's command on an object (write Null) so lower priorities or the Relinquish Default take over. Optional `priority` (1–16), default: the device's Write Priority. |
+| `bacnet.write_value` | Write a value once at a chosen `priority`, without changing the device's Write Priority setting. Binary objects: `0` = inactive, `1` = active. |
+
+Both work on BACnet switch, number and climate entities:
+
+```yaml
+action: bacnet.relinquish
+target:
+  entity_id: switch.ahu_1_supply_fan
+data:
+  priority: 8
+```
 
 ---
 
@@ -207,7 +270,9 @@ Binary outputs use the `Enumerated` BACnet type (`0 = inactive`, `1 = active`), 
 |---|---|---|
 | "No devices found" | Device not running or on a different subnet | Verify the device is reachable on UDP 47808 |
 | "Cannot connect" | Port 47808 already in use | Stop other BACnet software or use a different port |
-| Entities show "Unavailable" | Device went offline | Restart the device — entities recover automatically |
+| Entities show "Unavailable" | Device went offline, or the object reports FAULT | Check the device (and **Settings → Repairs**) — entities recover automatically. A single unavailable entity with others fine: check its `bacnet_status_flags`. |
+| "The BACnet device rejected the write" | Wrong write priority, or object not writable | Check the log for the reason; enable the **Write Priority** entity or check `bacnet_commandable` |
+| Want to release an override | Turn off commands `inactive`, it doesn't release | Use the `bacnet.relinquish` service |
 | COV not working | Device doesn't support COV | This is normal — polling activates as fallback |
 | Write has no effect | Object is not commandable | Check the `bacnet_commandable` attribute |
 | Values don't update | COV increment too high, or polling interval too long | Lower the COV increment or reduce the polling interval |
@@ -224,12 +289,26 @@ logger:
     custom_components.bacnet: debug
 ```
 
+### Diagnostics download
+
+When reporting a problem, attach the diagnostics file: **Settings → Devices & Services → BACnet IP → ⋮ → Download diagnostics**. Network addresses are redacted.
+
+### Advanced tuning
+
+The defaults suit most controllers. For unusual devices they can be changed in `custom_components/bacnet/const.py`:
+
+| Constant | Default | Meaning |
+|---|---|---|
+| `RPM_MAX_OBJECTS` | `25` | Objects per ReadPropertyMultiple poll request (halved automatically when the device rejects a request as too large) |
+| `MAX_CONCURRENT_REQUESTS` | `4` | Parallel requests per device when individual reads are needed |
+| `METADATA_PERSIST_DELAY` | `5` s | Metadata changes found within this window cause one reload together |
+
 ---
 
 ## Requirements
 
-- **Home Assistant** 2024.1.0 or newer
-- **Python** 3.11+
+- **Home Assistant** 2024.4.0 or newer
+- **Python** 3.12+
 - **Network** UDP port 47808 accessible between HA and BACnet devices
 - **Cross-subnet** A BBMD or BACnet router if devices are on a different network
 
