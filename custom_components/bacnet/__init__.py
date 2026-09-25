@@ -348,9 +348,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # ---- 7. Forward to platforms ----
     needed_platforms = _get_platforms_in_use(selected_objects, domain_overrides)
-    # SELECT (write priority) and BUTTON (metadata refresh) are device-level,
-    # not object-dependent.
-    for device_level_platform in (Platform.SELECT, Platform.BUTTON):
+    # SELECT (write priority), BUTTON (metadata refresh) and SENSOR
+    # (diagnostics) are device-level, not object-dependent.
+    for device_level_platform in (Platform.SELECT, Platform.BUTTON, Platform.SENSOR):
         if device_level_platform not in needed_platforms:
             needed_platforms.append(device_level_platform)
     entry.runtime_data.platforms = needed_platforms

@@ -23,6 +23,7 @@ from typing import Any, ClassVar
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .bacnet_client import BACnetClient
@@ -161,6 +162,10 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # after a reconnect so the next successful poll re-creates COV subs.
         self._consecutive_failures: int = 0
         self._needs_resubscribe: bool = False
+        self.last_successful_poll: datetime | None = None
+        # Repair issues persist across restarts, so assume one may exist
+        # until the first successful poll has cleared it.
+        self._outage_issue_raised: bool = True
 
         # Metadata refresh (issue #26). Skip an immediate refresh right after
         # setup — the config flow just read fresh metadata during discovery.
@@ -249,6 +254,10 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # BACpypes3 timeouts surface as None values rather than exceptions.
         if self._poll_yielded_data(polled):
             self._consecutive_failures = 0
+            self.last_successful_poll = datetime.now(timezone.utc)
+            if self._outage_issue_raised:
+                ir.async_delete_issue(self.hass, DOMAIN, self._outage_issue_id)
+                self._outage_issue_raised = False
             # After a reconnect, rebuild COV subscriptions once the device is
             # confirmed reachable again.
             if self._needs_resubscribe:
@@ -275,6 +284,24 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             await self._handle_poll_failure()
 
         return data
+
+    @property
+    def _outage_issue_id(self) -> str:
+        return f"device_unreachable_{self.entry.entry_id if self.entry else 'unknown'}"
+
+    def diagnostics_summary(self) -> dict[str, Any]:
+        """Health figures for the diagnostics download and diagnostic sensors."""
+        return {
+            "objects": len(self.objects),
+            "cov_subscriptions": len(self._cov_subscriptions),
+            "cov_property_subscriptions": len(self._cov_property_subscriptions),
+            "polled_objects": len(self._polled_objects),
+            "consecutive_failed_polls": self._consecutive_failures,
+            "last_update_success": self.last_update_success,
+            "last_successful_poll": self.last_successful_poll,
+            "write_priority": self.write_priority,
+            "polling_interval": self.polling_interval,
+        }
 
     @staticmethod
     def _poll_yielded_data(
@@ -311,6 +338,22 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "Attempting BACnet client reconnect after %d failed polls",
                 failures,
             )
+            # Past a brief blip: tell the user in Settings → Repairs.
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                self._outage_issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.ERROR,
+                translation_key="device_unreachable",
+                translation_placeholders={
+                    "device": (
+                        self.entry.data.get("device_name") if self.entry else None
+                    )
+                    or "BACnet device",
+                },
+            )
+            self._outage_issue_raised = True
             try:
                 await self.client.reconnect()
                 self._needs_resubscribe = True

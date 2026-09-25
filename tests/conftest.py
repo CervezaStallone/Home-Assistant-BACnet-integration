@@ -32,6 +32,7 @@ class _DataUpdateCoordinator:
         self.hass = hass
         self.name = name
         self.data = None
+        self.last_update_success = True
         self._listeners: dict = {}
 
     # Allow DataUpdateCoordinator[SomeType] generic syntax (Python 3.9+)
@@ -93,7 +94,7 @@ class _DeviceInfo(dict):
 # ---------------------------------------------------------------------------
 
 
-class _SensorEntity(_CoordinatorEntity):
+class _SensorEntity:
     _attr_device_class = None
     _attr_native_unit_of_measurement = None
     _attr_state_class = None
@@ -115,6 +116,7 @@ class _SensorDeviceClass(str, Enum):
     ILLUMINANCE = "illuminance"
     WEIGHT = "weight"
     DURATION = "duration"
+    TIMESTAMP = "timestamp"
 
 
 class _SensorStateClass:
@@ -257,6 +259,13 @@ class _RepairsFlow:
         return {"type": "create_entry", "data": data}
 
 
+def _async_redact_data(data, to_redact):
+    return {k: ("**REDACTED**" if k in to_redact else v) for k, v in data.items()}
+
+
+_ha_diagnostics_mod = MagicMock()
+_ha_diagnostics_mod.async_redact_data = _async_redact_data
+
 _ha_repairs_mod = MagicMock()
 _ha_repairs_mod.RepairsFlow = _RepairsFlow
 
@@ -318,6 +327,7 @@ sys.modules.update(
         "homeassistant.components.button": _ha_button_mod,
         "homeassistant.components.select": _ha_select_mod,
         "homeassistant.components.repairs": _ha_repairs_mod,
+        "homeassistant.components.diagnostics": _ha_diagnostics_mod,
         "homeassistant.helpers": MagicMock(),
         "homeassistant.helpers.update_coordinator": _ha_coordinator_mod,
         "homeassistant.helpers.device_registry": _ha_device_registry,
