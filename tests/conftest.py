@@ -203,6 +203,16 @@ _ha_config_entries = MagicMock()
 _ha_config_entries.ConfigEntry = MagicMock
 _ha_config_entries.OptionsFlow = object  # options_flow inherits from this
 
+
+class _ConfigFlow:
+    """Minimal ConfigFlow stub (accepts the domain= class keyword)."""
+
+    def __init_subclass__(cls, domain=None, **kwargs):
+        super().__init_subclass__(**kwargs)
+
+
+_ha_config_entries.ConfigFlow = _ConfigFlow
+
 _ha_const = MagicMock()
 _ha_const.Platform = _Platform
 _ha_const.ATTR_TEMPERATURE = "temperature"

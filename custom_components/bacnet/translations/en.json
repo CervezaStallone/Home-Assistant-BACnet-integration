@@ -45,6 +45,26 @@
           "device_name": "Name for this device in Home Assistant. Pre-filled with the BACnet objectName.",
           "selected_objects": "Check the objects you want to monitor or control in Home Assistant."
         }
+      },
+      "reconfigure": {
+        "title": "Reconfigure BACnet connection",
+        "description": "Change the network settings or the address of this BACnet device. Entities, their history and all options are kept; the integration reloads with the new settings.",
+        "data": {
+          "local_ip": "Local IP address (bind)",
+          "local_port": "BACnet/IP port",
+          "use_bbmd": "Enable BBMD / Foreign Device Registration",
+          "bbmd_address": "BBMD address (IP:port)",
+          "bbmd_ttl": "Foreign Device TTL (seconds)",
+          "device_address": "Device address"
+        },
+        "data_description": {
+          "local_ip": "The IP address of this Home Assistant server's network interface to bind to. Include the subnet prefix (e.g. 192.168.1.100/24) so broadcasts (Who-Is discovery) work — without it, discovery on the local subnet will fail. This is NOT the BACnet device address. Leave empty for auto-detect.",
+          "local_port": "Default BACnet/IP port is 47808 (0xBAC0).",
+          "use_bbmd": "Enable this if BACnet devices are on another subnet/VLAN and a BBMD is available.",
+          "bbmd_address": "IP address and port of the BBMD (e.g. 192.168.2.1:47808).",
+          "bbmd_ttl": "Time-to-live for the Foreign Device Registration in seconds.",
+          "device_address": "IP address (and optional port) of the BACnet device, e.g. 192.168.1.50 or 192.168.1.50:47808, or a routed address such as 20000:1."
+        }
       }
     },
     "error": {
