@@ -335,6 +335,7 @@ sys.modules.update(
         "homeassistant.helpers.entity_platform": MagicMock(),
         "homeassistant.helpers.config_validation": MagicMock(),
         "homeassistant.helpers.service": MagicMock(),
+        "homeassistant.helpers.target": MagicMock(),
         "homeassistant.data_entry_flow": _ha_flow,
         "voluptuous": _voluptuous,
     }

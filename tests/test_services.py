@@ -96,3 +96,13 @@ class TestTargetValidation:
             asyncio.run(services.async_handle_relinquish(hass, _call({})))
         assert err.value.translation_key == "not_a_bacnet_object"
         client.relinquish.assert_not_awaited()
+
+
+def test_uses_non_deprecated_target_helper():
+    """helpers.service.async_extract_referenced_entity_ids is removed in HA 2026.8."""
+    import inspect
+
+    from custom_components.bacnet import services
+
+    source = inspect.getsource(services)
+    assert "from homeassistant.helpers.target import (" in source

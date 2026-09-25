@@ -18,7 +18,22 @@ import voluptuous as vol
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers.service import async_extract_referenced_entity_ids
+
+try:  # Newer HA; the helpers.service variant is removed in HA 2026.8
+    from homeassistant.helpers.target import (
+        TargetSelection,
+        async_extract_referenced_entity_ids,
+    )
+
+    def _referenced(hass: HomeAssistant, call: ServiceCall):
+        return async_extract_referenced_entity_ids(hass, TargetSelection(call.data))
+
+except ImportError:  # older Home Assistant (minimum supported: 2024.4)
+    from homeassistant.helpers.service import async_extract_referenced_entity_ids
+
+    def _referenced(hass: HomeAssistant, call: ServiceCall):
+        return async_extract_referenced_entity_ids(hass, call)
+
 
 from .const import DOMAIN
 from .entity import async_write_object_value
@@ -44,7 +59,7 @@ WRITE_VALUE_SCHEMA = cv.make_entity_service_schema(
 
 def _targets(hass: HomeAssistant, call: ServiceCall) -> list[tuple[Any, dict, str]]:
     """Resolve the call's entities to (coordinator, object, entity_id)."""
-    selected = async_extract_referenced_entity_ids(hass, call)
+    selected = _referenced(hass, call)
     registry = er.async_get(hass)
     targets = []
     for entity_id in sorted(selected.referenced | selected.indirectly_referenced):
