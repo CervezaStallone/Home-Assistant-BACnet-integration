@@ -424,7 +424,7 @@ def _climate_with_client(data):
     client = MagicMock()
     client.relinquish = AsyncMock(return_value=True)
     client.write_property = AsyncMock(return_value=True)
-    entity.coordinator.async_request_refresh = AsyncMock()
+    entity.coordinator.async_refresh_object = AsyncMock()
     entity.hass = MagicMock()
     entity.hass.data = {"bacnet": {entity._entry.entry_id: {"client": client}}}
     entity.async_write_ha_state = MagicMock()
@@ -471,3 +471,23 @@ class TestEntityRegistersObjectListener:
         cb()
         entity.async_write_ha_state.assert_called_once()
         assert remove in entity._on_remove
+
+
+class TestWriteRefreshesOnlyThatObject:
+    def test_switch_write_refreshes_its_object(self):
+        import asyncio
+        from unittest.mock import AsyncMock, MagicMock
+
+        obj = {"object_type": 4, "instance": 2, "commandable": True, "object_name": "S"}
+        entity = _switch(obj)
+        client = MagicMock()
+        client.write_property = AsyncMock(return_value=True)
+        entity.hass = MagicMock()
+        entity.hass.data = {"bacnet": {entity._entry.entry_id: {"client": client}}}
+        entity.coordinator.async_refresh_object = AsyncMock()
+        entity.coordinator.async_request_refresh = AsyncMock()
+
+        asyncio.run(entity.async_turn_on())
+
+        entity.coordinator.async_refresh_object.assert_awaited_once_with(obj)
+        entity.coordinator.async_request_refresh.assert_not_awaited()

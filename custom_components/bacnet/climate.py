@@ -180,7 +180,7 @@ class BACnetClimate(BACnetEntity, ClimateEntity, RestoreEntity):
         )
         if success:
             self._relinquished = False
-            await self.coordinator.async_request_refresh()
+            await self.coordinator.async_refresh_object(self._obj)
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set HVAC mode.
@@ -202,7 +202,7 @@ class BACnetClimate(BACnetEntity, ClimateEntity, RestoreEntity):
             )
             if success:
                 self._relinquished = True
-                await self.coordinator.async_request_refresh()
+                await self.coordinator.async_refresh_object(self._obj)
 
         elif hvac_mode == HVACMode.HEAT:
             # Re-activate: write the current target temperature (if known)

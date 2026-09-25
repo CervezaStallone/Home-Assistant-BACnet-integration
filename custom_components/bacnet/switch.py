@@ -99,8 +99,8 @@ class BACnetSwitch(BACnetEntity, SwitchEntity):
             commandable=self.is_commandable,
         )
         if success:
-            # Optimistic update: immediately reflect in HA
-            await self.coordinator.async_request_refresh()
+            # Re-read just this object so HA reflects the write immediately
+            await self.coordinator.async_refresh_object(self._obj)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the switch off by writing inactive (0) at the configured priority.
@@ -120,4 +120,4 @@ class BACnetSwitch(BACnetEntity, SwitchEntity):
             commandable=self.is_commandable,
         )
         if success:
-            await self.coordinator.async_request_refresh()
+            await self.coordinator.async_refresh_object(self._obj)
