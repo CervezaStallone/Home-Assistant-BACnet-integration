@@ -212,6 +212,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 device_address=self.device_address,
                 objects=self.objects,
                 property_names=["presentValue", "statusFlags"],
+                device_id=self.entry.data.get("device_id") if self.entry else None,
             )
             data.update(polled)
         except Exception as exc:  # noqa: BLE001
