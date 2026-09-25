@@ -33,7 +33,6 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
-from .bacnet_client import BACnetClient
 from .coordinator import BACnetCoordinator
 from .entity import BACnetEntity
 
@@ -160,20 +159,8 @@ class BACnetClimate(BACnetEntity, ClimateEntity, RestoreEntity):
         temperature = kwargs.get(ATTR_TEMPERATURE)
         if temperature is None:
             return
-
-        client: BACnetClient = self.coordinator.client
-        success = await client.write_property(
-            device_address=self.coordinator.device_address,
-            object_type=self._object_type,
-            instance=self._instance,
-            property_name="presentValue",
-            value=float(temperature),
-            priority=self.coordinator.write_priority,
-            commandable=self.is_commandable,
-        )
-        if success:
-            self._relinquished = False
-            await self.coordinator.async_refresh_object(self._obj)
+        await self.async_write_present_value(float(temperature))
+        self._relinquished = False
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set HVAC mode.
@@ -183,19 +170,14 @@ class BACnetClimate(BACnetEntity, ClimateEntity, RestoreEntity):
               releasing the override and allowing the Relinquish Default to
               take effect on the BACnet device.
         """
-        client: BACnetClient = self.coordinator.client
-
         if hvac_mode == HVACMode.OFF:
-            success = await client.relinquish(
-                device_address=self.coordinator.device_address,
-                object_type=self._object_type,
-                instance=self._instance,
-                priority=self.coordinator.write_priority,
-                commandable=self.is_commandable,
-            )
-            if success:
-                self._relinquished = True
-                await self.coordinator.async_refresh_object(self._obj)
+            # Flag first: the post-write refresh renders the new state.
+            self._relinquished = True
+            try:
+                await self.async_write_present_value(None)
+            except Exception:
+                self._relinquished = False
+                raise
 
         elif hvac_mode == HVACMode.HEAT:
             # Re-activate: write the current target temperature (if known)

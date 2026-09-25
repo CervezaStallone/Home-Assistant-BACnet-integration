@@ -160,6 +160,11 @@ class _ClimateEntity(_CoordinatorEntity):
     _attr_temperature_unit: str | None = None
 
 
+class _EntityCategory(str, Enum):
+    CONFIG = "config"
+    DIAGNOSTIC = "diagnostic"
+
+
 class _Platform(str, Enum):
     SENSOR = "sensor"
     BINARY_SENSOR = "binary_sensor"
@@ -196,9 +201,27 @@ _ha_const = MagicMock()
 _ha_const.Platform = _Platform
 _ha_const.ATTR_TEMPERATURE = "temperature"
 _ha_const.UnitOfTemperature = _UnitOfTemperature
+_ha_const.EntityCategory = _EntityCategory
+
+
+class _HomeAssistantError(Exception):
+    """Stub accepting HA's translation kwargs."""
+
+    def __init__(
+        self,
+        *args,
+        translation_domain=None,
+        translation_key=None,
+        translation_placeholders=None,
+    ):
+        super().__init__(*args)
+        self.translation_key = translation_key
+        self.translation_placeholders = translation_placeholders
+
 
 _ha_exceptions = MagicMock()
 _ha_exceptions.ConfigEntryNotReady = Exception
+_ha_exceptions.HomeAssistantError = _HomeAssistantError
 
 _ha_coordinator_mod = MagicMock()
 _ha_coordinator_mod.CoordinatorEntity = _CoordinatorEntity

@@ -19,7 +19,6 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .bacnet_client import BACnetClient
 from .coordinator import BACnetCoordinator
 from .entity import BACnetEntity
 
@@ -76,41 +75,13 @@ class BACnetSwitch(BACnetEntity, SwitchEntity):
         return bool(int(value))
 
     async def async_turn_on(self, **kwargs: Any) -> None:
-        """Turn the switch on by writing active (1) to presentValue.
-
-        For commandable objects this writes at the configured priority level
-        in the Priority Array.
-        """
-        client: BACnetClient = self.coordinator.client
-        success = await client.write_property(
-            device_address=self.coordinator.device_address,
-            object_type=self._object_type,
-            instance=self._instance,
-            property_name="presentValue",
-            value=1,  # active
-            priority=self.coordinator.write_priority,
-            commandable=self.is_commandable,
-        )
-        if success:
-            # Re-read just this object so HA reflects the write immediately
-            await self.coordinator.async_refresh_object(self._obj)
+        """Turn the switch on by writing active (1) at the configured priority."""
+        await self.async_write_present_value(1)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the switch off by writing inactive (0) at the configured priority.
 
-        Per BACnet standard, for commandable objects this writes at the
-        specified priority level in the Priority Array, setting the output
-        to inactive (0).
+        This commands the output off. To release HA's override instead, use
+        the bacnet.relinquish service.
         """
-        client: BACnetClient = self.coordinator.client
-        success = await client.write_property(
-            device_address=self.coordinator.device_address,
-            object_type=self._object_type,
-            instance=self._instance,
-            property_name="presentValue",
-            value=0,  # inactive
-            priority=self.coordinator.write_priority,
-            commandable=self.is_commandable,
-        )
-        if success:
-            await self.coordinator.async_refresh_object(self._obj)
+        await self.async_write_present_value(0)

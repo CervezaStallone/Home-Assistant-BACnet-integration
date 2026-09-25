@@ -53,6 +53,9 @@ CONF_COV_OVERRIDES = "cov_overrides"
 DEFAULT_PORT = 47808  # 0xBAC0 — standard BACnet/IP port
 DEFAULT_BBMD_TTL = 900  # seconds (15 min)
 DEFAULT_POLLING_INTERVAL = 30  # seconds
+# Polling always runs (COV only adds faster updates in between), so a very
+# short interval loads every device and the network for little gain.
+MIN_POLLING_INTERVAL = 10  # seconds
 DEFAULT_ENABLE_COV = True
 DEFAULT_USE_DESCRIPTION = False
 DEFAULT_COV_INCREMENT = 0.1  # default COV increment for analog objects

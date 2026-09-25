@@ -35,6 +35,7 @@ from .const import (
     DEFAULT_POLLING_INTERVAL,
     DEFAULT_USE_DESCRIPTION,
     LIVE_METADATA_PROPERTY_CHOICES,
+    MIN_POLLING_INTERVAL,
     SUPPORTED_DOMAINS,
 )
 from .helpers import default_domain_for
@@ -67,7 +68,7 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
         if user_input is not None:
             # --- Validate polling interval ---
             polling = user_input.get(CONF_POLLING_INTERVAL, DEFAULT_POLLING_INTERVAL)
-            if not isinstance(polling, int) or polling < 1:
+            if not isinstance(polling, int) or polling < MIN_POLLING_INTERVAL:
                 errors["base"] = "invalid_polling_interval"
 
             rescan = user_input.pop(CONF_RESCAN_OBJECTS, False)
@@ -104,7 +105,7 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
                     vol.Coerce(float), vol.Range(min=0.0)
                 ),
                 vol.Optional(CONF_POLLING_INTERVAL, default=current_poll): vol.All(
-                    vol.Coerce(int), vol.Range(min=1)
+                    vol.Coerce(int), vol.Range(min=MIN_POLLING_INTERVAL)
                 ),
                 vol.Optional(CONF_USE_DESCRIPTION, default=current_desc): bool,
                 vol.Optional(

@@ -76,6 +76,11 @@
           "16": "16 – Default (Lowest)"
         }
       }
+    },
+    "button": {
+      "refresh_metadata": {
+        "name": "Refresh object metadata"
+      }
     }
   },
   "options": {
@@ -86,16 +91,18 @@
         "data": {
           "enable_cov": "Enable COV (Change of Value) subscriptions",
           "cov_increment": "COV increment for analog objects",
-          "polling_interval": "Polling fallback interval (seconds)",
+          "polling_interval": "Polling interval (seconds)",
           "use_description": "Use description (property id 28) instead of name",
-          "rescan_objects": "Rescan device and manage BACnet object selection"
+          "rescan_objects": "Rescan device and manage BACnet object selection",
+          "live_metadata_properties": "Live metadata properties"
         },
         "data_description": {
           "enable_cov": "When enabled, the integration subscribes to COV notifications. If the device does not support COV or subscription fails, polling is used as fallback.",
           "cov_increment": "Minimum value change on the device before a COV notification is sent (applies to analog objects only). Set to 0 to use the device's default. Example: 0.5 means a notification is sent when the value changes by at least 0.5.",
-          "polling_interval": "Interval in seconds for polling when COV is unavailable or disabled.",
+          "polling_interval": "How often all objects are polled, in seconds (minimum 10). Polling always runs; COV only adds faster updates in between.",
           "use_description": "When checked, entities will be named using the BACnet 'description' property (ID 28) instead of 'objectName' (ID 77).",
-          "rescan_objects": "Rereads the device's current Object_List so you can add objects that weren't selected during setup, or pick up objects added to the device since. Currently imported objects stay selected by default."
+          "rescan_objects": "Rereads the device's current Object_List so you can add objects that weren't selected during setup, or pick up objects added to the device since. Currently imported objects stay selected by default.",
+          "live_metadata_properties": "Properties that get their own live COV-Property subscription instead of the periodic re-read. Each one is an extra subscription on the device, and not every device supports it."
         }
       },
       "rescan_objects": {
@@ -108,7 +115,7 @@
       }
     },
     "error": {
-      "invalid_polling_interval": "Polling interval must be a positive integer.",
+      "invalid_polling_interval": "The polling interval must be at least 10 seconds.",
       "no_objects_found": "No readable BACnet objects were found on this device.",
       "unknown": "An unexpected error occurred."
     },
@@ -127,6 +134,11 @@
           }
         }
       }
+    }
+  },
+  "exceptions": {
+    "write_failed": {
+      "message": "The BACnet device rejected the write to {object}. Check the Home Assistant log for the reason (for example a wrong write priority or an object that is not writable)."
     }
   }
 }
