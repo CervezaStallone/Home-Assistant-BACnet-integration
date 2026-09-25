@@ -145,3 +145,39 @@ class TestFallbackPoll:
         assert len(result) == 200
         assert all(v["presentValue"] is None for v in result.values())
         assert app.reads <= MAX_CONCURRENT_REQUESTS * 2
+
+
+class _FakeFirstObjectsEmptyApp:
+    """Online device whose first few objects have no presentValue."""
+
+    def __init__(self, device_answers=True):
+        self.device_answers = device_answers
+        self.device_reads = 0
+
+    async def read_property(self, addr, oid, prop_name, array_index=None):
+        if str(oid[0]) == "device":
+            self.device_reads += 1
+            return "Controller" if self.device_answers else None
+        return None if int(oid[1]) < MAX_CONCURRENT_REQUESTS else 1.0
+
+
+class TestOfflineProbeUsesDeviceObject:
+    def _poll(self, app, device_id=1001):
+        client = _client(app)
+        client._rpm_supported[_ADDR] = False
+        return asyncio.run(
+            client.poll_objects(
+                _ADDR, _objects(20), ["presentValue"], device_id=device_id
+            )
+        )
+
+    def test_empty_first_batch_on_online_device_still_reads_everything(self):
+        app = _FakeFirstObjectsEmptyApp(device_answers=True)
+        result = self._poll(app)
+        assert app.device_reads == 1
+        assert result[f"0:{MAX_CONCURRENT_REQUESTS}"]["presentValue"] == 1.0
+
+    def test_silent_device_object_means_offline(self):
+        app = _FakeFirstObjectsEmptyApp(device_answers=False)
+        result = self._poll(app)
+        assert result[f"0:{MAX_CONCURRENT_REQUESTS}"]["presentValue"] is None

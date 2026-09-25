@@ -1184,6 +1184,7 @@ class BACnetClient:
         device_address: str,
         objects: list[dict[str, Any]],
         property_names: list[str] | None = None,
+        device_id: int | None = None,
     ) -> dict[str, dict[str, Any]]:
         """Read properties for a batch of objects with as few round-trips as possible.
 
@@ -1191,6 +1192,9 @@ class BACnetClient:
         objects. A chunk that fails is read individually for this poll. The
         chunk size shrinks on size-related rejections; RPM is only disabled
         for the device when it doesn't support the service at all.
+
+        *device_id* (the device object instance) lets the individual-read
+        fallback tell an offline device from objects without a value.
 
         Returns dict keyed by "object_type:instance" → {property: value}.
         """
@@ -1201,7 +1205,9 @@ class BACnetClient:
             property_names = ["presentValue", "statusFlags"]
 
         if not self._rpm_supported.get(device_address, True):
-            return await self._fallback_poll(device_address, objects, property_names)
+            return await self._fallback_poll(
+                device_address, objects, property_names, device_id
+            )
 
         # One RPM per chunk; a chunk that fails is read individually this
         # poll instead of failing (or slowing down) the whole batch.
@@ -1221,7 +1227,9 @@ class BACnetClient:
 
         if failed:
             data.update(
-                await self._fallback_poll(device_address, failed, property_names)
+                await self._fallback_poll(
+                    device_address, failed, property_names, device_id
+                )
             )
         return data
 
@@ -1295,6 +1303,17 @@ class BACnetClient:
             )
             return None
 
+    async def _device_answers(self, device_address: str, device_id: int | None) -> bool:
+        """Return True if the device object answers a ReadProperty."""
+        if device_id is None:
+            return False
+        name = await self._safe_read(
+            Address(device_address),
+            ObjectIdentifier(("device", device_id)),
+            "objectName",
+        )
+        return name is not None
+
     def _handle_rpm_rejection(
         self, device_address: str, chunk_len: int, exc: ErrorRejectAbortNack
     ) -> None:
@@ -1325,13 +1344,15 @@ class BACnetClient:
         device_address: str,
         objects: list[dict[str, Any]],
         property_names: list[str],
+        device_id: int | None = None,
     ) -> dict[str, dict[str, Any]]:
         """Read each object's properties individually (fallback when RPM is unavailable).
 
         Up to MAX_CONCURRENT_REQUESTS objects are read in parallel. If the
-        whole first batch returns no presentValue the device is treated as
-        offline and the remaining objects are skipped (reported as None) —
-        otherwise every read would wait out its own timeout.
+        whole first batch returns no presentValue, the device object itself
+        is asked for its name: no answer means the device is offline and the
+        remaining objects are skipped (reported as None) — otherwise every
+        read would wait out its own timeout.
         """
         semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 
@@ -1349,7 +1370,11 @@ class BACnetClient:
         data = dict(await asyncio.gather(*(_read_object(o) for o in probe)))
 
         rest = objects[MAX_CONCURRENT_REQUESTS:]
-        if not any(d.get("presentValue") is not None for d in data.values()):
+        if (
+            rest
+            and not any(d.get("presentValue") is not None for d in data.values())
+            and not await self._device_answers(device_address, device_id)
+        ):
             empty = dict.fromkeys(property_names)
             for obj in rest:
                 data[f"{obj['object_type']}:{obj['instance']}"] = dict(empty)

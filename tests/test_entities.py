@@ -537,3 +537,19 @@ class TestSharedDeviceInfo:
         assert expected["sw_version"] == "2.3 / 1.0"
         assert BACnetWritePrioritySelect(coord, entry)._attr_device_info == expected
         assert BACnetRefreshMetadataButton(coord, entry)._attr_device_info == expected
+
+
+class TestFaultFlagAvailability:
+    def _entity(self, flags):
+        obj = {"object_type": 0, "instance": 1, "object_name": "T"}
+        return _sensor(obj, {"0:1": {"presentValue": 1.0, "statusFlags": flags}})
+
+    def test_fault_flag_makes_entity_unavailable(self):
+        # statusFlags = [in_alarm, fault, overridden, out_of_service]
+        assert self._entity([False, True, False, False]).available is False
+
+    @pytest.mark.parametrize(
+        "flags", [[True, False, False, False], [False, False, True, True], None]
+    )
+    def test_other_flags_keep_entity_available(self, flags):
+        assert self._entity(flags).available is True
