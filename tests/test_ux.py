@@ -111,3 +111,25 @@ class TestPollingIntervalFloor:
             flow.async_step_init({"polling_interval": MIN_POLLING_INTERVAL - 1})
         )
         assert result["errors"] == {"base": "invalid_polling_interval"}
+
+
+def test_nl_translation_is_complete():
+    """Every string has a Dutch version with the same placeholders."""
+    import re
+
+    def flat(d, prefix=""):
+        out = {}
+        for key, value in d.items():
+            if isinstance(value, dict):
+                out.update(flat(value, f"{prefix}{key}."))
+            else:
+                out[prefix + key] = value
+        return out
+
+    strings = flat(json.loads((_COMPONENT / "strings.json").read_text()))
+    nl = flat(json.loads((_COMPONENT / "translations" / "nl.json").read_text()))
+    assert set(nl) == set(strings)
+    for key, text in strings.items():
+        assert set(re.findall(r"{\w+}", nl[key])) == set(re.findall(r"{\w+}", text)), (
+            key
+        )
