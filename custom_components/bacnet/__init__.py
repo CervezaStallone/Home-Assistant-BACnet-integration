@@ -21,6 +21,7 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import issue_registry as ir
 
 from .const import (
     CONF_BBMD_ADDRESS,
@@ -52,7 +53,12 @@ from .const import (
     DEFAULT_USE_DESCRIPTION,
     DOMAIN,
 )
-from .helpers import default_domain_for, object_key
+from .helpers import (
+    default_domain_for,
+    object_key,
+    object_label,
+    stale_domain_overrides,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -176,6 +182,46 @@ def _migrate_unique_ids(
 
 
 # ---------------------------------------------------------------------------
+# Repairs
+# ---------------------------------------------------------------------------
+
+
+def _async_check_stale_overrides(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    objects: list[dict[str, Any]],
+    domain_overrides: dict[str, str],
+) -> None:
+    """Raise (or clear) a fixable issue for overrides left by the options-flow bug.
+
+    Not auto-removed: the domain mapping is the user's, so they confirm the
+    cleanup in Settings → Repairs (see repairs.py).
+    """
+    issue_id = f"stale_domain_overrides_{entry.entry_id}"
+    stale = set(stale_domain_overrides(objects, domain_overrides))
+    if not stale:
+        ir.async_delete_issue(hass, DOMAIN, issue_id)
+        return
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        issue_id,
+        is_fixable=True,
+        severity=ir.IssueSeverity.WARNING,
+        translation_key="stale_domain_overrides",
+        translation_placeholders={
+            "device": entry.data.get("device_name", "BACnet Device"),
+            "objects": ", ".join(
+                f"{object_label(o)} → {domain_overrides[object_key(o)]}"
+                for o in objects
+                if object_key(o) in stale
+            ),
+        },
+        data={"entry_id": entry.entry_id},
+    )
+
+
+# ---------------------------------------------------------------------------
 # Integration lifecycle
 # ---------------------------------------------------------------------------
 
@@ -295,6 +341,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Must run before platforms load so entities find the migrated registry entries.
     _migrate_unique_ids(hass, entry, entry.data.get("device_id"))
 
+    _async_check_stale_overrides(hass, entry, selected_objects, domain_overrides)
+
     # ---- 7. Forward to platforms ----
     needed_platforms = _get_platforms_in_use(selected_objects, domain_overrides)
     # SELECT (write priority) and BUTTON (metadata refresh) are device-level,
@@ -392,3 +440,8 @@ async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> Non
     """
     _LOGGER.debug("Options updated for BACnet entry %s — reloading", entry.entry_id)
     await hass.config_entries.async_reload(entry.entry_id)
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Drop this entry's repair issue so it can't outlive the device."""
+    ir.async_delete_issue(hass, DOMAIN, f"stale_domain_overrides_{entry.entry_id}")
