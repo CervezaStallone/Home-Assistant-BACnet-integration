@@ -101,6 +101,17 @@
       "refresh_metadata": {
         "name": "Refresh object metadata"
       }
+    },
+    "sensor": {
+      "last_successful_poll": {
+        "name": "Last successful poll"
+      },
+      "cov_subscriptions": {
+        "name": "COV subscriptions"
+      },
+      "consecutive_failed_polls": {
+        "name": "Consecutive failed polls"
+      }
     }
   },
   "options": {
@@ -161,6 +172,10 @@
           }
         }
       }
+    },
+    "device_unreachable": {
+      "title": "{device} is not responding",
+      "description": "Home Assistant has not received data from the BACnet device {device} for several polls, and reconnecting did not help. Its entities are unavailable until it answers again.\n\nCheck that the device is powered and on the network, that its address is still correct (you can change it via Reconfigure), and — when a BBMD is used — that the BBMD is reachable. This message disappears by itself once the device responds."
     }
   },
   "exceptions": {
