@@ -427,8 +427,7 @@ def _climate_with_client(data):
     client.relinquish = AsyncMock(return_value=True)
     client.write_property = AsyncMock(return_value=True)
     entity.coordinator.async_refresh_object = AsyncMock()
-    entity.hass = MagicMock()
-    entity.hass.data = {"bacnet": {entity._entry.entry_id: {"client": client}}}
+    entity.coordinator.client = client
     entity.async_write_ha_state = MagicMock()
     return entity
 
@@ -484,8 +483,7 @@ class TestWriteRefreshesOnlyThatObject:
         entity = _switch(obj)
         client = MagicMock()
         client.write_property = AsyncMock(return_value=True)
-        entity.hass = MagicMock()
-        entity.hass.data = {"bacnet": {entity._entry.entry_id: {"client": client}}}
+        entity.coordinator.client = client
         entity.coordinator.async_refresh_object = AsyncMock()
         entity.coordinator.async_request_refresh = AsyncMock()
 
@@ -525,3 +523,17 @@ class TestUnrecordedAttributes:
         } <= BACnetEntity._unrecorded_attributes
         # Status flags change at runtime and are worth keeping in history.
         assert "bacnet_status_flags" not in BACnetEntity._unrecorded_attributes
+
+
+class TestSharedDeviceInfo:
+    def test_select_and_button_share_entity_device_info(self):
+        from custom_components.bacnet.button import BACnetRefreshMetadataButton
+        from custom_components.bacnet.select import BACnetWritePrioritySelect
+
+        obj = {"object_type": 0, "instance": 1, "object_name": "T"}
+        sensor = _sensor(obj)
+        coord, entry = sensor.coordinator, sensor._entry
+        expected = sensor._attr_device_info
+        assert expected["sw_version"] == "2.3 / 1.0"
+        assert BACnetWritePrioritySelect(coord, entry)._attr_device_info == expected
+        assert BACnetRefreshMetadataButton(coord, entry)._attr_device_info == expected

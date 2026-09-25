@@ -17,6 +17,7 @@ import asyncio
 import logging
 import math
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, ClassVar
 
@@ -52,6 +53,16 @@ _LOGGER = logging.getLogger(__name__)
 # COV subscription lifetime.  BACpypes3's change_of_value() context manager
 # automatically renews the subscription before it expires.
 COV_LIFETIME_SECONDS = 300
+
+
+@dataclass
+class BACnetRuntimeData:
+    """What a loaded config entry keeps in entry.runtime_data."""
+
+    coordinator: BACnetCoordinator
+    # Platforms forwarded at setup — unload must use exactly these, even if
+    # entry.data changed since (a metadata persist reloads with new data).
+    platforms: list = field(default_factory=list)
 
 
 class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):

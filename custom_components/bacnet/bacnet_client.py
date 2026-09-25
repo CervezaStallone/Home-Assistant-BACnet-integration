@@ -222,6 +222,11 @@ class BACnetClient:
         self._last_bbmd_address: str | None = None
         self._last_bbmd_ttl: int = 900
 
+    @property
+    def local_port(self) -> int:
+        """The local UDP port this client binds to."""
+        return self._local_port
+
     @staticmethod
     def _derive_device_instance(local_ip: str, local_port: int) -> int:
         """Derive a stable, unique device instance from the local address.

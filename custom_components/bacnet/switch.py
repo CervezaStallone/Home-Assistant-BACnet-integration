@@ -20,12 +20,6 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .bacnet_client import BACnetClient
-from .const import (
-    DATA_CLIENT,
-    DATA_COORDINATOR,
-    DATA_OBJECTS,
-    DOMAIN,
-)
 from .coordinator import BACnetCoordinator
 from .entity import BACnetEntity
 
@@ -38,9 +32,8 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up BACnet switch entities from a config entry."""
-    data = hass.data[DOMAIN][entry.entry_id]
-    coordinator: BACnetCoordinator = data[DATA_COORDINATOR]
-    objects: list[dict[str, Any]] = data[DATA_OBJECTS]
+    coordinator: BACnetCoordinator = entry.runtime_data.coordinator
+    objects: list[dict[str, Any]] = coordinator.objects
 
     entities: list[BACnetSwitch] = []
     for obj in objects:
@@ -88,7 +81,7 @@ class BACnetSwitch(BACnetEntity, SwitchEntity):
         For commandable objects this writes at the configured priority level
         in the Priority Array.
         """
-        client: BACnetClient = self.hass.data[DOMAIN][self._entry.entry_id][DATA_CLIENT]
+        client: BACnetClient = self.coordinator.client
         success = await client.write_property(
             device_address=self.coordinator.device_address,
             object_type=self._object_type,
@@ -109,7 +102,7 @@ class BACnetSwitch(BACnetEntity, SwitchEntity):
         specified priority level in the Priority Array, setting the output
         to inactive (0).
         """
-        client: BACnetClient = self.hass.data[DOMAIN][self._entry.entry_id][DATA_CLIENT]
+        client: BACnetClient = self.coordinator.client
         success = await client.write_property(
             device_address=self.coordinator.device_address,
             object_type=self._object_type,
