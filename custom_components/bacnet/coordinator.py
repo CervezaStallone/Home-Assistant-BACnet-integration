@@ -135,6 +135,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # setup — the config flow just read fresh metadata during discovery.
         self._last_metadata_refresh: datetime = datetime.now(timezone.utc)
         self._last_object_metadata_check: dict[str, datetime] = {}
+        self._metadata_task: asyncio.Task | None = None
 
         # Device address for reads/writes (from config entry data)
         self.device_address: str = ""
@@ -223,9 +224,20 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # Piggyback the metadata refresh on this same successful cycle
             # rather than a dedicated timer — the device is already confirmed
             # reachable, so this is the cheapest point to check for changes.
+            # Runs in the background: a sweep is several reads per object and
+            # must not hold up this poll (or writes waiting on a refresh).
             elapsed = datetime.now(timezone.utc) - self._last_metadata_refresh
-            if elapsed >= timedelta(seconds=DEFAULT_METADATA_REFRESH_INTERVAL):
-                await self.async_refresh_metadata()
+            sweep_running = (
+                self._metadata_task is not None and not self._metadata_task.done()
+            )
+            if (
+                elapsed >= timedelta(seconds=DEFAULT_METADATA_REFRESH_INTERVAL)
+                and not sweep_running
+            ):
+                self._last_metadata_refresh = datetime.now(timezone.utc)
+                self._metadata_task = self.hass.async_create_background_task(
+                    self.async_refresh_metadata(), name=f"{self.name} metadata sweep"
+                )
         else:
             await self._handle_poll_failure()
 
@@ -362,51 +374,54 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         Returns True if any object's metadata changed.
         """
         self._last_metadata_refresh = datetime.now(timezone.utc)
-        new_objects: list[dict[str, Any]] = []
-        changed = False
+        semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 
-        for obj in self.objects:
-            try:
-                fresh = await self.client.refresh_object_metadata(
-                    device_address=self.device_address,
-                    object_type=obj["object_type"],
-                    instance=obj["instance"],
-                    current_commandable=obj.get("commandable", False),
-                    current_object_name=obj.get("object_name"),
-                    current_description=obj.get("description"),
-                    current_units=obj.get("units"),
-                )
-            except Exception as exc:  # noqa: BLE001
-                _LOGGER.debug(
-                    "Metadata refresh failed for %s:%s: %s",
-                    obj["object_type"],
-                    obj["instance"],
-                    exc,
-                )
-                new_objects.append(obj)
-                continue
-
-            if fresh is None:
-                new_objects.append(obj)
-                continue
-
-            updates = self._diff_metadata(obj, fresh)
-            if updates:
-                for key, value in updates.items():
-                    _LOGGER.info(
-                        "BACnet object %s:%s metadata changed: %s %r → %r",
+        async def _changes_for(obj: dict[str, Any]) -> dict[str, Any]:
+            async with semaphore:
+                try:
+                    fresh = await self.client.refresh_object_metadata(
+                        device_address=self.device_address,
+                        object_type=obj["object_type"],
+                        instance=obj["instance"],
+                        current_commandable=obj.get("commandable", False),
+                        current_object_name=obj.get("object_name"),
+                        current_description=obj.get("description"),
+                        current_units=obj.get("units"),
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    _LOGGER.debug(
+                        "Metadata refresh failed for %s:%s: %s",
                         obj["object_type"],
                         obj["instance"],
-                        key,
-                        obj.get(key),
-                        value,
+                        exc,
                     )
-                obj = {**obj, **updates}
+                    return {}
+            if fresh is None:
+                return {}
+            updates = self._diff_metadata(obj, fresh)
+            for key, value in updates.items():
+                _LOGGER.info(
+                    "BACnet object %s:%s metadata changed: %s %r → %r",
+                    obj["object_type"],
+                    obj["instance"],
+                    key,
+                    obj.get(key),
+                    value,
+                )
+            return updates
+
+        snapshot = self.objects
+        all_updates = await asyncio.gather(*(_changes_for(o) for o in snapshot))
+
+        # Apply onto the CURRENT list, not the snapshot: a COV-triggered
+        # check may have replaced self.objects while this sweep was awaiting.
+        changed = False
+        for obj, updates in zip(snapshot, all_updates, strict=True):
+            if updates:
+                self._replace_object(f"{obj['object_type']}:{obj['instance']}", updates)
                 changed = True
-            new_objects.append(obj)
 
         if changed:
-            self.objects = new_objects
             self._persist_metadata_change()
 
         return changed
@@ -725,6 +740,9 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         shared BACnetClient (used by multiple coordinators on the same port)
         is not disrupted when one config entry is unloaded.
         """
+        if self._metadata_task is not None and not self._metadata_task.done():
+            self._metadata_task.cancel()
+
         for sub_key in list(self._cov_subscriptions.values()):
             await self.client.unsubscribe_cov(sub_key)
         self._cov_subscriptions.clear()
