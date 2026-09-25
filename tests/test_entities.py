@@ -451,3 +451,23 @@ class TestClimateOffAfterRelinquish:
         asyncio.run(entity.async_set_hvac_mode(HVACMode.OFF))
         asyncio.run(entity.async_set_temperature(temperature=21.0))
         assert entity.hvac_mode == HVACMode.HEAT
+
+
+class TestEntityRegistersObjectListener:
+    def test_added_entity_listens_to_its_own_object(self):
+        import asyncio
+        from unittest.mock import MagicMock
+
+        obj = {"object_type": 0, "instance": 1, "object_name": "T"}
+        entity = _sensor(obj, {"0:1": {"presentValue": 1.0}})
+        remove = MagicMock()
+        entity.coordinator.async_add_object_listener.return_value = remove
+        entity.async_write_ha_state = MagicMock()
+
+        asyncio.run(entity.async_added_to_hass())
+
+        key, cb = entity.coordinator.async_add_object_listener.call_args.args
+        assert key == "0:1"
+        cb()
+        entity.async_write_ha_state.assert_called_once()
+        assert remove in entity._on_remove

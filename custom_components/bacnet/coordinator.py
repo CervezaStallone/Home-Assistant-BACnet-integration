@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from typing import Any, ClassVar
 
@@ -115,6 +116,10 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             str, str
         ] = {}  # "obj_key:prop" → sub_key
         self._polled_objects: list[dict[str, Any]] = []
+
+        # Per-object listeners for COV pushes (obj_key → callbacks), so a
+        # notification refreshes only the entity it concerns.
+        self._object_listeners: dict[str, set[Callable[[], None]]] = {}
 
         # Outage-recovery state (issue #18).
         # _consecutive_failures counts polls in a row that returned no usable
@@ -611,11 +616,11 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         change is received.  We merge the changed properties into our
         data dict and tell HA to update affected entities.
 
-        IMPORTANT: We update self.data directly and notify listeners
-        instead of using async_set_updated_data(), because the latter
-        resets the polling timer.  If COV notifications arrive frequently,
-        that would prevent the scheduled _async_update_data poll from
-        ever firing.
+        IMPORTANT: We update self.data directly and notify only this
+        object's listeners instead of using async_set_updated_data(): that
+        resets the polling timer (frequent COV would starve the scheduled
+        poll) and would re-render every entity of the device for a change
+        to one object.
 
         Args:
             obj_key: Object identifier string ("object_type:instance").
@@ -625,17 +630,29 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self.data is None:
             return
 
-        data = dict(self.data)
-        if obj_key in data:
-            data[obj_key].update(changed_values)
-        else:
-            data[obj_key] = changed_values
-
-        # Update data and notify listeners WITHOUT resetting the poll timer.
-        self.data = data
-        self.async_update_listeners()
+        # New outer AND inner dict: the previous snapshot stays untouched.
+        self.data = {
+            **self.data,
+            obj_key: {**self.data.get(obj_key, {}), **changed_values},
+        }
+        for update_callback in list(self._object_listeners.get(obj_key, ())):
+            update_callback()
 
         self._maybe_schedule_metadata_check(obj_key)
+
+    @callback
+    def async_add_object_listener(
+        self, obj_key: str, update_callback: Callable[[], None]
+    ) -> Callable[[], None]:
+        """Call *update_callback* on COV pushes for *obj_key*; returns remover."""
+        listeners = self._object_listeners.setdefault(obj_key, set())
+        listeners.add(update_callback)
+
+        @callback
+        def remove() -> None:
+            listeners.discard(update_callback)
+
+        return remove
 
     def _maybe_schedule_metadata_check(self, obj_key: str) -> None:
         """Schedule a COV-triggered metadata check for *obj_key*, throttled.

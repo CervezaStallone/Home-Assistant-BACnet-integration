@@ -70,6 +70,9 @@ class _CoordinatorEntity:
     async def async_added_to_hass(self) -> None:
         pass
 
+    def async_on_remove(self, func) -> None:
+        self.__dict__.setdefault("_on_remove", []).append(func)
+
 
 class _RestoreEntity:
     """Minimal RestoreEntity stub."""
