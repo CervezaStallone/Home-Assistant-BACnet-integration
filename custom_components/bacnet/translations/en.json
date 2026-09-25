@@ -99,5 +99,18 @@
     "abort": {
       "cannot_connect": "Could not reach the BACnet device to rescan its object list. Make sure the device is online and try again."
     }
+  },
+  "issues": {
+    "stale_domain_overrides": {
+      "title": "Incorrect entity types on {device}",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Reset incorrect entity types",
+            "description": "An earlier version of this integration saved an entity type for these BACnet objects that ignores whether the object is commandable:\n\n{objects}\n\nNon-commandable objects set to a writable type (switch, number) reject every write; commandable objects stuck on a read-only type (sensor) can't be controlled. Confirm to remove these overrides. The objects return to their correct default type and the integration reloads. If you chose one of these types deliberately, set it again in the integration options."
+          }
+        }
+      }
+    }
   }
 }

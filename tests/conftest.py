@@ -198,6 +198,21 @@ _ha_coordinator_mod.DataUpdateCoordinator = _DataUpdateCoordinator
 _ha_coordinator_mod.UpdateFailed = Exception
 
 
+class _RepairsFlow:
+    """Minimal RepairsFlow stub."""
+
+    hass: Any = None
+
+    def async_show_form(self, *, step_id, **kwargs):
+        return {"type": "form", "step_id": step_id}
+
+    def async_create_entry(self, *, data, **kwargs):
+        return {"type": "create_entry", "data": data}
+
+
+_ha_repairs_mod = MagicMock()
+_ha_repairs_mod.RepairsFlow = _RepairsFlow
+
 _ha_restore_state = MagicMock()
 _ha_restore_state.RestoreEntity = _RestoreEntity
 
@@ -251,6 +266,7 @@ sys.modules.update(
         "homeassistant.components.number": _ha_number_mod,
         "homeassistant.components.climate": _ha_climate_mod,
         "homeassistant.components.button": _ha_button_mod,
+        "homeassistant.components.repairs": _ha_repairs_mod,
         "homeassistant.helpers": MagicMock(),
         "homeassistant.helpers.update_coordinator": _ha_coordinator_mod,
         "homeassistant.helpers.device_registry": _ha_device_registry,
