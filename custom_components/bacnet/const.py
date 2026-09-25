@@ -190,8 +190,3 @@ DATA_COORDINATOR = "coordinator"
 DATA_OBJECTS = "objects"
 DATA_DEVICE_INFO = "device_info"
 DATA_UNSUB = "unsub"
-
-# ---------------------------------------------------------------------------
-# Events / signals
-# ---------------------------------------------------------------------------
-SIGNAL_BACNET_COV_UPDATE = f"{DOMAIN}_cov_update"

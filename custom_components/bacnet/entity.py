@@ -95,6 +95,15 @@ class BACnetEntity(CoordinatorEntity[BACnetCoordinator]):
         # Entity name — respects the "use description" option
         self._attr_name = coordinator.get_entity_name(obj)
 
+    async def async_added_to_hass(self) -> None:
+        """Also listen for COV pushes that concern only this object."""
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            self.coordinator.async_add_object_listener(
+                self._obj_key, self.async_write_ha_state
+            )
+        )
+
     # ------------------------------------------------------------------
     # Properties
     # ------------------------------------------------------------------

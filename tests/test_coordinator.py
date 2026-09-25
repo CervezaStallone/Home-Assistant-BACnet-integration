@@ -1028,3 +1028,49 @@ class TestParallelCovSetup:
         asyncio.run(coord._setup_subscriptions())
         assert coord.client.subscribe_cov.await_count == 20
         assert len(coord._polled_objects) == 19
+
+
+# ---------------------------------------------------------------------------
+# COV notifications only refresh the entity of the object that changed
+# ---------------------------------------------------------------------------
+
+
+class TestPerObjectCovListeners:
+    def _coord(self):
+        from unittest.mock import MagicMock
+
+        coord = _make_coordinator()
+        coord.data = {"0:1": {"presentValue": 1.0}, "0:2": {"presentValue": 2.0}}
+        coord.async_update_listeners = MagicMock()
+        return coord
+
+    def test_only_listener_for_changed_object_fires(self):
+        from unittest.mock import MagicMock
+
+        coord = self._coord()
+        a, b = MagicMock(), MagicMock()
+        coord.async_add_object_listener("0:1", a)
+        coord.async_add_object_listener("0:2", b)
+
+        coord._handle_cov_notification("0:1", {"presentValue": 5.0})
+
+        a.assert_called_once()
+        b.assert_not_called()
+        coord.async_update_listeners.assert_not_called()
+        assert coord.data["0:1"]["presentValue"] == 5.0
+
+    def test_removed_listener_is_not_called(self):
+        from unittest.mock import MagicMock
+
+        coord = self._coord()
+        a = MagicMock()
+        remove = coord.async_add_object_listener("0:1", a)
+        remove()
+        coord._handle_cov_notification("0:1", {"presentValue": 5.0})
+        a.assert_not_called()
+
+    def test_previous_data_snapshot_is_not_mutated(self):
+        coord = self._coord()
+        before = coord.data
+        coord._handle_cov_notification("0:1", {"presentValue": 5.0})
+        assert before["0:1"]["presentValue"] == 1.0
