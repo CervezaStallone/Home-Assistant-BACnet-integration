@@ -48,6 +48,8 @@ jobs:
               "Run HACS validation",
               "Run pytest (3.12)",
               "Run pytest (3.13)",
+              "HA smoke test (minimum)",
+              "HA smoke test (latest)",
             ];
             const sha = context.sha;
 

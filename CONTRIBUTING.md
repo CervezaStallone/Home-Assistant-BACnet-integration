@@ -130,7 +130,17 @@ custom_components/bacnet/
 
 3. **Make your changes** following the [coding standards](#coding-standards) below.
 
-4. **Test your changes** against a real or simulated BACnet device and verify nothing is broken in the Home Assistant UI.
+4. **Test your changes** against a real or simulated BACnet device and verify nothing is broken in the Home Assistant UI. Two automated suites run in CI:
+   ```bash
+   # Unit tests — fast, against stubbed Home Assistant modules
+   pytest
+
+   # Smoke tests — the integration in a real Home Assistant (BACnet faked).
+   # Catches HA API changes the stubs can't see. Needs its own environment:
+   pip install pytest-homeassistant-custom-component "BACpypes3==0.0.99"
+   cd tests_ha && pytest
+   ```
+   CI runs the smoke tests against both the minimum supported and the latest Home Assistant (see `tests_ha/requirements-min.txt`).
 
 5. **Commit** with a clear, concise message:
    ```bash
