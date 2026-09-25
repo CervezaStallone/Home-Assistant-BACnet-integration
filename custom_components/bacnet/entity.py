@@ -31,6 +31,18 @@ class BACnetEntity(CoordinatorEntity[BACnetCoordinator]):
     """
 
     _attr_has_entity_name = True
+    # Static per-object metadata: don't store it again with every state change.
+    _unrecorded_attributes = frozenset(
+        {
+            "bacnet_object_type",
+            "bacnet_instance",
+            "bacnet_commandable",
+            "bacnet_units",
+            "bacnet_description",
+            "bacnet_update_method",
+            "bacnet_cov_increment",
+        }
+    )
 
     def __init__(
         self,
