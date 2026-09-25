@@ -308,8 +308,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         live_metadata_properties=live_metadata_properties,
     )
 
-    # Perform the first data refresh so entities have initial state
-    await coordinator.async_config_entry_first_refresh()
+    # Perform the first data refresh so entities have initial state. On
+    # failure HA never calls async_unload_entry, so undo this setup here —
+    # otherwise the shared socket's ref_count (and any COV subscription
+    # already created on it) leaks on every retry.
+    try:
+        await coordinator.async_config_entry_first_refresh()
+    except BaseException:
+        await coordinator.async_shutdown()
+        await _async_release_client(hass, client)
+        raise
 
     # ---- 5. Store runtime data ----
     entry.runtime_data = BACnetRuntimeData(coordinator=coordinator)
@@ -364,35 +372,37 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         coordinator = runtime_data.coordinator
         await coordinator.async_shutdown()
 
-        # Release the shared client reference.  Only disconnect the underlying
-        # UDP socket when the last config entry using this port is unloaded.
-        client = coordinator.client
-        if client is not None:
-            # The client's own port, not entry.data: a reconfigure may have
-            # changed the configured port before this reload.
-            local_port = client.local_port
-            port_clients = hass.data[DOMAIN].get("_port_clients", {})
-            if local_port in port_clients:
-                port_clients[local_port]["ref_count"] -= 1
-                if port_clients[local_port]["ref_count"] <= 0:
-                    port_clients.pop(local_port)
-                    await client.disconnect()
-                    _LOGGER.debug(
-                        "Disconnected shared BACnet client on port %d", local_port
-                    )
-                else:
-                    _LOGGER.debug(
-                        "Released client reference for port %d (ref_count=%d remaining)",
-                        local_port,
-                        port_clients[local_port]["ref_count"],
-                    )
-            else:
-                # Fallback for entries created before shared-client support
-                await client.disconnect()
+        await _async_release_client(hass, coordinator.client)
 
         _LOGGER.info("BACnet integration unloaded for entry %s", entry.entry_id)
 
     return unload_ok
+
+
+async def _async_release_client(hass: HomeAssistant, client: Any) -> None:
+    """Drop one reference to a shared per-port client; disconnect the last one."""
+    if client is None:
+        return
+    # The client's own port, not entry.data: a reconfigure may have changed
+    # the configured port before this reload.
+    local_port = client.local_port
+    port_clients = hass.data[DOMAIN].get("_port_clients", {})
+    shared = port_clients.get(local_port)
+    if shared is None or shared["client"] is not client:
+        # Fallback for entries created before shared-client support
+        await client.disconnect()
+        return
+    shared["ref_count"] -= 1
+    if shared["ref_count"] <= 0:
+        port_clients.pop(local_port)
+        await client.disconnect()
+        _LOGGER.debug("Disconnected shared BACnet client on port %d", local_port)
+    else:
+        _LOGGER.debug(
+            "Released client reference for port %d (ref_count=%d remaining)",
+            local_port,
+            shared["ref_count"],
+        )
 
 
 async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
