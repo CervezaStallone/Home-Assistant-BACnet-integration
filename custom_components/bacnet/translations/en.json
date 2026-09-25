@@ -110,8 +110,15 @@
         "description": "Currently imported objects are pre-selected. Check any additional objects you want to add, or uncheck ones to remove. Domain mapping and COV overrides are preserved for objects that stay selected."
       },
       "domain_mapping": {
-        "title": "Domain Mapping",
-        "description": "Override the default Home Assistant domain for individual BACnet objects. For example, map an Analog Value to 'number' instead of 'sensor' if you need write access. Select the desired domain for each object below."
+        "title": "Customize objects",
+        "description": "Tick the BACnet objects whose entity type, COV setting or climate temperature sensor you want to change. Objects that already have a custom setting are ticked. Unticked objects use the defaults.",
+        "data": {
+          "customize_objects": "Objects to customize"
+        }
+      },
+      "customize_objects": {
+        "title": "Customize objects",
+        "description": "Per object: the Home Assistant entity type, whether COV is used, and — for objects that are already a climate entity — which object provides the room temperature. Changed an object to climate just now? Save, then open the options again to pick its temperature sensor."
       }
     },
     "error": {

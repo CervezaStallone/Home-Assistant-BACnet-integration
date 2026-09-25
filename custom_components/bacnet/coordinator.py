@@ -104,6 +104,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         entry: ConfigEntry | None = None,
         cov_increment: float = DEFAULT_COV_INCREMENT,
         live_metadata_properties: list[str] | None = None,
+        climate_temperature_sources: dict[str, str] | None = None,
     ) -> None:
         """Initialise the coordinator.
 
@@ -123,6 +124,9 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 description, units) get a live SubscribeCOVProperty
                 subscription instead of the periodic/COV-triggered
                 ReadProperty refresh. Empty by default (issue #26).
+            climate_temperature_sources: climate obj_key → obj_key of the
+                object whose presentValue is that climate's current
+                temperature (options flow).
         """
         self.client = client
         self.objects = objects
@@ -134,6 +138,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.entry = entry
         self.cov_increment = cov_increment
         self.live_metadata_properties = live_metadata_properties or []
+        self.climate_temperature_sources = climate_temperature_sources or {}
         self.write_priority: int = DEFAULT_WRITE_PRIORITY
 
         # Track which objects have active COV and which need polling

@@ -331,6 +331,7 @@ def _make_coordinator(data: dict | None = None) -> MagicMock:
     coord.data = data or {}
     coord.device_address = "192.168.1.100"
     coord.last_update_success = True
+    coord.climate_temperature_sources = {}
     coord.get_object_value.side_effect = lambda key, prop="presentValue": (
         coord.data.get(key, {}).get(prop)
     )

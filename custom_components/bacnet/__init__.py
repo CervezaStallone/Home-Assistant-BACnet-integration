@@ -27,6 +27,7 @@ from homeassistant.helpers import issue_registry as ir
 from .const import (
     CONF_BBMD_ADDRESS,
     CONF_BBMD_TTL,
+    CONF_CLIMATE_TEMPERATURE_SOURCES,
     CONF_COV_INCREMENT,
     CONF_COV_OVERRIDES,
     CONF_DOMAIN_MAPPING,
@@ -271,6 +272,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     live_metadata_properties: list[str] = entry.options.get(
         CONF_LIVE_METADATA_PROPERTIES, DEFAULT_LIVE_METADATA_PROPERTIES
     )
+    climate_temperature_sources: dict[str, str] = entry.options.get(
+        CONF_CLIMATE_TEMPERATURE_SOURCES, {}
+    )
 
     # ---- 2. Get or create a shared BACnet client for this port ----
     # A single UDP socket (one BACnetClient) can communicate with any number
@@ -319,6 +323,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry=entry,
         cov_increment=cov_increment,
         live_metadata_properties=live_metadata_properties,
+        climate_temperature_sources=climate_temperature_sources,
     )
 
     # Perform the first data refresh so entities have initial state. On

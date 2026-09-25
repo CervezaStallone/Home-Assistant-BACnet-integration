@@ -1,10 +1,12 @@
 """
 Options flow for BACnet IP integration.
 
-Provides two configuration steps accessible from the integration's "Configure" button:
-  Step 1 (init)           – COV toggle, polling fallback interval, naming toggle
-  Step 2 (domain_mapping) – Per-object HA domain override (sensor/switch/number/climate/…)
-                             and per-object COV enable/disable override
+Steps behind the integration's "Configure" button:
+  init              – COV toggle, polling interval, naming, live metadata
+  rescan_objects    – (optional) re-read the device's object list
+  domain_mapping    – pick which objects to customise (unpicked = defaults)
+  customize_objects – per picked object: HA type, COV on/off and, for
+                      climate objects, the object providing the temperature
 """
 
 from __future__ import annotations
@@ -18,8 +20,10 @@ from homeassistant import config_entries
 from homeassistant.data_entry_flow import FlowResult
 
 from .const import (
+    CONF_CLIMATE_TEMPERATURE_SOURCES,
     CONF_COV_INCREMENT,
     CONF_COV_OVERRIDES,
+    CONF_CUSTOMIZE_OBJECTS,
     CONF_DEVICE_ADDRESS,
     CONF_DEVICE_ID,
     CONF_DOMAIN_MAPPING,
@@ -36,6 +40,9 @@ from .const import (
     DEFAULT_USE_DESCRIPTION,
     LIVE_METADATA_PROPERTY_CHOICES,
     MIN_POLLING_INTERVAL,
+    OBJECT_TYPE_ANALOG_INPUT,
+    OBJECT_TYPE_ANALOG_OUTPUT,
+    OBJECT_TYPE_ANALOG_VALUE,
     SUPPORTED_DOMAINS,
 )
 from .helpers import default_domain_for
@@ -44,6 +51,13 @@ from .helpers import object_label as _object_label
 from .helpers import select_objects_by_key as _select_objects_by_key
 
 _LOGGER = logging.getLogger(__name__)
+
+# Object types that can provide a temperature for a climate entity.
+_ANALOG_TYPES = {
+    OBJECT_TYPE_ANALOG_INPUT,
+    OBJECT_TYPE_ANALOG_OUTPUT,
+    OBJECT_TYPE_ANALOG_VALUE,
+}
 
 
 class BACnetOptionsFlow(config_entries.OptionsFlow):
@@ -54,6 +68,7 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
         self._config_entry = config_entry
         self._options_so_far: dict[str, Any] = {}
         self._rescanned_objects: list[dict[str, Any]] = []
+        self._customize: list[dict[str, Any]] = []
 
     # ------------------------------------------------------------------
     # Step 1: General options (COV, polling, naming)
@@ -207,95 +222,141 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
         )
 
     # ------------------------------------------------------------------
-    # Step 2: Per-object domain mapping
+    # Per-object customisation: pick objects, then edit only those
     # ------------------------------------------------------------------
 
-    async def async_step_domain_mapping(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Second options step — let the user reassign HA domains per BACnet object.
+    @property
+    def _selected_objects(self) -> list[dict[str, Any]]:
+        return self._config_entry.data.get(CONF_SELECTED_OBJECTS, [])
 
-        Each selected BACnet object is shown as a dropdown with the available
-        HA domains (sensor, binary_sensor, switch, number, climate).
-        The user can change the mapping and save.
-        """
-        errors: dict[str, str] = {}
-
-        # Retrieve the selected objects from the config entry data
-        selected_objects: list[dict[str, Any]] = self._config_entry.data.get(
-            CONF_SELECTED_OBJECTS, []
-        )
-
-        global_cov_default = self._options_so_far.get(
+    @property
+    def _global_cov(self) -> bool:
+        return self._options_so_far.get(
             CONF_ENABLE_COV,
             self._config_entry.options.get(CONF_ENABLE_COV, DEFAULT_ENABLE_COV),
         )
 
+    def _current(self, conf_key: str) -> dict[str, Any]:
+        return self._config_entry.options.get(conf_key, {})
+
+    async def async_step_domain_mapping(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Pick which objects to customise; objects left unpicked use defaults.
+
+        Objects that already have a custom setting are preselected, so a
+        plain "Submit" keeps everything as it was.
+        """
+        objects = self._selected_objects
         if user_input is not None:
-            # Only persist values that differ from the default. Storing every
-            # form value would freeze today's defaults as explicit overrides:
-            # a later commandable change or enable_cov toggle would then never
-            # take effect for any object.
-            #
-            # Objects removed by a rescan keep their custom domain/COV settings
-            # so they are restored if re-selected later (issue #30).
-            domain_mapping = dict(
-                self._config_entry.options.get(CONF_DOMAIN_MAPPING, {})
-            )
-            cov_overrides = dict(self._config_entry.options.get(CONF_COV_OVERRIDES, {}))
-            for obj in selected_objects:
-                obj_key = _object_key(obj)
-                domain_mapping.pop(obj_key, None)
-                cov_overrides.pop(obj_key, None)
+            picked = set(user_input.get(CONF_CUSTOMIZE_OBJECTS, []))
+            self._customize = [o for o in objects if _object_key(o) in picked]
+            if not self._customize:
+                return self._save({})
+            return await self.async_step_customize_objects()
 
-                domain = user_input.get(f"domain_{obj_key}")
-                if domain is not None and domain != default_domain_for(obj):
-                    domain_mapping[obj_key] = domain
-
-                cov = user_input.get(f"cov_{obj_key}")
-                if cov is not None and cov != global_cov_default:
-                    cov_overrides[obj_key] = cov
-
-            final_options = {
-                **self._options_so_far,
-                CONF_DOMAIN_MAPPING: domain_mapping,
-                CONF_COV_OVERRIDES: cov_overrides,
-            }
-            return self.async_create_entry(title="", data=final_options)
-
-        # --- Build the form: one dropdown + one COV checkbox per BACnet object ---
-        current_mapping: dict[str, str] = self._config_entry.options.get(
-            CONF_DOMAIN_MAPPING, {}
+        customised = (
+            set(self._current(CONF_DOMAIN_MAPPING))
+            | set(self._current(CONF_COV_OVERRIDES))
+            | set(self._current(CONF_CLIMATE_TEMPERATURE_SOURCES))
         )
-        current_cov_overrides: dict[str, bool] = self._config_entry.options.get(
-            CONF_COV_OVERRIDES, {}
-        )
-        schema_fields: dict[Any, Any] = {}
-        for obj in selected_objects:
-            obj_key = f"{obj['object_type']}:{obj['instance']}"
-
-            # Current domain: user override → commandable-aware default
-            current_domain = current_mapping.get(obj_key, default_domain_for(obj))
-
-            domain_field_key = f"domain_{obj_key}"
-            schema_fields[
+        options = {_object_key(o): _object_label(o) for o in objects}
+        schema = vol.Schema(
+            {
                 vol.Optional(
-                    domain_field_key,
-                    default=current_domain,
-                    description={"suggested_value": current_domain},
+                    CONF_CUSTOMIZE_OBJECTS,
+                    default=[k for k in options if k in customised],
+                ): cv.multi_select(options),
+            }
+        )
+        return self.async_show_form(step_id="domain_mapping", data_schema=schema)
+
+    async def async_step_customize_objects(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """HA type, COV and climate temperature source for the picked objects.
+
+        Field names are the objects' own labels (a translation can't name a
+        per-device object), so the form reads e.g. "Analog Value (4) — SP — type".
+        """
+        if user_input is not None:
+            return self._save(
+                {
+                    _object_key(obj): {
+                        what: user_input.get(self._field(obj, what))
+                        for what in ("type", "COV", "temperature sensor")
+                    }
+                    for obj in self._customize
+                }
+            )
+
+        domains = self._current(CONF_DOMAIN_MAPPING)
+        covs = self._current(CONF_COV_OVERRIDES)
+        sources = self._current(CONF_CLIMATE_TEMPERATURE_SOURCES)
+        temperature_choices = {"": "—"} | {
+            _object_key(o): _object_label(o)
+            for o in self._selected_objects
+            if o["object_type"] in _ANALOG_TYPES
+        }
+        fields: dict[Any, Any] = {}
+        for obj in self._customize:
+            key = _object_key(obj)
+            domain = domains.get(key, default_domain_for(obj))
+            fields[vol.Optional(self._field(obj, "type"), default=domain)] = vol.In(
+                {d: d for d in SUPPORTED_DOMAINS}
+            )
+            fields[
+                vol.Optional(
+                    self._field(obj, "COV"), default=covs.get(key, self._global_cov)
                 )
-            ] = vol.In({d: d for d in SUPPORTED_DOMAINS})
-
-            # Current COV state: per-object override → device-wide default
-            current_cov = current_cov_overrides.get(obj_key, global_cov_default)
-
-            cov_field_key = f"cov_{obj_key}"
-            schema_fields[vol.Optional(cov_field_key, default=current_cov)] = bool
-
-        schema = vol.Schema(schema_fields)
-
+            ] = bool
+            if domain == "climate":
+                fields[
+                    vol.Optional(
+                        self._field(obj, "temperature sensor"),
+                        default=sources.get(key, ""),
+                    )
+                ] = vol.In({k: v for k, v in temperature_choices.items() if k != key})
         return self.async_show_form(
-            step_id="domain_mapping",
-            data_schema=schema,
-            errors=errors,
+            step_id="customize_objects", data_schema=vol.Schema(fields)
+        )
+
+    @staticmethod
+    def _field(obj: dict[str, Any], what: str) -> str:
+        return f"{_object_label(obj)} — {what}"
+
+    def _save(self, edits: dict[str, dict[str, Any]]) -> FlowResult:
+        """Store per-object settings, keeping only values that differ from defaults.
+
+        Every selected object not in *edits* is reset to its defaults.
+        Settings of objects no longer selected are kept, so they come back
+        if the object is re-selected after a rescan (issue #30). Storing
+        every form value would freeze today's defaults as overrides, so a
+        later commandable change or enable_cov toggle would never apply.
+        """
+        domains = dict(self._current(CONF_DOMAIN_MAPPING))
+        covs = dict(self._current(CONF_COV_OVERRIDES))
+        sources = dict(self._current(CONF_CLIMATE_TEMPERATURE_SOURCES))
+        for obj in self._selected_objects:
+            key = _object_key(obj)
+            for store in (domains, covs, sources):
+                store.pop(key, None)
+            edit = edits.get(key)
+            if edit is None:
+                continue
+            if edit["type"] is not None and edit["type"] != default_domain_for(obj):
+                domains[key] = edit["type"]
+            if edit["COV"] is not None and edit["COV"] != self._global_cov:
+                covs[key] = edit["COV"]
+            if edit["temperature sensor"]:
+                sources[key] = edit["temperature sensor"]
+
+        return self.async_create_entry(
+            title="",
+            data={
+                **self._options_so_far,
+                CONF_DOMAIN_MAPPING: domains,
+                CONF_COV_OVERRIDES: covs,
+                CONF_CLIMATE_TEMPERATURE_SOURCES: sources,
+            },
         )

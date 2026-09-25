@@ -43,6 +43,13 @@ CONF_COV_INCREMENT = "cov_increment"
 # Domain mapping
 CONF_DOMAIN_MAPPING = "domain_mapping"
 
+# Options-flow only, never persisted: which objects to customise.
+CONF_CUSTOMIZE_OBJECTS = "customize_objects"
+
+# Climate objects whose current temperature comes from another selected
+# object (climate obj_key -> temperature obj_key).
+CONF_CLIMATE_TEMPERATURE_SOURCES = "climate_temperature_sources"
+
 # Per-object COV override (obj_key -> bool). Objects with no entry fall back
 # to the device-wide CONF_ENABLE_COV value.
 CONF_COV_OVERRIDES = "cov_overrides"
