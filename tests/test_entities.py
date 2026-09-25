@@ -66,7 +66,9 @@ class TestSensorNativeValue:
             "object_name": "T",
         }
         entity = _sensor(obj, {"0:1": {"presentValue": 23.456}})
-        assert entity.native_value == pytest.approx(23.46)
+        # Full precision in the state; the UI rounds via display precision.
+        assert entity.native_value == 23.456
+        assert entity._attr_suggested_display_precision == 2
 
     def test_analog_none_when_no_data(self):
         obj = {
@@ -491,3 +493,35 @@ class TestWriteRefreshesOnlyThatObject:
 
         entity.coordinator.async_refresh_object.assert_awaited_once_with(obj)
         entity.coordinator.async_request_refresh.assert_not_awaited()
+
+
+class TestSensorPrecision:
+    def _value(self, pv):
+        obj = {"object_type": 0, "instance": 1, "object_name": "T"}
+        return _sensor(obj, {"0:1": {"presentValue": pv}}).native_value
+
+    def test_float32_noise_is_stripped(self):
+        assert self._value(23.456000328063965) == 23.456
+
+    def test_small_values_are_not_rounded_away(self):
+        assert self._value(0.00123) == 0.00123
+
+    def test_large_counter_keeps_decimals(self):
+        assert self._value(123456.7) == 123456.7
+
+
+class TestUnrecordedAttributes:
+    def test_static_bacnet_attributes_are_not_recorded(self):
+        from custom_components.bacnet.entity import BACnetEntity
+
+        assert {
+            "bacnet_object_type",
+            "bacnet_instance",
+            "bacnet_commandable",
+            "bacnet_units",
+            "bacnet_description",
+            "bacnet_update_method",
+            "bacnet_cov_increment",
+        } <= BACnetEntity._unrecorded_attributes
+        # Status flags change at runtime and are worth keeping in history.
+        assert "bacnet_status_flags" not in BACnetEntity._unrecorded_attributes

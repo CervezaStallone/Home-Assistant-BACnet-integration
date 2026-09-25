@@ -119,6 +119,9 @@ class BACnetSensor(BACnetEntity, SensorEntity):
             OBJECT_TYPE_ANALOG_VALUE,
         }:
             self._attr_state_class = SensorStateClass.MEASUREMENT
+            # Display hint only — the state keeps full precision (user can
+            # change it per entity in the UI).
+            self._attr_suggested_display_precision = 2
 
     @property
     def native_value(self) -> float | int | str | None:
@@ -133,7 +136,9 @@ class BACnetSensor(BACnetEntity, SensorEntity):
             OBJECT_TYPE_ANALOG_VALUE,
         }:
             try:
-                return round(float(value), 2)
+                # BACnet REAL is float32: keep its ~7 significant digits and
+                # drop the float64 conversion noise (23.456000328…).
+                return float(f"{float(value):.7g}")
             except (ValueError, TypeError):
                 return None
         # Multi-state values are integers
