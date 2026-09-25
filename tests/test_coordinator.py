@@ -939,3 +939,92 @@ class TestMetadataChangeTriggersRealReload:
             "data"
         ]
         assert persisted_data != pre_change_entry_data
+
+
+# ---------------------------------------------------------------------------
+# covIncrement is only written when it differs (avoids NV-memory writes on
+# every setup/reload)
+# ---------------------------------------------------------------------------
+
+
+class TestCovIncrementWriteSkipping:
+    def _run(self, device_value):
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
+        coord.cov_increment = 0.1
+        coord.client.read_property = AsyncMock(return_value=device_value)
+        coord.client.write_property = AsyncMock(return_value=True)
+        coord.client.subscribe_cov = AsyncMock(return_value="sub")
+        asyncio.run(coord._setup_subscriptions())
+        return coord.client.write_property
+
+    def test_equal_value_is_not_rewritten(self):
+        # Device stores covIncrement as a float32 REAL.
+        self._run(0.10000000149011612).assert_not_awaited()
+
+    def test_different_value_is_written(self):
+        self._run(0.5).assert_awaited_once()
+
+    def test_unreadable_value_is_written(self):
+        self._run(None).assert_awaited_once()
+
+
+# ---------------------------------------------------------------------------
+# COV setup runs in parallel and stops probing a device that rejects COV
+# ---------------------------------------------------------------------------
+
+
+class TestParallelCovSetup:
+    def _coord(self, n, subscribe):
+        from unittest.mock import AsyncMock
+
+        coord = _make_coordinator(
+            objects=[{"object_type": 3, "instance": i} for i in range(n)]
+        )
+        coord.client.subscribe_cov = AsyncMock(side_effect=subscribe)
+        return coord
+
+    def test_subscriptions_run_concurrently_within_limit(self):
+        import asyncio
+
+        from custom_components.bacnet.const import MAX_CONCURRENT_REQUESTS
+
+        state = {"in_flight": 0, "peak": 0}
+
+        async def subscribe(**kwargs):
+            state["in_flight"] += 1
+            state["peak"] = max(state["peak"], state["in_flight"])
+            await asyncio.sleep(0.001)
+            state["in_flight"] -= 1
+            return f"sub-{kwargs['instance']}"
+
+        coord = self._coord(12, subscribe)
+        asyncio.run(coord._setup_subscriptions())
+        assert len(coord._cov_subscriptions) == 12
+        assert 1 < state["peak"] <= MAX_CONCURRENT_REQUESTS
+
+    def test_device_rejecting_first_batch_is_not_probed_further(self):
+        import asyncio
+
+        from custom_components.bacnet.const import MAX_CONCURRENT_REQUESTS
+
+        async def subscribe(**kwargs):
+            return None
+
+        coord = self._coord(20, subscribe)
+        asyncio.run(coord._setup_subscriptions())
+        assert coord.client.subscribe_cov.await_count == MAX_CONCURRENT_REQUESTS
+        assert len(coord._polled_objects) == 20
+
+    def test_partial_cov_support_keeps_trying_all_objects(self):
+        import asyncio
+
+        async def subscribe(**kwargs):
+            return "sub" if kwargs["instance"] == 0 else None
+
+        coord = self._coord(20, subscribe)
+        asyncio.run(coord._setup_subscriptions())
+        assert coord.client.subscribe_cov.await_count == 20
+        assert len(coord._polled_objects) == 19
