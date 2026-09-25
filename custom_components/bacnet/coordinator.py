@@ -47,7 +47,7 @@ from .const import (
     OBJECT_TYPE_ANALOG_VALUE,
     RECONNECT_THRESHOLD,
 )
-from .helpers import default_domain_for
+from .helpers import default_domain_for, mask_address
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -329,7 +329,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         failures = self._consecutive_failures
         _LOGGER.warning(
             "BACnet device %s unresponsive (%d consecutive failed polls)",
-            self.device_address or "(no address)",
+            mask_address(self.device_address),
             failures,
         )
 
@@ -365,7 +365,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         if failures >= MAX_SILENT_FAILURES:
             raise UpdateFailed(
-                f"BACnet device {self.device_address or '(no address)'} not "
+                f"BACnet device {mask_address(self.device_address)} not "
                 f"responding ({failures} consecutive failed polls)"
             )
 
@@ -598,7 +598,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if probe and not any(results):
             _LOGGER.info(
                 "Device %s rejected COV for the first %d objects — polling the rest",
-                self.device_address or "(no address)",
+                mask_address(self.device_address),
                 len(probe),
             )
             self._polled_objects.extend(rest)
