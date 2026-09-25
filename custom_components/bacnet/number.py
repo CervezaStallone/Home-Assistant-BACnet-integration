@@ -144,7 +144,7 @@ class BACnetNumber(BACnetEntity, NumberEntity):
             commandable=self.is_commandable,
         )
         if success:
-            await self.coordinator.async_request_refresh()
+            await self.coordinator.async_refresh_object(self._obj)
         else:
             _LOGGER.error(
                 "Failed to write %.2f to %s:%d",

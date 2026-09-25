@@ -662,15 +662,41 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self.data is None:
             return
 
+        self._merge_object_data(obj_key, changed_values)
+        self._maybe_schedule_metadata_check(obj_key)
+
+    def _merge_object_data(self, obj_key: str, values: dict[str, Any]) -> None:
+        """Merge *values* into one object's data and notify only its listeners."""
         # New outer AND inner dict: the previous snapshot stays untouched.
         self.data = {
-            **self.data,
-            obj_key: {**self.data.get(obj_key, {}), **changed_values},
+            **(self.data or {}),
+            obj_key: {**(self.data or {}).get(obj_key, {}), **values},
         }
         for update_callback in list(self._object_listeners.get(obj_key, ())):
             update_callback()
 
-        self._maybe_schedule_metadata_check(obj_key)
+    async def async_refresh_object(self, obj: dict[str, Any]) -> None:
+        """Re-read one object after a write instead of polling the whole device.
+
+        Falls back to a regular (debounced) full refresh when the read
+        returns nothing, so a flaky read never leaves a stale state behind.
+        """
+        obj_key = f"{obj['object_type']}:{obj['instance']}"
+        try:
+            polled = await self.client.poll_objects(
+                device_address=self.device_address,
+                objects=[obj],
+                property_names=["presentValue", "statusFlags"],
+            )
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.debug("Post-write read failed for %s: %s", obj_key, exc)
+            polled = None
+
+        values = (polled or {}).get(obj_key)
+        if not values or values.get("presentValue") is None:
+            await self.async_request_refresh()
+            return
+        self._merge_object_data(obj_key, values)
 
     @callback
     def async_add_object_listener(

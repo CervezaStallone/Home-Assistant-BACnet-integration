@@ -1214,3 +1214,42 @@ class TestMetadataPersistDebounce:
         handle = coord._persist_handle
         asyncio.run(coord.async_shutdown())
         handle.cancel.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# After a write only the written object is re-read
+# ---------------------------------------------------------------------------
+
+
+class TestRefreshSingleObject:
+    def _coord(self, polled):
+        from unittest.mock import AsyncMock, MagicMock
+
+        coord = _make_coordinator()
+        coord.data = {"0:1": {"presentValue": 1.0}, "0:2": {"presentValue": 2.0}}
+        coord.client.poll_objects = AsyncMock(return_value=polled)
+        coord.async_request_refresh = AsyncMock()
+        self.listener = MagicMock()
+        coord.async_add_object_listener("0:1", self.listener)
+        return coord
+
+    def test_reads_only_that_object_and_notifies_it(self):
+        import asyncio
+
+        coord = self._coord({"0:1": {"presentValue": 9.0, "statusFlags": None}})
+        asyncio.run(coord.async_refresh_object({"object_type": 0, "instance": 1}))
+
+        objects = coord.client.poll_objects.call_args.kwargs["objects"]
+        assert objects == [{"object_type": 0, "instance": 1}]
+        assert coord.data["0:1"]["presentValue"] == 9.0
+        assert coord.data["0:2"]["presentValue"] == 2.0
+        self.listener.assert_called_once()
+        coord.async_request_refresh.assert_not_awaited()
+
+    def test_falls_back_to_full_refresh_when_read_fails(self):
+        import asyncio
+
+        coord = self._coord({"0:1": {"presentValue": None, "statusFlags": None}})
+        asyncio.run(coord.async_refresh_object({"object_type": 0, "instance": 1}))
+        coord.async_request_refresh.assert_awaited_once()
+        assert coord.data["0:1"]["presentValue"] == 1.0
