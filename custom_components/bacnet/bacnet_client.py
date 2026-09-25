@@ -35,6 +35,7 @@ from bacpypes3.service.cov import SubscriptionContextManager
 
 from .const import (
     DEFAULT_WRITE_PRIORITY,
+    MAX_CONCURRENT_REQUESTS,
     OBJECT_TYPE_ANALOG_INPUT,
     OBJECT_TYPE_ANALOG_OUTPUT,
     OBJECT_TYPE_ANALOG_VALUE,
@@ -44,6 +45,7 @@ from .const import (
     OBJECT_TYPE_MULTI_STATE_INPUT,
     OBJECT_TYPE_MULTI_STATE_OUTPUT,
     OBJECT_TYPE_MULTI_STATE_VALUE,
+    RPM_MAX_OBJECTS,
 )
 from .helpers import mask_address as _mask_address
 
@@ -75,6 +77,15 @@ POTENTIALLY_WRITABLE_TYPES: set[int] = {
     OBJECT_TYPE_ANALOG_VALUE,
     OBJECT_TYPE_BINARY_VALUE,
     OBJECT_TYPE_MULTI_STATE_VALUE,
+}
+
+# Rejection reasons meaning "this device has no ReadPropertyMultiple at all".
+# Any other rejection (segmentation-not-supported, buffer-overflow, …) is
+# treated as "request too large" and answered by shrinking the chunk size.
+_RPM_UNSUPPORTED_REASONS = {
+    "unrecognized-service",
+    "optional-functionality-not-supported",
+    "service-request-denied",
 }
 
 # Type alias for the application — either Normal or Foreign
@@ -200,6 +211,9 @@ class BACnetClient:
         self._cov_property_stop_events: dict[str, asyncio.Event] = {}
         # Per-device RPM support cache: True = supported (or untested), False = rejected
         self._rpm_supported: dict[str, bool] = {}
+        # Per-device RPM chunk size (objects per request), shrunk on
+        # size-related aborts.
+        self._rpm_chunk_size: dict[str, int] = {}
         # Last successful connect() parameters — used by reconnect() to
         # re-register with the BBMD after a network outage (issue #18).
         # BBMD foreign device registration has a TTL (default 900s); once it
@@ -1166,12 +1180,12 @@ class BACnetClient:
         objects: list[dict[str, Any]],
         property_names: list[str] | None = None,
     ) -> dict[str, dict[str, Any]]:
-        """Read properties for a batch of objects in one network round-trip.
+        """Read properties for a batch of objects with as few round-trips as possible.
 
-        Attempts ReadPropertyMultiple (RPM) first so all objects are fetched
-        in a single request.  Falls back to per-object reads if the device
-        rejects RPM (once rejected, individual reads are used for all future
-        polls of that device).
+        Uses ReadPropertyMultiple (RPM) in chunks of at most RPM_MAX_OBJECTS
+        objects. A chunk that fails is read individually for this poll. The
+        chunk size shrinks on size-related rejections; RPM is only disabled
+        for the device when it doesn't support the service at all.
 
         Returns dict keyed by "object_type:instance" → {property: value}.
         """
@@ -1181,12 +1195,30 @@ class BACnetClient:
         if property_names is None:
             property_names = ["presentValue", "statusFlags"]
 
-        if self._rpm_supported.get(device_address, True):
-            result = await self._try_rpm_poll(device_address, objects, property_names)
-            if result is not None:
-                return result
+        if not self._rpm_supported.get(device_address, True):
+            return await self._fallback_poll(device_address, objects, property_names)
 
-        return await self._fallback_poll(device_address, objects, property_names)
+        # One RPM per chunk; a chunk that fails is read individually this
+        # poll instead of failing (or slowing down) the whole batch.
+        data: dict[str, dict[str, Any]] = {}
+        failed: list[dict[str, Any]] = []
+        chunk_size = self._rpm_chunk_size.get(device_address, RPM_MAX_OBJECTS)
+        for start in range(0, len(objects), chunk_size):
+            chunk = objects[start : start + chunk_size]
+            if not self._rpm_supported.get(device_address, True):
+                failed.extend(chunk)
+                continue
+            result = await self._try_rpm_poll(device_address, chunk, property_names)
+            if result is None:
+                failed.extend(chunk)
+            else:
+                data.update(result)
+
+        if failed:
+            data.update(
+                await self._fallback_poll(device_address, failed, property_names)
+            )
+        return data
 
     async def _try_rpm_poll(
         self,
@@ -1194,15 +1226,15 @@ class BACnetClient:
         objects: list[dict[str, Any]],
         property_names: list[str],
     ) -> dict[str, dict[str, Any]] | None:
-        """Attempt one ReadPropertyMultiple request for all objects.
+        """Attempt one ReadPropertyMultiple request for *objects* (one chunk).
 
         Returns the parsed result dict on success, or None if RPM failed so
         the caller can fall back to individual reads.
 
-        Permanently marks the device as not supporting RPM when the device
-        sends an ``ErrorRejectAbortNack`` (service-not-supported).  Transient
-        failures (timeout, unexpected exceptions) return None without updating
-        the cache so the next poll retries RPM.
+        A device rejection goes through _handle_rpm_rejection() (shrink the
+        chunk size or disable RPM). Transient failures (timeout, unexpected
+        exceptions) return None without changing anything, so the next poll
+        retries RPM.
         """
         rpm_props = [self._CAMEL_TO_HYPHEN.get(p, p) for p in property_names]
 
@@ -1250,13 +1282,7 @@ class BACnetClient:
             _LOGGER.debug("RPM poll timed out for %s", _mask_address(device_address))
             return None
         except ErrorRejectAbortNack as exc:
-            _LOGGER.info(
-                "Device %s rejected ReadPropertyMultiple (%s) — "
-                "switching to individual reads for all future polls",
-                _mask_address(device_address),
-                exc,
-            )
-            self._rpm_supported[device_address] = False
+            self._handle_rpm_rejection(device_address, len(objects), exc)
             return None
         except Exception as exc:  # noqa: BLE001
             _LOGGER.debug(
@@ -1264,23 +1290,67 @@ class BACnetClient:
             )
             return None
 
+    def _handle_rpm_rejection(
+        self, device_address: str, chunk_len: int, exc: ErrorRejectAbortNack
+    ) -> None:
+        """Shrink the RPM chunk size, or disable RPM when it can't work at all."""
+        reason = str(getattr(exc, "reason", exc))
+        if reason not in _RPM_UNSUPPORTED_REASONS and chunk_len > 1:
+            new_size = max(1, chunk_len // 2)
+            self._rpm_chunk_size[device_address] = new_size
+            _LOGGER.info(
+                "Device %s rejected a %d-object ReadPropertyMultiple (%s) — "
+                "retrying with %d objects per request",
+                _mask_address(device_address),
+                chunk_len,
+                reason,
+                new_size,
+            )
+            return
+        _LOGGER.info(
+            "Device %s rejected ReadPropertyMultiple (%s) — "
+            "switching to individual reads for all future polls",
+            _mask_address(device_address),
+            reason,
+        )
+        self._rpm_supported[device_address] = False
+
     async def _fallback_poll(
         self,
         device_address: str,
         objects: list[dict[str, Any]],
         property_names: list[str],
     ) -> dict[str, dict[str, Any]]:
-        """Read each object's properties individually (fallback when RPM is unavailable)."""
-        data: dict[str, dict[str, Any]] = {}
-        for obj in objects:
-            obj_key = f"{obj['object_type']}:{obj['instance']}"
-            obj_data: dict[str, Any] = {}
-            for prop in property_names:
-                value = await self.read_property(
-                    device_address, obj["object_type"], obj["instance"], prop
-                )
-                obj_data[prop] = self._coerce_value(value)
-            data[obj_key] = obj_data
+        """Read each object's properties individually (fallback when RPM is unavailable).
+
+        Up to MAX_CONCURRENT_REQUESTS objects are read in parallel. If the
+        whole first batch returns no presentValue the device is treated as
+        offline and the remaining objects are skipped (reported as None) —
+        otherwise every read would wait out its own timeout.
+        """
+        semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
+
+        async def _read_object(obj: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+            async with semaphore:
+                obj_data: dict[str, Any] = {}
+                for prop in property_names:
+                    value = await self.read_property(
+                        device_address, obj["object_type"], obj["instance"], prop
+                    )
+                    obj_data[prop] = self._coerce_value(value)
+            return f"{obj['object_type']}:{obj['instance']}", obj_data
+
+        probe = objects[:MAX_CONCURRENT_REQUESTS]
+        data = dict(await asyncio.gather(*(_read_object(o) for o in probe)))
+
+        rest = objects[MAX_CONCURRENT_REQUESTS:]
+        if not any(d.get("presentValue") is not None for d in data.values()):
+            empty = dict.fromkeys(property_names)
+            for obj in rest:
+                data[f"{obj['object_type']}:{obj['instance']}"] = dict(empty)
+            return data
+
+        data.update(await asyncio.gather(*(_read_object(o) for o in rest)))
         return data
 
     # ------------------------------------------------------------------

@@ -66,6 +66,16 @@ DEFAULT_COV_INCREMENT = 0.1  # default COV increment for analog objects
 MAX_SILENT_FAILURES = 3
 RECONNECT_THRESHOLD = 10
 
+# Network load limits per device.
+# RPM_MAX_OBJECTS caps one ReadPropertyMultiple request; larger requests can
+# exceed a controller's max APDU / segmentation support. On a size-related
+# abort the per-device chunk size is halved automatically.
+# MAX_CONCURRENT_REQUESTS caps parallel individual requests (fallback reads,
+# COV subscribes, metadata reads) — small controllers only handle a few
+# outstanding confirmed requests at a time.
+RPM_MAX_OBJECTS = 25
+MAX_CONCURRENT_REQUESTS = 4
+
 # Static object metadata (objectName, description, units, commandable) has no
 # COV/push mechanism in BACnet — a device-side edit is only visible on a fresh
 # ReadProperty. Two refresh paths pick that up (issue #26):
