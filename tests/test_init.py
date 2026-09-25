@@ -179,3 +179,46 @@ class TestGetPlatformsInUse:
         result = _get_platforms_in_use(objects, {})
         platform_values = [p.value for p in result]
         assert len(platform_values) == len(set(platform_values))
+
+
+class TestSetupFailureReleasesClient:
+    """If the first refresh fails, setup must not leak the shared socket."""
+
+    def test_failed_first_refresh_releases_client_and_subscriptions(self, monkeypatch):
+        import asyncio
+        from unittest.mock import AsyncMock, MagicMock
+
+        import pytest
+
+        import custom_components.bacnet as integration
+        import custom_components.bacnet.bacnet_client as client_mod
+        import custom_components.bacnet.coordinator as coord_mod
+
+        client = MagicMock()
+        client.connect = AsyncMock()
+        client.disconnect = AsyncMock()
+        client.local_port = 47808
+        monkeypatch.setattr(client_mod, "BACnetClient", MagicMock(return_value=client))
+
+        coordinator = MagicMock()
+        coordinator.client = client
+        coordinator.async_config_entry_first_refresh = AsyncMock(
+            side_effect=RuntimeError("device offline")
+        )
+        coordinator.async_shutdown = AsyncMock()
+        monkeypatch.setattr(
+            coord_mod, "BACnetCoordinator", MagicMock(return_value=coordinator)
+        )
+
+        hass = MagicMock()
+        hass.data = {}
+        entry = MagicMock()
+        entry.data = {"local_port": 47808}
+        entry.options = {}
+
+        with pytest.raises(RuntimeError):
+            asyncio.run(integration.async_setup_entry(hass, entry))
+
+        coordinator.async_shutdown.assert_awaited_once()
+        client.disconnect.assert_awaited_once()
+        assert hass.data["bacnet"]["_port_clients"] == {}

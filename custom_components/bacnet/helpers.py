@@ -50,3 +50,53 @@ def mask_address(addr: str | object) -> str:
     if len(octets) == 4:
         return f"{octets[0]}.x.x.{octets[3]}{port_suffix}"
     return addr_str
+
+
+def default_domain_for(obj: dict[str, Any]) -> str:
+    """Return the default HA domain for a BACnet object (type + commandability).
+
+    Value-type objects (AV, BV, MSV) only map to a writable domain when they
+    are commandable (have a Priority Array) — the device rejects writes
+    otherwise. Single source of truth for setup, the coordinator and the
+    options flow, so they can never disagree.
+    """
+    from .const import (  # local import avoids a cycle at module load
+        DEFAULT_DOMAIN_MAP,
+        OBJECT_TYPE_ANALOG_VALUE,
+        OBJECT_TYPE_BINARY_VALUE,
+        OBJECT_TYPE_MULTI_STATE_VALUE,
+    )
+
+    obj_type = obj["object_type"]
+    commandable = obj.get("commandable", False)
+    if obj_type == OBJECT_TYPE_BINARY_VALUE:
+        return "switch" if commandable else "binary_sensor"
+    if obj_type in {OBJECT_TYPE_ANALOG_VALUE, OBJECT_TYPE_MULTI_STATE_VALUE}:
+        return "number" if commandable else "sensor"
+    return DEFAULT_DOMAIN_MAP.get(obj_type, "sensor")
+
+
+def stale_domain_overrides(
+    objects: list[dict[str, Any]], domain_overrides: dict[str, str]
+) -> list[str]:
+    """Return keys of overrides left behind by the pre-1.0.47 options-flow bug.
+
+    That bug stored the type-only DEFAULT_DOMAIN_MAP value as an explicit
+    override for every object. Only the overrides where that value differs
+    from the commandable-aware default are harmful: a non-commandable BV
+    forced to "switch", or a commandable AV/MSV stuck on read-only "sensor".
+    Any other value was a deliberate user choice.
+    """
+    from .const import DEFAULT_DOMAIN_MAP  # local import avoids a cycle at module load
+
+    stale = []
+    for obj in objects:
+        key = object_key(obj)
+        override = domain_overrides.get(key)
+        if (
+            override is not None
+            and override == DEFAULT_DOMAIN_MAP.get(obj["object_type"])
+            and override != default_domain_for(obj)
+        ):
+            stale.append(key)
+    return stale

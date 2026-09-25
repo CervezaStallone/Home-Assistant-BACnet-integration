@@ -19,6 +19,24 @@ from custom_components.bacnet.const import (
 from custom_components.bacnet.coordinator import BACnetCoordinator
 
 
+def _batch_metadata(coord, per_object):
+    """Mock client.read_objects_metadata from a per-object AsyncMock."""
+    from unittest.mock import AsyncMock
+
+    async def _batch(device_address, objects):
+        result = {}
+        for obj in objects:
+            key = f"{obj['object_type']}:{obj['instance']}"
+            result[key] = await per_object(
+                device_address=device_address,
+                object_type=obj["object_type"],
+                instance=obj["instance"],
+            )
+        return result
+
+    coord.client.read_objects_metadata = AsyncMock(side_effect=_batch)
+
+
 def _make_coordinator(
     objects=None, domain_overrides=None, cov_overrides=None, enable_cov=True
 ):
@@ -35,6 +53,8 @@ def _make_coordinator(
     # COV-triggered metadata check (most of them) just need it not to leak
     # an "never awaited" warning. Tests that DO care override this.
     hass.async_create_task = MagicMock(side_effect=lambda coro: coro.close())
+    # Debounced metadata persists fire immediately unless a test captures them.
+    hass.loop.call_later = MagicMock(side_effect=lambda delay, cb: cb() or MagicMock())
 
     coord = BACnetCoordinator(
         hass=hass,
@@ -507,13 +527,16 @@ class TestRefreshMetadata:
             "commandable": False,
         }
         coord = _make_coordinator(objects=[obj])
-        coord.client.refresh_object_metadata = AsyncMock(
-            return_value={
-                "object_name": "New Name",
-                "description": "",
-                "units": "degrees-celsius",
-                "commandable": False,
-            }
+        _batch_metadata(
+            coord,
+            AsyncMock(
+                return_value={
+                    "object_name": "New Name",
+                    "description": "",
+                    "units": "degrees-celsius",
+                    "commandable": False,
+                }
+            ),
         )
 
         changed = asyncio.run(coord.async_refresh_metadata())
@@ -538,7 +561,7 @@ class TestRefreshMetadata:
             "commandable": False,
         }
         coord = _make_coordinator(objects=[obj])
-        coord.client.refresh_object_metadata = AsyncMock(return_value=dict(obj))
+        _batch_metadata(coord, AsyncMock(return_value=dict(obj)))
 
         changed = asyncio.run(coord.async_refresh_metadata())
 
@@ -551,7 +574,7 @@ class TestRefreshMetadata:
 
         obj = {"object_type": 0, "instance": 1, "object_name": "Same"}
         coord = _make_coordinator(objects=[obj])
-        coord.client.refresh_object_metadata = AsyncMock(return_value=None)
+        _batch_metadata(coord, AsyncMock(return_value=None))
 
         changed = asyncio.run(coord.async_refresh_metadata())
 
@@ -564,9 +587,7 @@ class TestRefreshMetadata:
 
         obj = {"object_type": 0, "instance": 1}
         coord = _make_coordinator(objects=[obj])
-        coord.client.refresh_object_metadata = AsyncMock(
-            side_effect=RuntimeError("boom")
-        )
+        _batch_metadata(coord, AsyncMock(side_effect=RuntimeError("boom")))
 
         changed = asyncio.run(coord.async_refresh_metadata())
 
@@ -595,7 +616,7 @@ class TestMetadataRefreshTiming:
     def test_triggered_once_interval_elapses(self):
         import asyncio
         from datetime import datetime, timedelta, timezone
-        from unittest.mock import AsyncMock
+        from unittest.mock import AsyncMock, MagicMock
 
         coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
         coord._setup_subscriptions = AsyncMock()
@@ -604,10 +625,17 @@ class TestMetadataRefreshTiming:
         )
         coord.async_refresh_metadata = AsyncMock()
         coord._last_metadata_refresh = datetime.now(timezone.utc) - timedelta(hours=2)
+        scheduled = []
+        coord.hass.async_create_background_task = MagicMock(
+            side_effect=lambda coro, name: scheduled.append(coro)
+        )
 
         asyncio.run(coord._async_update_data())
 
-        coord.async_refresh_metadata.assert_awaited_once()
+        # Scheduled in the background — the poll cycle does not wait for it.
+        coord.async_refresh_metadata.assert_called_once()
+        assert len(scheduled) == 1
+        scheduled[0].close()
 
     def test_not_triggered_on_failed_poll(self):
         """A failed poll must not attempt a metadata refresh either."""
@@ -892,8 +920,9 @@ class TestMetadataChangeTriggersRealReload:
         coord.entry.data[CONF_SELECTED_OBJECTS] = coord.objects
         pre_change_entry_data = dict(coord.entry.data)
 
-        coord.client.refresh_object_metadata = AsyncMock(
-            return_value={"object_name": "Old", "units": "degrees-celsius"}
+        _batch_metadata(
+            coord,
+            AsyncMock(return_value={"object_name": "Old", "units": "degrees-celsius"}),
         )
 
         asyncio.run(coord.async_refresh_metadata())
@@ -939,3 +968,306 @@ class TestMetadataChangeTriggersRealReload:
             "data"
         ]
         assert persisted_data != pre_change_entry_data
+
+
+# ---------------------------------------------------------------------------
+# covIncrement is only written when it differs (avoids NV-memory writes on
+# every setup/reload)
+# ---------------------------------------------------------------------------
+
+
+class TestCovIncrementWriteSkipping:
+    def _run(self, device_value):
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
+        coord.cov_increment = 0.1
+        coord.client.read_property = AsyncMock(return_value=device_value)
+        coord.client.write_property = AsyncMock(return_value=True)
+        coord.client.subscribe_cov = AsyncMock(return_value="sub")
+        asyncio.run(coord._setup_subscriptions())
+        return coord.client.write_property
+
+    def test_equal_value_is_not_rewritten(self):
+        # Device stores covIncrement as a float32 REAL.
+        self._run(0.10000000149011612).assert_not_awaited()
+
+    def test_different_value_is_written(self):
+        self._run(0.5).assert_awaited_once()
+
+    def test_unreadable_value_is_written(self):
+        self._run(None).assert_awaited_once()
+
+
+# ---------------------------------------------------------------------------
+# COV setup runs in parallel and stops probing a device that rejects COV
+# ---------------------------------------------------------------------------
+
+
+class TestParallelCovSetup:
+    def _coord(self, n, subscribe):
+        from unittest.mock import AsyncMock
+
+        coord = _make_coordinator(
+            objects=[{"object_type": 3, "instance": i} for i in range(n)]
+        )
+        coord.client.subscribe_cov = AsyncMock(side_effect=subscribe)
+        return coord
+
+    def test_subscriptions_run_concurrently_within_limit(self):
+        import asyncio
+
+        from custom_components.bacnet.const import MAX_CONCURRENT_REQUESTS
+
+        state = {"in_flight": 0, "peak": 0}
+
+        async def subscribe(**kwargs):
+            state["in_flight"] += 1
+            state["peak"] = max(state["peak"], state["in_flight"])
+            await asyncio.sleep(0.001)
+            state["in_flight"] -= 1
+            return f"sub-{kwargs['instance']}"
+
+        coord = self._coord(12, subscribe)
+        asyncio.run(coord._setup_subscriptions())
+        assert len(coord._cov_subscriptions) == 12
+        assert 1 < state["peak"] <= MAX_CONCURRENT_REQUESTS
+
+    def test_device_rejecting_first_batch_is_not_probed_further(self):
+        import asyncio
+
+        from custom_components.bacnet.const import MAX_CONCURRENT_REQUESTS
+
+        async def subscribe(**kwargs):
+            return None
+
+        coord = self._coord(20, subscribe)
+        asyncio.run(coord._setup_subscriptions())
+        assert coord.client.subscribe_cov.await_count == MAX_CONCURRENT_REQUESTS
+        assert len(coord._polled_objects) == 20
+
+    def test_partial_cov_support_keeps_trying_all_objects(self):
+        import asyncio
+
+        async def subscribe(**kwargs):
+            return "sub" if kwargs["instance"] == 0 else None
+
+        coord = self._coord(20, subscribe)
+        asyncio.run(coord._setup_subscriptions())
+        assert coord.client.subscribe_cov.await_count == 20
+        assert len(coord._polled_objects) == 19
+
+
+# ---------------------------------------------------------------------------
+# COV notifications only refresh the entity of the object that changed
+# ---------------------------------------------------------------------------
+
+
+class TestPerObjectCovListeners:
+    def _coord(self):
+        from unittest.mock import MagicMock
+
+        coord = _make_coordinator()
+        coord.data = {"0:1": {"presentValue": 1.0}, "0:2": {"presentValue": 2.0}}
+        coord.async_update_listeners = MagicMock()
+        return coord
+
+    def test_only_listener_for_changed_object_fires(self):
+        from unittest.mock import MagicMock
+
+        coord = self._coord()
+        a, b = MagicMock(), MagicMock()
+        coord.async_add_object_listener("0:1", a)
+        coord.async_add_object_listener("0:2", b)
+
+        coord._handle_cov_notification("0:1", {"presentValue": 5.0})
+
+        a.assert_called_once()
+        b.assert_not_called()
+        coord.async_update_listeners.assert_not_called()
+        assert coord.data["0:1"]["presentValue"] == 5.0
+
+    def test_removed_listener_is_not_called(self):
+        from unittest.mock import MagicMock
+
+        coord = self._coord()
+        a = MagicMock()
+        remove = coord.async_add_object_listener("0:1", a)
+        remove()
+        coord._handle_cov_notification("0:1", {"presentValue": 5.0})
+        a.assert_not_called()
+
+    def test_previous_data_snapshot_is_not_mutated(self):
+        coord = self._coord()
+        before = coord.data
+        coord._handle_cov_notification("0:1", {"presentValue": 5.0})
+        assert before["0:1"]["presentValue"] == 1.0
+
+
+# ---------------------------------------------------------------------------
+# Metadata sweep: background, never overlapping, parallel, cancelled on unload
+# ---------------------------------------------------------------------------
+
+
+class TestMetadataSweepBackground:
+    def _polling_coord(self):
+        from datetime import datetime, timedelta, timezone
+        from unittest.mock import AsyncMock, MagicMock
+
+        coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
+        coord._setup_subscriptions = AsyncMock()
+        coord.client.poll_objects = AsyncMock(
+            return_value={"0:1": {"presentValue": 1.0, "statusFlags": [False] * 4}}
+        )
+        coord._last_metadata_refresh = datetime.now(timezone.utc) - timedelta(hours=2)
+        coord.hass.async_create_background_task = MagicMock(
+            side_effect=lambda coro, name: coro.close() or MagicMock(done=lambda: False)
+        )
+        return coord
+
+    def test_running_sweep_is_not_started_twice(self):
+        import asyncio
+        from datetime import datetime, timedelta, timezone
+
+        coord = self._polling_coord()
+        asyncio.run(coord._async_update_data())
+        coord._last_metadata_refresh = datetime.now(timezone.utc) - timedelta(hours=2)
+        asyncio.run(coord._async_update_data())
+        assert coord.hass.async_create_background_task.call_count == 1
+
+    def test_shutdown_cancels_running_sweep(self):
+        import asyncio
+        from unittest.mock import MagicMock
+
+        coord = _make_coordinator()
+        task = MagicMock()
+        task.done.return_value = False
+        coord._metadata_task = task
+        asyncio.run(coord.async_shutdown())
+        task.cancel.assert_called_once()
+
+    def test_sweep_reads_all_objects_in_one_batch_call(self):
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        objects = [
+            {"object_type": 0, "instance": i, "object_name": f"o{i}"} for i in range(12)
+        ]
+        coord = _make_coordinator(objects=objects)
+        coord.entry.data = {**coord.entry.data, CONF_SELECTED_OBJECTS: objects}
+        coord.client.read_objects_metadata = AsyncMock(
+            return_value={
+                f"0:{i}": {**objects[i], "object_name": f"new{i}"} for i in range(12)
+            }
+        )
+        assert asyncio.run(coord.async_refresh_metadata()) is True
+        coord.client.read_objects_metadata.assert_awaited_once()
+        assert [o["object_name"] for o in coord.objects] == [
+            f"new{i}" for i in range(12)
+        ]
+
+    def test_new_metadata_fields_are_diffed(self):
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        obj = {"object_type": 19, "instance": 1, "object_name": "Mode"}
+        coord = _make_coordinator(objects=[obj])
+        coord.client.read_objects_metadata = AsyncMock(
+            return_value={"19:1": {**obj, "state_text": ["Off", "On"]}}
+        )
+        assert asyncio.run(coord.async_refresh_metadata()) is True
+        assert coord.objects[0]["state_text"] == ["Off", "On"]
+
+
+# ---------------------------------------------------------------------------
+# COV-triggered metadata changes are coalesced into one reload
+# ---------------------------------------------------------------------------
+
+
+class TestMetadataPersistDebounce:
+    def _coord(self):
+        from unittest.mock import MagicMock
+
+        objects = [
+            {"object_type": 0, "instance": 1, "units": "a"},
+            {"object_type": 0, "instance": 2, "units": "a"},
+        ]
+        coord = _make_coordinator(objects=objects)
+        coord.entry.data = {**coord.entry.data, CONF_SELECTED_OBJECTS: objects}
+        self.scheduled = []
+        coord.hass.loop.call_later = MagicMock(
+            side_effect=lambda delay, cb: self.scheduled.append(cb) or MagicMock()
+        )
+        return coord
+
+    def test_changes_within_window_cause_one_reload(self):
+        coord = self._coord()
+        coord._handle_cov_property_notification("0:1", "units", "b")
+        coord._handle_cov_property_notification("0:2", "units", "c")
+        coord.hass.config_entries.async_update_entry.assert_not_called()
+        assert len(self.scheduled) == 1
+
+        self.scheduled[0]()
+
+        coord.hass.config_entries.async_update_entry.assert_called_once()
+        persisted = coord.hass.config_entries.async_update_entry.call_args.kwargs[
+            "data"
+        ][CONF_SELECTED_OBJECTS]
+        assert [o["units"] for o in persisted] == ["b", "c"]
+
+    def test_immediate_persist_absorbs_pending_one(self):
+        coord = self._coord()
+        coord._handle_cov_property_notification("0:1", "units", "b")
+        handle = coord._persist_handle
+        coord._persist_metadata_change()
+        handle.cancel.assert_called_once()
+        coord.hass.config_entries.async_update_entry.assert_called_once()
+
+    def test_shutdown_cancels_pending_persist(self):
+        import asyncio
+
+        coord = self._coord()
+        coord._handle_cov_property_notification("0:1", "units", "b")
+        handle = coord._persist_handle
+        asyncio.run(coord.async_shutdown())
+        handle.cancel.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# After a write only the written object is re-read
+# ---------------------------------------------------------------------------
+
+
+class TestRefreshSingleObject:
+    def _coord(self, polled):
+        from unittest.mock import AsyncMock, MagicMock
+
+        coord = _make_coordinator()
+        coord.data = {"0:1": {"presentValue": 1.0}, "0:2": {"presentValue": 2.0}}
+        coord.client.poll_objects = AsyncMock(return_value=polled)
+        coord.async_request_refresh = AsyncMock()
+        self.listener = MagicMock()
+        coord.async_add_object_listener("0:1", self.listener)
+        return coord
+
+    def test_reads_only_that_object_and_notifies_it(self):
+        import asyncio
+
+        coord = self._coord({"0:1": {"presentValue": 9.0, "statusFlags": None}})
+        asyncio.run(coord.async_refresh_object({"object_type": 0, "instance": 1}))
+
+        objects = coord.client.poll_objects.call_args.kwargs["objects"]
+        assert objects == [{"object_type": 0, "instance": 1}]
+        assert coord.data["0:1"]["presentValue"] == 9.0
+        assert coord.data["0:2"]["presentValue"] == 2.0
+        self.listener.assert_called_once()
+        coord.async_request_refresh.assert_not_awaited()
+
+    def test_falls_back_to_full_refresh_when_read_fails(self):
+        import asyncio
+
+        coord = self._coord({"0:1": {"presentValue": None, "statusFlags": None}})
+        asyncio.run(coord.async_refresh_object({"object_type": 0, "instance": 1}))
+        coord.async_request_refresh.assert_awaited_once()
+        assert coord.data["0:1"]["presentValue"] == 1.0

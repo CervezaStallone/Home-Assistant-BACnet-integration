@@ -19,13 +19,6 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .bacnet_client import BACnetClient
-from .const import (
-    DATA_CLIENT,
-    DATA_COORDINATOR,
-    DATA_OBJECTS,
-    DOMAIN,
-)
 from .coordinator import BACnetCoordinator
 from .entity import BACnetEntity
 
@@ -38,9 +31,8 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up BACnet switch entities from a config entry."""
-    data = hass.data[DOMAIN][entry.entry_id]
-    coordinator: BACnetCoordinator = data[DATA_COORDINATOR]
-    objects: list[dict[str, Any]] = data[DATA_OBJECTS]
+    coordinator: BACnetCoordinator = entry.runtime_data.coordinator
+    objects: list[dict[str, Any]] = coordinator.objects
 
     entities: list[BACnetSwitch] = []
     for obj in objects:
@@ -83,41 +75,13 @@ class BACnetSwitch(BACnetEntity, SwitchEntity):
         return bool(int(value))
 
     async def async_turn_on(self, **kwargs: Any) -> None:
-        """Turn the switch on by writing active (1) to presentValue.
-
-        For commandable objects this writes at the configured priority level
-        in the Priority Array.
-        """
-        client: BACnetClient = self.hass.data[DOMAIN][self._entry.entry_id][DATA_CLIENT]
-        success = await client.write_property(
-            device_address=self.coordinator.device_address,
-            object_type=self._object_type,
-            instance=self._instance,
-            property_name="presentValue",
-            value=1,  # active
-            priority=self.coordinator.write_priority,
-            commandable=self.is_commandable,
-        )
-        if success:
-            # Optimistic update: immediately reflect in HA
-            await self.coordinator.async_request_refresh()
+        """Turn the switch on by writing active (1) at the configured priority."""
+        await self.async_write_present_value(1)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the switch off by writing inactive (0) at the configured priority.
 
-        Per BACnet standard, for commandable objects this writes at the
-        specified priority level in the Priority Array, setting the output
-        to inactive (0).
+        This commands the output off. To release HA's override instead, use
+        the bacnet.relinquish service.
         """
-        client: BACnetClient = self.hass.data[DOMAIN][self._entry.entry_id][DATA_CLIENT]
-        success = await client.write_property(
-            device_address=self.coordinator.device_address,
-            object_type=self._object_type,
-            instance=self._instance,
-            property_name="presentValue",
-            value=0,  # inactive
-            priority=self.coordinator.write_priority,
-            commandable=self.is_commandable,
-        )
-        if success:
-            await self.coordinator.async_request_refresh()
+        await self.async_write_present_value(0)

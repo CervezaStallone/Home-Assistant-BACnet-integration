@@ -1,0 +1,215 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "BACnet/IP-netwerkinstellingen",
+        "description": "Stel de lokale BACnet/IP-netwerkinterface in. Wil je een specifiek apparaat via zijn IP-adres toevoegen, vul dan hieronder het doeladres in. Laat het leeg om alle apparaten op het netwerk automatisch te zoeken.",
+        "data": {
+          "local_ip": "Lokaal IP-adres (binden)",
+          "local_port": "BACnet/IP-poort",
+          "target_address": "Adres van het doelapparaat",
+          "target_device_id": "Apparaat-ID (instance)",
+          "use_bbmd": "BBMD / Foreign Device Registration inschakelen",
+          "bbmd_address": "BBMD-adres (IP:poort)",
+          "bbmd_ttl": "Foreign Device TTL (seconden)"
+        },
+        "data_description": {
+          "local_ip": "Het IP-adres van de netwerkinterface van deze Home Assistant-server om aan te binden. Voeg het subnetprefix toe (bijv. 192.168.1.100/24) zodat broadcasts (Who-Is-discovery) werken — zonder prefix mislukt het zoeken op het lokale subnet. Dit is NIET het adres van het BACnet-apparaat. Leeg laten voor automatische detectie.",
+          "local_port": "De standaard BACnet/IP-poort is 47808 (0xBAC0).",
+          "target_address": "IP-adres van het BACnet-apparaat dat je wilt toevoegen (bijv. 192.168.1.50 of 192.168.1.50:47808). Leeg laten om apparaten automatisch te zoeken via een Who-Is-broadcast.",
+          "target_device_id": "Het BACnet Device Object Instance-nummer (DOI). Wordt alleen gebruikt als er een doeladres is ingevuld. Laat op 0 voor automatische detectie.",
+          "use_bbmd": "Schakel dit in als de BACnet-apparaten in een ander subnet/VLAN zitten en er een BBMD beschikbaar is.",
+          "bbmd_address": "IP-adres en poort van de BBMD (bijv. 192.168.2.1:47808).",
+          "bbmd_ttl": "Geldigheidsduur (time-to-live) van de Foreign Device Registration in seconden."
+        }
+      },
+      "discovery": {
+        "title": "Apparaten zoeken",
+        "description": "Er wordt naar BACnet-apparaten op het netwerk gezocht. Dit kan een paar seconden duren...",
+        "data": {
+          "device_id": "Kies een BACnet-apparaat"
+        },
+        "data_description": {
+          "device_id": "Kies het apparaat dat je aan Home Assistant wilt toevoegen."
+        }
+      },
+      "select_objects": {
+        "title": "BACnet-objecten kiezen",
+        "description": "Kies de BACnet-objecten die je als Home Assistant-entiteiten wilt importeren. Met 'Alles selecteren' zet je alle objecten in één keer aan.",
+        "data": {
+          "device_name": "Apparaatnaam",
+          "select_all": "Alle objecten selecteren",
+          "selected_objects": "BACnet-objecten"
+        },
+        "data_description": {
+          "device_name": "Naam van dit apparaat in Home Assistant. Vooraf ingevuld met de BACnet-objectName.",
+          "selected_objects": "Vink de objecten aan die je in Home Assistant wilt volgen of bedienen."
+        }
+      },
+      "reconfigure": {
+        "title": "BACnet-verbinding opnieuw instellen",
+        "description": "Wijzig de netwerkinstellingen of het adres van dit BACnet-apparaat. Entiteiten, hun geschiedenis en alle opties blijven behouden; de integratie herlaadt met de nieuwe instellingen.",
+        "data": {
+          "local_ip": "Lokaal IP-adres (binden)",
+          "local_port": "BACnet/IP-poort",
+          "use_bbmd": "BBMD / Foreign Device Registration inschakelen",
+          "bbmd_address": "BBMD-adres (IP:poort)",
+          "bbmd_ttl": "Foreign Device TTL (seconden)",
+          "device_address": "Apparaatadres"
+        },
+        "data_description": {
+          "local_ip": "Het IP-adres van de netwerkinterface van deze Home Assistant-server om aan te binden. Voeg het subnetprefix toe (bijv. 192.168.1.100/24) zodat broadcasts (Who-Is-discovery) werken — zonder prefix mislukt het zoeken op het lokale subnet. Dit is NIET het adres van het BACnet-apparaat. Leeg laten voor automatische detectie.",
+          "local_port": "De standaard BACnet/IP-poort is 47808 (0xBAC0).",
+          "use_bbmd": "Schakel dit in als de BACnet-apparaten in een ander subnet/VLAN zitten en er een BBMD beschikbaar is.",
+          "bbmd_address": "IP-adres en poort van de BBMD (bijv. 192.168.2.1:47808).",
+          "bbmd_ttl": "Geldigheidsduur (time-to-live) van de Foreign Device Registration in seconden.",
+          "device_address": "IP-adres (en eventueel poort) van het BACnet-apparaat, bijv. 192.168.1.50 of 192.168.1.50:47808, of een gerouteerd adres zoals 20000:1."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Kan geen verbinding maken met het BACnet-netwerk. Controleer je netwerkinstellingen en kijk in het Home Assistant-logboek voor details.",
+      "no_devices_found": "Er zijn geen BACnet-apparaten op het netwerk gevonden. Probeer het IP-adres van het apparaat in te vullen bij 'Adres van het doelapparaat'.",
+      "device_unreachable": "Het BACnet-apparaat op het opgegeven adres is niet bereikbaar. Controleer het IP-adres en de poort.",
+      "no_objects_found": "Er zijn op dit apparaat geen leesbare BACnet-objecten gevonden.",
+      "bbmd_registration_failed": "De Foreign Device Registration bij de BBMD is mislukt. Controleer het BBMD-adres.",
+      "invalid_ip": "Het opgegeven IP-adres is ongeldig.",
+      "timeout": "De bewerking duurde te lang. Het apparaat is mogelijk niet bereikbaar.",
+      "unknown": "Er is een onverwachte fout opgetreden."
+    },
+    "abort": {
+      "already_configured": "Dit BACnet-apparaat is al ingesteld.",
+      "reconfigure_successful": "Opnieuw instellen is gelukt."
+    }
+  },
+  "entity": {
+    "select": {
+      "write_priority": {
+        "name": "Schrijfprioriteit",
+        "state": {
+          "8": "8 – Handbediening (operator)",
+          "9": "9",
+          "12": "12",
+          "13": "13",
+          "14": "14",
+          "15": "15",
+          "16": "16 – Standaard (laagste)"
+        }
+      }
+    },
+    "button": {
+      "refresh_metadata": {
+        "name": "Objectmetadata vernieuwen"
+      }
+    },
+    "sensor": {
+      "last_successful_poll": {
+        "name": "Laatste geslaagde poll"
+      },
+      "cov_subscriptions": {
+        "name": "COV-abonnementen"
+      },
+      "consecutive_failed_polls": {
+        "name": "Mislukte polls op rij"
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opties BACnet-integratie",
+        "description": "Stel het updategedrag, de naamgeving van entiteiten en de objectinstellingen van dit apparaat in.",
+        "data": {
+          "enable_cov": "COV-abonnementen (Change of Value) inschakelen",
+          "cov_increment": "COV-drempel voor analoge objecten",
+          "polling_interval": "Poll-interval (seconden)",
+          "use_description": "Description (property-id 28) gebruiken in plaats van de naam",
+          "rescan_objects": "Apparaat opnieuw scannen en objectselectie beheren",
+          "live_metadata_properties": "Live metadata-properties"
+        },
+        "data_description": {
+          "enable_cov": "Indien ingeschakeld abonneert de integratie zich op COV-meldingen. Ondersteunt het apparaat geen COV of mislukt het abonnement, dan wordt gepolld.",
+          "cov_increment": "Minimale waardeverandering op het apparaat voordat een COV-melding wordt verstuurd (alleen voor analoge objecten). Zet op 0 voor de standaardwaarde van het apparaat. Voorbeeld: 0,5 betekent een melding zodra de waarde minstens 0,5 verandert.",
+          "polling_interval": "Hoe vaak alle objecten worden gepolld, in seconden (minimaal 10). Pollen gebeurt altijd; COV voegt daartussen alleen snellere updates toe.",
+          "use_description": "Indien aangevinkt krijgen entiteiten hun naam uit de BACnet-property 'description' (ID 28) in plaats van 'objectName' (ID 77).",
+          "rescan_objects": "Leest de huidige Object_List van het apparaat opnieuw in, zodat je objecten kunt toevoegen die bij het instellen niet gekozen waren, of objecten die sindsdien aan het apparaat zijn toegevoegd. Al geïmporteerde objecten blijven standaard geselecteerd.",
+          "live_metadata_properties": "Properties die een eigen live COV-Property-abonnement krijgen in plaats van het periodiek opnieuw uitlezen. Elke property is een extra abonnement op het apparaat, en niet elk apparaat ondersteunt dit."
+        }
+      },
+      "rescan_objects": {
+        "title": "BACnet-objecten beheren",
+        "description": "De al geïmporteerde objecten zijn vooraf geselecteerd. Vink extra objecten aan om ze toe te voegen, of vink objecten uit om ze te verwijderen. Objectinstellingen blijven bewaard voor objecten die geselecteerd blijven."
+      },
+      "domain_mapping": {
+        "title": "Objecten aanpassen",
+        "description": "Vink de BACnet-objecten aan waarvan je het entiteittype, de COV-instelling of de temperatuursensor (bij climate) wilt wijzigen. Objecten met een eigen instelling zijn al aangevinkt. Niet-aangevinkte objecten gebruiken de standaardinstellingen.",
+        "data": {
+          "customize_objects": "Aan te passen objecten"
+        }
+      },
+      "customize_objects": {
+        "title": "Objecten aanpassen",
+        "description": "Per object: het entiteittype in Home Assistant, of COV wordt gebruikt en — voor objecten die al een climate-entiteit zijn — welk object de ruimtetemperatuur levert. Heb je een object net naar climate omgezet? Sla op en open de opties opnieuw om de temperatuursensor te kiezen."
+      }
+    },
+    "error": {
+      "invalid_polling_interval": "Het poll-interval moet minstens 10 seconden zijn.",
+      "no_objects_found": "Er zijn op dit apparaat geen leesbare BACnet-objecten gevonden.",
+      "unknown": "Er is een onverwachte fout opgetreden."
+    },
+    "abort": {
+      "cannot_connect": "Het BACnet-apparaat is niet bereikbaar om de objectlijst opnieuw te scannen. Controleer of het apparaat online is en probeer het opnieuw."
+    }
+  },
+  "issues": {
+    "stale_domain_overrides": {
+      "title": "Onjuiste entiteittypes op {device}",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Onjuiste entiteittypes herstellen",
+            "description": "Een eerdere versie van deze integratie heeft voor deze BACnet-objecten een entiteittype opgeslagen dat geen rekening houdt met of het object commandable is:\n\n{objects}\n\nNiet-commandable objecten met een schrijfbaar type (switch, number) weigeren elke schrijfactie; commandable objecten die op een alleen-lezen type (sensor) zijn blijven staan, kun je niet bedienen. Bevestig om deze instellingen te verwijderen. De objecten krijgen weer hun juiste standaardtype en de integratie herlaadt. Had je een van deze types bewust gekozen, stel het dan opnieuw in via de opties van de integratie."
+          }
+        }
+      }
+    },
+    "device_unreachable": {
+      "title": "{device} reageert niet",
+      "description": "Home Assistant heeft al meerdere polls geen gegevens ontvangen van het BACnet-apparaat {device}, en opnieuw verbinden hielp niet. De entiteiten zijn niet beschikbaar tot het apparaat weer antwoordt.\n\nControleer of het apparaat stroom heeft en op het netwerk zit, of het adres nog klopt (wijzigen kan via Opnieuw instellen) en — als er een BBMD wordt gebruikt — of de BBMD bereikbaar is. Deze melding verdwijnt vanzelf zodra het apparaat weer reageert."
+    }
+  },
+  "exceptions": {
+    "write_failed": {
+      "message": "Het BACnet-apparaat heeft de schrijfactie naar {object} geweigerd. Kijk in het Home Assistant-logboek voor de reden (bijvoorbeeld een verkeerde schrijfprioriteit of een object dat niet schrijfbaar is)."
+    },
+    "not_a_bacnet_object": {
+      "message": "{entity_id} is geen BACnet-objectentiteit van deze integratie."
+    }
+  },
+  "services": {
+    "relinquish": {
+      "name": "Vrijgeven (relinquish)",
+      "description": "Geeft het commando van Home Assistant op een BACnet-object vrij (schrijft Null op een prioriteitsniveau), zodat lagere prioriteiten of de Relinquish Default het overnemen.",
+      "fields": {
+        "priority": {
+          "name": "Prioriteit",
+          "description": "Prioriteitsniveau dat wordt vrijgegeven (1-16). Standaard de schrijfprioriteit van het apparaat."
+        }
+      }
+    },
+    "write_value": {
+      "name": "Waarde schrijven",
+      "description": "Schrijft eenmalig een waarde naar de present value van een BACnet-object, op een gekozen prioriteit, zonder de schrijfprioriteit van het apparaat te wijzigen.",
+      "fields": {
+        "value": {
+          "name": "Waarde",
+          "description": "Te schrijven waarde. Binaire objecten: 0 = inactief, 1 = actief."
+        },
+        "priority": {
+          "name": "Prioriteit",
+          "description": "Prioriteitsniveau waarop wordt geschreven (1-16). Standaard de schrijfprioriteit van het apparaat."
+        }
+      }
+    }
+  }
+}

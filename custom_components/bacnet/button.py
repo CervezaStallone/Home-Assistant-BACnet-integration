@@ -11,13 +11,14 @@ import logging
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DATA_COORDINATOR, DOMAIN
+from .const import DOMAIN
 from .coordinator import BACnetCoordinator
+from .entity import bacnet_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -28,7 +29,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the metadata refresh button for a BACnet device."""
-    coordinator: BACnetCoordinator = hass.data[DOMAIN][entry.entry_id][DATA_COORDINATOR]
+    coordinator: BACnetCoordinator = entry.runtime_data.coordinator
     async_add_entities([BACnetRefreshMetadataButton(coordinator, entry)])
 
 
@@ -36,6 +37,8 @@ class BACnetRefreshMetadataButton(CoordinatorEntity[BACnetCoordinator], ButtonEn
     """Button that forces an immediate object-metadata refresh from the device."""
 
     _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_translation_key = "refresh_metadata"
     _attr_icon = "mdi:refresh"
 
     def __init__(self, coordinator: BACnetCoordinator, entry: ConfigEntry) -> None:
@@ -43,30 +46,9 @@ class BACnetRefreshMetadataButton(CoordinatorEntity[BACnetCoordinator], ButtonEn
         self._entry = entry
 
         device_id = entry.data.get("device_id", "unknown")
-        device_name = entry.data.get("device_name", "BACnet Device")
-        vendor_name = entry.data.get("vendor_name", "BACnet")
-        model_name = entry.data.get("model_name", "")
-        fw_version = entry.data.get("firmware_version", "")
-        sw_version = entry.data.get("software_version", "")
-
         self._attr_unique_id = f"{DOMAIN}_{device_id}_refresh_metadata"
-        self._attr_name = "Refresh Object Metadata"
 
-        device_info = DeviceInfo(
-            identifiers={(DOMAIN, str(device_id))},
-            name=device_name,
-            manufacturer=vendor_name,
-        )
-        device_info["model"] = (
-            model_name if model_name else f"BACnet Device {device_id}"
-        )
-        if fw_version and sw_version:
-            device_info["sw_version"] = f"{fw_version} / {sw_version}"
-        elif fw_version:
-            device_info["sw_version"] = fw_version
-        elif sw_version:
-            device_info["sw_version"] = sw_version
-        self._attr_device_info = device_info
+        self._attr_device_info = bacnet_device_info(entry)
 
     async def async_press(self) -> None:
         """Force an immediate metadata refresh, bypassing the interval timer."""
