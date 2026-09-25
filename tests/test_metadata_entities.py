@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import ClassVar
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -134,3 +135,37 @@ class TestMultiStateText:
         from custom_components.bacnet.const import SUPPORTED_DOMAINS
 
         assert "select" in SUPPORTED_DOMAINS
+
+
+class TestClimateTemperatureSourceEntity:
+    _SP: ClassVar[dict] = {
+        "object_type": 2,
+        "instance": 4,
+        "commandable": True,
+        "object_name": "SP",
+    }
+
+    def _climate(self, sources):
+        data = {"2:4": {"presentValue": 21.0}, "0:3": {"presentValue": 19.26}}
+        entity = _make("climate", "BACnetClimate", self._SP, data)
+        entity.coordinator.climate_temperature_sources = sources
+        return entity
+
+    def test_current_temperature_from_source_object(self):
+        entity = self._climate({"2:4": "0:3"})
+        assert entity.current_temperature == 19.3
+        assert entity.target_temperature == 21.0
+
+    def test_without_source_setpoint_is_shown(self):
+        entity = self._climate({})
+        assert entity.current_temperature == 21.0
+
+    def test_listens_to_source_object_updates(self):
+        entity = self._climate({"2:4": "0:3"})
+        entity.async_write_ha_state = MagicMock()
+        asyncio.run(entity.async_added_to_hass())
+        keys = [
+            c.args[0]
+            for c in entity.coordinator.async_add_object_listener.call_args_list
+        ]
+        assert keys == ["2:4", "0:3"]

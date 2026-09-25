@@ -12,9 +12,9 @@ The entity provides:
   - Target temperature: read/write presentValue (with Priority Array)
   - HVAC mode: heating-only by default (can be extended)
 
-For full multi-point HVAC mapping, the user should use the domain_mapping
-to assign the setpoint object to "climate", and leave the actual room
-temperature sensor as "sensor".
+Map the setpoint object to "climate" in the options, and pick the room
+temperature object there as its temperature sensor; without one, the
+setpoint's own value is shown as the current temperature.
 """
 
 from __future__ import annotations
@@ -115,25 +115,33 @@ class BACnetClimate(BACnetEntity, ClimateEntity, RestoreEntity):
     # ------------------------------------------------------------------
 
     @property
-    def current_temperature(self) -> float | None:
-        """Return the current temperature reading.
+    def _temperature_source(self) -> str | None:
+        """obj_key of the object providing the room temperature, if configured."""
+        return self.coordinator.climate_temperature_sources.get(self._obj_key)
 
-        Since this entity maps a setpoint object, current_temperature
-        reflects the setpoint's presentValue. For a true room temperature,
-        the user should create a separate sensor entity.
-        """
-        value = self.get_present_value()
-        if value is None:
-            return None
+    @staticmethod
+    def _as_temperature(value: Any) -> float | None:
         try:
-            return round(float(value), 1)
+            return round(float(value), 1) if value is not None else None
         except (ValueError, TypeError):
             return None
 
     @property
+    def current_temperature(self) -> float | None:
+        """Return the room temperature.
+
+        Comes from the temperature object chosen in the options, or — when
+        none is configured — falls back to the setpoint's own presentValue.
+        """
+        source = self._temperature_source
+        if source is None:
+            return self.target_temperature
+        return self._as_temperature(self.coordinator.get_object_value(source))
+
+    @property
     def target_temperature(self) -> float | None:
         """Return the target temperature (setpoint)."""
-        return self.current_temperature
+        return self._as_temperature(self.get_present_value())
 
     @property
     def hvac_mode(self) -> HVACMode:
@@ -147,8 +155,14 @@ class BACnetClimate(BACnetEntity, ClimateEntity, RestoreEntity):
         return HVACMode.HEAT
 
     async def async_added_to_hass(self) -> None:
-        """Restore whether HA had relinquished its setpoint before restart."""
+        """Restore the relinquished flag; also follow the temperature object."""
         await super().async_added_to_hass()
+        if self._temperature_source is not None:
+            self.async_on_remove(
+                self.coordinator.async_add_object_listener(
+                    self._temperature_source, self.async_write_ha_state
+                )
+            )
         last_state = await self.async_get_last_state()
         if last_state is not None and last_state.state == HVACMode.OFF:
             self._relinquished = True
