@@ -38,7 +38,6 @@ from .const import (
     CONF_TARGET_DEVICE_ID,
     CONF_USE_BBMD,
     CONF_VENDOR_NAME,
-    DATA_CLIENT,
     DEFAULT_BBMD_TTL,
     DEFAULT_PORT,
     DOMAIN,
@@ -182,25 +181,15 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def _find_existing_client(self, local_port: int):
         """Return an already-connected BACnetClient bound to *local_port*, if any.
 
-        When a config entry is already loaded for the same BACnet/IP network
-        its client is stored in ``hass.data[DOMAIN][entry_id][DATA_CLIENT]``.
-        We can safely reuse it for discovery / object reads, avoiding a
-        duplicate UDP bind on the same port.
+        Loaded config entries share one client per local port (see
+        ``hass.data[DOMAIN]["_port_clients"]`` in __init__.py). Reusing it
+        for discovery / object reads avoids a duplicate UDP bind.
         """
-        domain_data = self.hass.data.get(DOMAIN, {})
-        for entry_id, entry_data in domain_data.items():
-            client = entry_data.get(DATA_CLIENT)
-            if (
-                client is not None
-                and getattr(client, "_local_port", None) == local_port
-                and getattr(client, "_app", None) is not None
-            ):
-                _LOGGER.debug(
-                    "Reusing existing BACnet client from entry %s (port %d)",
-                    entry_id,
-                    local_port,
-                )
-                return client
+        shared = self.hass.data.get(DOMAIN, {}).get("_port_clients", {}).get(local_port)
+        client = shared["client"] if shared else None
+        if client is not None and getattr(client, "_app", None) is not None:
+            _LOGGER.debug("Reusing existing BACnet client (port %d)", local_port)
+            return client
         return None
 
     # ------------------------------------------------------------------

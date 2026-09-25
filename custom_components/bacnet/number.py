@@ -21,10 +21,6 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .bacnet_client import BACnetClient
 from .const import (
-    DATA_CLIENT,
-    DATA_COORDINATOR,
-    DATA_OBJECTS,
-    DOMAIN,
     OBJECT_TYPE_MULTI_STATE_INPUT,
     OBJECT_TYPE_MULTI_STATE_OUTPUT,
     OBJECT_TYPE_MULTI_STATE_VALUE,
@@ -60,9 +56,8 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up BACnet number entities from a config entry."""
-    data = hass.data[DOMAIN][entry.entry_id]
-    coordinator: BACnetCoordinator = data[DATA_COORDINATOR]
-    objects: list[dict[str, Any]] = data[DATA_OBJECTS]
+    coordinator: BACnetCoordinator = entry.runtime_data.coordinator
+    objects: list[dict[str, Any]] = coordinator.objects
 
     entities: list[BACnetNumber] = []
     for obj in objects:
@@ -133,7 +128,7 @@ class BACnetNumber(BACnetEntity, NumberEntity):
         priority in the Priority Array. For non-commandable writable objects,
         priority is ignored by the BACnet device.
         """
-        client: BACnetClient = self.hass.data[DOMAIN][self._entry.entry_id][DATA_CLIENT]
+        client: BACnetClient = self.coordinator.client
         success = await client.write_property(
             device_address=self.coordinator.device_address,
             object_type=self._object_type,

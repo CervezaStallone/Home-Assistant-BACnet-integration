@@ -23,6 +23,30 @@ from .coordinator import BACnetCoordinator
 _LOGGER = logging.getLogger(__name__)
 
 
+def bacnet_device_info(entry: ConfigEntry) -> DeviceInfo:
+    """Build the HA device-registry info shared by every entity of a device."""
+    device_id = entry.data.get("device_id", "unknown")
+    model_name = entry.data.get("model_name", "")
+    fw_version = entry.data.get("firmware_version", "")
+    sw_version = entry.data.get("software_version", "")
+
+    device_info = DeviceInfo(
+        identifiers={(DOMAIN, str(device_id))},
+        name=entry.data.get("device_name", "BACnet Device"),
+        manufacturer=entry.data.get("vendor_name", "BACnet"),
+        model=model_name or f"BACnet Device {device_id}",
+    )
+    # BACnet firmwareRevision (Property 44) is the device firmware version.
+    # applicationSoftwareVersion (Property 12) is the app layer version.
+    # HA's sw_version field is the right place for firmware; there is no
+    # BACnet property for hardware revision so hw_version is left unset.
+    if fw_version and sw_version:
+        device_info["sw_version"] = f"{fw_version} / {sw_version}"
+    elif fw_version or sw_version:
+        device_info["sw_version"] = fw_version or sw_version
+    return device_info
+
+
 class BACnetEntity(CoordinatorEntity[BACnetCoordinator]):
     """Base class for BACnet entities.
 
@@ -68,33 +92,7 @@ class BACnetEntity(CoordinatorEntity[BACnetCoordinator]):
 
         # Device info for HA device registry — groups all entities under one device
         device_id = entry.data.get("device_id", "unknown")
-        device_name = entry.data.get("device_name", "BACnet Device")
-        vendor_name = entry.data.get("vendor_name", "BACnet")
-        model_name = entry.data.get("model_name", "")
-        sw_version = entry.data.get("software_version", "")
-        fw_version = entry.data.get("firmware_version", "")
-
-        device_info = DeviceInfo(
-            identifiers={(DOMAIN, str(device_id))},
-            name=device_name,
-            manufacturer=vendor_name,
-        )
-        if model_name:
-            device_info["model"] = model_name
-        else:
-            device_info["model"] = f"BACnet Device {device_id}"
-        # BACnet firmwareRevision (Property 44) is the device firmware version.
-        # applicationSoftwareVersion (Property 12) is the app layer version.
-        # HA's sw_version field is the right place for firmware; there is no
-        # BACnet property for hardware revision so hw_version is left unset.
-        if fw_version and sw_version:
-            device_info["sw_version"] = f"{fw_version} / {sw_version}"
-        elif fw_version:
-            device_info["sw_version"] = fw_version
-        elif sw_version:
-            device_info["sw_version"] = sw_version
-
-        self._attr_device_info = device_info
+        self._attr_device_info = bacnet_device_info(entry)
 
         # Unique ID: BACnet device instance + object type + instance.
         # Using the BACnet device_id (not entry_id) makes the unique_id stable

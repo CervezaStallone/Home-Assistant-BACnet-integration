@@ -34,12 +34,6 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
 from .bacnet_client import BACnetClient
-from .const import (
-    DATA_CLIENT,
-    DATA_COORDINATOR,
-    DATA_OBJECTS,
-    DOMAIN,
-)
 from .coordinator import BACnetCoordinator
 from .entity import BACnetEntity
 
@@ -52,9 +46,8 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up BACnet climate entities from a config entry."""
-    data = hass.data[DOMAIN][entry.entry_id]
-    coordinator: BACnetCoordinator = data[DATA_COORDINATOR]
-    objects: list[dict[str, Any]] = data[DATA_OBJECTS]
+    coordinator: BACnetCoordinator = entry.runtime_data.coordinator
+    objects: list[dict[str, Any]] = coordinator.objects
 
     entities: list[BACnetClimate] = []
     for obj in objects:
@@ -168,7 +161,7 @@ class BACnetClimate(BACnetEntity, ClimateEntity, RestoreEntity):
         if temperature is None:
             return
 
-        client: BACnetClient = self.hass.data[DOMAIN][self._entry.entry_id][DATA_CLIENT]
+        client: BACnetClient = self.coordinator.client
         success = await client.write_property(
             device_address=self.coordinator.device_address,
             object_type=self._object_type,
@@ -190,7 +183,7 @@ class BACnetClimate(BACnetEntity, ClimateEntity, RestoreEntity):
               releasing the override and allowing the Relinquish Default to
               take effect on the BACnet device.
         """
-        client: BACnetClient = self.hass.data[DOMAIN][self._entry.entry_id][DATA_CLIENT]
+        client: BACnetClient = self.coordinator.client
 
         if hvac_mode == HVACMode.OFF:
             success = await client.relinquish(

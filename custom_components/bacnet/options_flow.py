@@ -29,13 +29,11 @@ from .const import (
     CONF_RESCAN_OBJECTS,
     CONF_SELECTED_OBJECTS,
     CONF_USE_DESCRIPTION,
-    DATA_CLIENT,
     DEFAULT_COV_INCREMENT,
     DEFAULT_ENABLE_COV,
     DEFAULT_LIVE_METADATA_PROPERTIES,
     DEFAULT_POLLING_INTERVAL,
     DEFAULT_USE_DESCRIPTION,
-    DOMAIN,
     LIVE_METADATA_PROPERTY_CHOICES,
     SUPPORTED_DOMAINS,
 )
@@ -141,8 +139,8 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
         to this device), so no new socket or discovery step is needed.
         """
         errors: dict[str, str] = {}
-        entry_data = self.hass.data.get(DOMAIN, {}).get(self._config_entry.entry_id, {})
-        client = entry_data.get(DATA_CLIENT)
+        runtime_data = getattr(self._config_entry, "runtime_data", None)
+        client = runtime_data.coordinator.client if runtime_data else None
 
         current_objects: list[dict[str, Any]] = self._config_entry.data.get(
             CONF_SELECTED_OBJECTS, []
