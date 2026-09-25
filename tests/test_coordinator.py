@@ -595,7 +595,7 @@ class TestMetadataRefreshTiming:
     def test_triggered_once_interval_elapses(self):
         import asyncio
         from datetime import datetime, timedelta, timezone
-        from unittest.mock import AsyncMock
+        from unittest.mock import AsyncMock, MagicMock
 
         coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
         coord._setup_subscriptions = AsyncMock()
@@ -604,10 +604,17 @@ class TestMetadataRefreshTiming:
         )
         coord.async_refresh_metadata = AsyncMock()
         coord._last_metadata_refresh = datetime.now(timezone.utc) - timedelta(hours=2)
+        scheduled = []
+        coord.hass.async_create_background_task = MagicMock(
+            side_effect=lambda coro, name: scheduled.append(coro)
+        )
 
         asyncio.run(coord._async_update_data())
 
-        coord.async_refresh_metadata.assert_awaited_once()
+        # Scheduled in the background — the poll cycle does not wait for it.
+        coord.async_refresh_metadata.assert_called_once()
+        assert len(scheduled) == 1
+        scheduled[0].close()
 
     def test_not_triggered_on_failed_poll(self):
         """A failed poll must not attempt a metadata refresh either."""
@@ -1074,3 +1081,80 @@ class TestPerObjectCovListeners:
         before = coord.data
         coord._handle_cov_notification("0:1", {"presentValue": 5.0})
         assert before["0:1"]["presentValue"] == 1.0
+
+
+# ---------------------------------------------------------------------------
+# Metadata sweep: background, never overlapping, parallel, cancelled on unload
+# ---------------------------------------------------------------------------
+
+
+class TestMetadataSweepBackground:
+    def _polling_coord(self):
+        from datetime import datetime, timedelta, timezone
+        from unittest.mock import AsyncMock, MagicMock
+
+        coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
+        coord._setup_subscriptions = AsyncMock()
+        coord.client.poll_objects = AsyncMock(
+            return_value={"0:1": {"presentValue": 1.0, "statusFlags": [False] * 4}}
+        )
+        coord._last_metadata_refresh = datetime.now(timezone.utc) - timedelta(hours=2)
+        coord.hass.async_create_background_task = MagicMock(
+            side_effect=lambda coro, name: coro.close() or MagicMock(done=lambda: False)
+        )
+        return coord
+
+    def test_running_sweep_is_not_started_twice(self):
+        import asyncio
+        from datetime import datetime, timedelta, timezone
+
+        coord = self._polling_coord()
+        asyncio.run(coord._async_update_data())
+        coord._last_metadata_refresh = datetime.now(timezone.utc) - timedelta(hours=2)
+        asyncio.run(coord._async_update_data())
+        assert coord.hass.async_create_background_task.call_count == 1
+
+    def test_shutdown_cancels_running_sweep(self):
+        import asyncio
+        from unittest.mock import MagicMock
+
+        coord = _make_coordinator()
+        task = MagicMock()
+        task.done.return_value = False
+        coord._metadata_task = task
+        asyncio.run(coord.async_shutdown())
+        task.cancel.assert_called_once()
+
+    def test_sweep_reads_objects_in_parallel_and_keeps_order(self):
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        from custom_components.bacnet.const import MAX_CONCURRENT_REQUESTS
+
+        objects = [
+            {"object_type": 0, "instance": i, "object_name": f"o{i}"} for i in range(12)
+        ]
+        coord = _make_coordinator(objects=objects)
+        coord.entry.data = {**coord.entry.data, CONF_SELECTED_OBJECTS: objects}
+        state = {"in_flight": 0, "peak": 0}
+
+        async def refresh(**kwargs):
+            state["in_flight"] += 1
+            state["peak"] = max(state["peak"], state["in_flight"])
+            await asyncio.sleep(0.001)
+            state["in_flight"] -= 1
+            return {
+                "object_type": 0,
+                "instance": kwargs["instance"],
+                "object_name": f"new{kwargs['instance']}",
+                "description": None,
+                "units": None,
+                "commandable": False,
+            }
+
+        coord.client.refresh_object_metadata = AsyncMock(side_effect=refresh)
+        assert asyncio.run(coord.async_refresh_metadata()) is True
+        assert 1 < state["peak"] <= MAX_CONCURRENT_REQUESTS
+        assert [o["object_name"] for o in coord.objects] == [
+            f"new{i}" for i in range(12)
+        ]
