@@ -35,6 +35,8 @@ def _make_coordinator(
     # COV-triggered metadata check (most of them) just need it not to leak
     # an "never awaited" warning. Tests that DO care override this.
     hass.async_create_task = MagicMock(side_effect=lambda coro: coro.close())
+    # Debounced metadata persists fire immediately unless a test captures them.
+    hass.loop.call_later = MagicMock(side_effect=lambda delay, cb: cb() or MagicMock())
 
     coord = BACnetCoordinator(
         hass=hass,
@@ -1158,3 +1160,57 @@ class TestMetadataSweepBackground:
         assert [o["object_name"] for o in coord.objects] == [
             f"new{i}" for i in range(12)
         ]
+
+
+# ---------------------------------------------------------------------------
+# COV-triggered metadata changes are coalesced into one reload
+# ---------------------------------------------------------------------------
+
+
+class TestMetadataPersistDebounce:
+    def _coord(self):
+        from unittest.mock import MagicMock
+
+        objects = [
+            {"object_type": 0, "instance": 1, "units": "a"},
+            {"object_type": 0, "instance": 2, "units": "a"},
+        ]
+        coord = _make_coordinator(objects=objects)
+        coord.entry.data = {**coord.entry.data, CONF_SELECTED_OBJECTS: objects}
+        self.scheduled = []
+        coord.hass.loop.call_later = MagicMock(
+            side_effect=lambda delay, cb: self.scheduled.append(cb) or MagicMock()
+        )
+        return coord
+
+    def test_changes_within_window_cause_one_reload(self):
+        coord = self._coord()
+        coord._handle_cov_property_notification("0:1", "units", "b")
+        coord._handle_cov_property_notification("0:2", "units", "c")
+        coord.hass.config_entries.async_update_entry.assert_not_called()
+        assert len(self.scheduled) == 1
+
+        self.scheduled[0]()
+
+        coord.hass.config_entries.async_update_entry.assert_called_once()
+        persisted = coord.hass.config_entries.async_update_entry.call_args.kwargs[
+            "data"
+        ][CONF_SELECTED_OBJECTS]
+        assert [o["units"] for o in persisted] == ["b", "c"]
+
+    def test_immediate_persist_absorbs_pending_one(self):
+        coord = self._coord()
+        coord._handle_cov_property_notification("0:1", "units", "b")
+        handle = coord._persist_handle
+        coord._persist_metadata_change()
+        handle.cancel.assert_called_once()
+        coord.hass.config_entries.async_update_entry.assert_called_once()
+
+    def test_shutdown_cancels_pending_persist(self):
+        import asyncio
+
+        coord = self._coord()
+        coord._handle_cov_property_notification("0:1", "units", "b")
+        handle = coord._persist_handle
+        asyncio.run(coord.async_shutdown())
+        handle.cancel.assert_called_once()

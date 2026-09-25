@@ -85,6 +85,9 @@ MAX_CONCURRENT_REQUESTS = 4
 #      doesn't cause a metadata re-read on every notification.
 #   2. Periodic sweep: the safety net for polling-only objects, which never
 #      produce a COV notification to trigger off of.
+# COV-triggered metadata changes arriving within this window are persisted
+# together — one config-entry reload instead of one per object.
+METADATA_PERSIST_DELAY = 5  # seconds
 COV_METADATA_CHECK_INTERVAL = 300  # seconds (5 min) — per-object COV throttle
 DEFAULT_METADATA_REFRESH_INTERVAL = 3600  # seconds (1 hour) — polled-object sweep
 
