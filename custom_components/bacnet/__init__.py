@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import homeassistant.helpers.config_validation as cv
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
@@ -63,6 +64,10 @@ PLATFORMS: list[Platform] = [
     Platform.SELECT,
     Platform.BUTTON,
 ]
+
+
+# Config entries only — no YAML configuration.
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
 # ---------------------------------------------------------------------------
@@ -215,6 +220,14 @@ def _async_check_stale_overrides(
 # ---------------------------------------------------------------------------
 # Integration lifecycle
 # ---------------------------------------------------------------------------
+
+
+async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+    """Register the integration-wide services (once, not per entry)."""
+    from .services import async_setup_services  # noqa: WPS433
+
+    async_setup_services(hass)
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

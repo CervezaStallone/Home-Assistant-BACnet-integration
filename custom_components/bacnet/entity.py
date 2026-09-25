@@ -48,6 +48,45 @@ def bacnet_device_info(entry: ConfigEntry) -> DeviceInfo:
     return device_info
 
 
+async def async_write_object_value(
+    coordinator: BACnetCoordinator,
+    obj: dict[str, Any],
+    value: Any,
+    *,
+    priority: int | None = None,
+    label: str | None = None,
+) -> None:
+    """Write an object's presentValue (None = relinquish), then re-read it.
+
+    *priority* defaults to the device's write priority. Raises
+    HomeAssistantError when the device rejects the write, so the UI shows
+    an error instead of silently keeping the old state.
+    """
+    client = coordinator.client
+    target = {
+        "device_address": coordinator.device_address,
+        "object_type": obj["object_type"],
+        "instance": obj["instance"],
+        "priority": priority or coordinator.write_priority,
+        "commandable": obj.get("commandable", False),
+    }
+    if value is None:
+        success = await client.relinquish(**target)
+    else:
+        success = await client.write_property(
+            property_name="presentValue", value=value, **target
+        )
+    if not success:
+        raise HomeAssistantError(
+            translation_domain=DOMAIN,
+            translation_key="write_failed",
+            translation_placeholders={
+                "object": label or f"{obj['object_type']}:{obj['instance']}"
+            },
+        )
+    await coordinator.async_refresh_object(obj)
+
+
 class BACnetEntity(CoordinatorEntity[BACnetCoordinator]):
     """Base class for BACnet entities.
 
@@ -161,33 +200,10 @@ class BACnetEntity(CoordinatorEntity[BACnetCoordinator]):
     # ------------------------------------------------------------------
 
     async def async_write_present_value(self, value: Any) -> None:
-        """Write presentValue at the device's write priority (None = relinquish).
-
-        Raises HomeAssistantError when the device rejects the write, so the
-        UI shows an error instead of silently keeping the old state. On
-        success only this object is re-read.
-        """
-        client = self.coordinator.client
-        target = {
-            "device_address": self.coordinator.device_address,
-            "object_type": self._object_type,
-            "instance": self._instance,
-            "priority": self.coordinator.write_priority,
-            "commandable": self.is_commandable,
-        }
-        if value is None:
-            success = await client.relinquish(**target)
-        else:
-            success = await client.write_property(
-                property_name="presentValue", value=value, **target
-            )
-        if not success:
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="write_failed",
-                translation_placeholders={"object": self._attr_name or self._obj_key},
-            )
-        await self.coordinator.async_refresh_object(self._obj)
+        """Write presentValue at the device's write priority (None = relinquish)."""
+        await async_write_object_value(
+            self.coordinator, self._obj, value, label=self._attr_name
+        )
 
     def get_present_value(self) -> Any:
         """Return the current presentValue from the coordinator data."""
