@@ -39,6 +39,7 @@ from .const import (
     LIVE_METADATA_PROPERTY_TO_BACNET,
     MAX_CONCURRENT_REQUESTS,
     MAX_SILENT_FAILURES,
+    METADATA_PERSIST_DELAY,
     OBJECT_TYPE_ANALOG_INPUT,
     OBJECT_TYPE_ANALOG_OUTPUT,
     OBJECT_TYPE_ANALOG_VALUE,
@@ -136,6 +137,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._last_metadata_refresh: datetime = datetime.now(timezone.utc)
         self._last_object_metadata_check: dict[str, datetime] = {}
         self._metadata_task: asyncio.Task | None = None
+        self._persist_handle: asyncio.TimerHandle | None = None
 
         # Device address for reads/writes (from config entry data)
         self.device_address: str = ""
@@ -353,8 +355,12 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         A reload (not just an in-place dict mutation) is required because HA
         sensor entities read units/device_class once at __init__. Reuses the
         same options-update-listener path already used when the user edits
-        options.
+        options. Persists self.objects as a whole, so it also covers any
+        change still waiting in _schedule_metadata_persist().
         """
+        if self._persist_handle is not None:
+            self._persist_handle.cancel()
+            self._persist_handle = None
         if self.entry is None:
             return
         _LOGGER.info("BACnet object metadata changed on device — reloading entry")
@@ -362,6 +368,17 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self.entry,
             data={**self.entry.data, CONF_SELECTED_OBJECTS: self.objects},
         )
+
+    def _schedule_metadata_persist(self) -> None:
+        """Persist after METADATA_PERSIST_DELAY, coalescing COV-triggered changes.
+
+        COV-triggered checks find changes one object at a time; persisting
+        each immediately would reload the entry once per changed object.
+        """
+        if self._persist_handle is None:
+            self._persist_handle = self.hass.loop.call_later(
+                METADATA_PERSIST_DELAY, self._persist_metadata_change
+            )
 
     async def async_refresh_metadata(self) -> bool:
         """Re-read objectName/description/units/commandable for every object.
@@ -479,7 +496,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 value,
             )
         self._replace_object(obj_key, updates)
-        self._persist_metadata_change()
+        self._schedule_metadata_persist()
 
     # ------------------------------------------------------------------
     # COV subscription management
@@ -727,7 +744,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             value,
         )
         self._replace_object(obj_key, {internal_key: value})
-        self._persist_metadata_change()
+        self._schedule_metadata_persist()
 
     # ------------------------------------------------------------------
     # Shutdown
@@ -742,6 +759,11 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """
         if self._metadata_task is not None and not self._metadata_task.done():
             self._metadata_task.cancel()
+        # Dropped, not flushed: the device still holds the new metadata, so
+        # the next coordinator picks it up on its first check.
+        if self._persist_handle is not None:
+            self._persist_handle.cancel()
+            self._persist_handle = None
 
         for sub_key in list(self._cov_subscriptions.values()):
             await self.client.unsubscribe_cov(sub_key)
