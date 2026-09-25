@@ -50,6 +50,19 @@ from .helpers import default_domain_for
 
 _LOGGER = logging.getLogger(__name__)
 
+# Stored object metadata that a refresh may update. Keys a read doesn't
+# return (e.g. state_text on an analog object) are never touched.
+_METADATA_KEYS = (
+    "object_name",
+    "description",
+    "units",
+    "commandable",
+    "state_text",
+    "min_value",
+    "max_value",
+    "resolution",
+)
+
 # COV subscription lifetime.  BACpypes3's change_of_value() context manager
 # automatically renews the subscription before it expires.
 COV_LIFETIME_SECONDS = 300
@@ -330,8 +343,8 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     @staticmethod
     def _diff_metadata(obj: dict[str, Any], fresh: dict[str, Any]) -> dict[str, Any]:
-        """Return the object_name/description/units/commandable fields that
-        differ between *obj* and *fresh* (empty dict if nothing changed).
+        """Return the _METADATA_KEYS fields that differ between *obj* and
+        *fresh* (empty dict if nothing changed).
 
         Deliberately does NOT mutate *obj*. self.objects is the SAME list
         of dicts as entry.data[CONF_SELECTED_OBJECTS] (assigned once by
@@ -346,8 +359,8 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         _replace_object().
         """
         changed: dict[str, Any] = {}
-        for key in ("object_name", "description", "units", "commandable"):
-            if obj.get(key) != fresh.get(key):
+        for key in _METADATA_KEYS:
+            if key in fresh and obj.get(key) != fresh[key]:
                 changed[key] = fresh[key]
         return changed
 
@@ -393,7 +406,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
 
     async def async_refresh_metadata(self) -> bool:
-        """Re-read objectName/description/units/commandable for every object.
+        """Re-read the metadata of every object (one batched client call).
 
         Safety-net sweep for polling-only objects, which never produce a COV
         notification to trigger the cheaper per-object check below. Runs on
@@ -403,31 +416,19 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         Returns True if any object's metadata changed.
         """
         self._last_metadata_refresh = datetime.now(timezone.utc)
-        semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
+        snapshot = self.objects
+        try:
+            fresh_by_key = await self.client.read_objects_metadata(
+                self.device_address, snapshot
+            )
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.debug("Metadata refresh failed: %s", exc)
+            return False
 
-        async def _changes_for(obj: dict[str, Any]) -> dict[str, Any]:
-            async with semaphore:
-                try:
-                    fresh = await self.client.refresh_object_metadata(
-                        device_address=self.device_address,
-                        object_type=obj["object_type"],
-                        instance=obj["instance"],
-                        current_commandable=obj.get("commandable", False),
-                        current_object_name=obj.get("object_name"),
-                        current_description=obj.get("description"),
-                        current_units=obj.get("units"),
-                    )
-                except Exception as exc:  # noqa: BLE001
-                    _LOGGER.debug(
-                        "Metadata refresh failed for %s:%s: %s",
-                        obj["object_type"],
-                        obj["instance"],
-                        exc,
-                    )
-                    return {}
-            if fresh is None:
-                return {}
-            updates = self._diff_metadata(obj, fresh)
+        all_updates = []
+        for obj in snapshot:
+            fresh = fresh_by_key.get(f"{obj['object_type']}:{obj['instance']}")
+            updates = self._diff_metadata(obj, fresh) if fresh else {}
             for key, value in updates.items():
                 _LOGGER.info(
                     "BACnet object %s:%s metadata changed: %s %r → %r",
@@ -437,10 +438,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     obj.get(key),
                     value,
                 )
-            return updates
-
-        snapshot = self.objects
-        all_updates = await asyncio.gather(*(_changes_for(o) for o in snapshot))
+            all_updates.append(updates)
 
         # Apply onto the CURRENT list, not the snapshot: a COV-triggered
         # check may have replaced self.objects while this sweep was awaiting.
