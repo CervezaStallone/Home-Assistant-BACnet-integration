@@ -26,7 +26,6 @@ from .const import (
     CONF_SELECTED_OBJECTS,
     COV_METADATA_CHECK_INTERVAL,
     DEFAULT_COV_INCREMENT,
-    DEFAULT_DOMAIN_MAP,
     DEFAULT_ENABLE_COV,
     DEFAULT_METADATA_REFRESH_INTERVAL,
     DEFAULT_POLLING_INTERVAL,
@@ -39,10 +38,9 @@ from .const import (
     OBJECT_TYPE_ANALOG_INPUT,
     OBJECT_TYPE_ANALOG_OUTPUT,
     OBJECT_TYPE_ANALOG_VALUE,
-    OBJECT_TYPE_BINARY_VALUE,
-    OBJECT_TYPE_MULTI_STATE_VALUE,
     RECONNECT_THRESHOLD,
 )
+from .helpers import default_domain_for
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -683,13 +681,6 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         obj_data = self.data.get(obj_key, {})
         return obj_data.get(prop)
 
-    # Value-type objects that may or may not have a Priority Array
-    _VALUE_TYPES: ClassVar = {
-        OBJECT_TYPE_ANALOG_VALUE,
-        OBJECT_TYPE_BINARY_VALUE,
-        OBJECT_TYPE_MULTI_STATE_VALUE,
-    }
-
     def get_domain_for_object(self, obj: dict[str, Any]) -> str:
         """Determine the HA domain for a BACnet object, respecting user overrides.
 
@@ -703,16 +694,10 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return self.domain_overrides[obj_key]
         return self._default_domain_for(obj)
 
-    def _default_domain_for(self, obj: dict[str, Any]) -> str:
+    @staticmethod
+    def _default_domain_for(obj: dict[str, Any]) -> str:
         """Return the default HA domain for a BACnet object based on type + commandability."""
-        obj_type = obj["object_type"]
-        if obj_type in self._VALUE_TYPES:
-            commandable = obj.get("commandable", False)
-            if obj_type == OBJECT_TYPE_BINARY_VALUE:
-                return "switch" if commandable else "binary_sensor"
-            if obj_type in {OBJECT_TYPE_ANALOG_VALUE, OBJECT_TYPE_MULTI_STATE_VALUE}:
-                return "number" if commandable else "sensor"
-        return DEFAULT_DOMAIN_MAP.get(obj_type, "sensor")
+        return default_domain_for(obj)
 
     def get_entity_name(self, obj: dict[str, Any]) -> str:
         """Return the entity display name, respecting the use_description option."""

@@ -391,3 +391,63 @@ class TestEntityBase:
         entity = BACnetSensor(coord, entry, obj)
         assert "99999" in entity._attr_unique_id
         assert "bacnet" in entity._attr_unique_id
+
+
+# ---------------------------------------------------------------------------
+# Availability must follow coordinator outages
+# ---------------------------------------------------------------------------
+
+
+class TestAvailabilityFollowsCoordinator:
+    def test_unavailable_when_last_update_failed(self):
+        obj = {
+            "object_type": 0,
+            "instance": 1,
+            "commandable": False,
+            "object_name": "T",
+        }
+        entity = _sensor(obj, {"0:1": {"presentValue": 23.0}})
+        entity.coordinator.last_update_success = False
+        assert entity.available is False
+
+
+# ---------------------------------------------------------------------------
+# Climate OFF must survive the relinquish-default presentValue
+# ---------------------------------------------------------------------------
+
+
+def _climate_with_client(data):
+    from unittest.mock import AsyncMock, MagicMock
+
+    obj = {"object_type": 2, "instance": 1, "commandable": True, "object_name": "SP"}
+    entity = _climate(obj, data)
+    client = MagicMock()
+    client.relinquish = AsyncMock(return_value=True)
+    client.write_property = AsyncMock(return_value=True)
+    entity.coordinator.async_request_refresh = AsyncMock()
+    entity.hass = MagicMock()
+    entity.hass.data = {"bacnet": {entity._entry.entry_id: {"client": client}}}
+    entity.async_write_ha_state = MagicMock()
+    return entity
+
+
+class TestClimateOffAfterRelinquish:
+    def test_off_after_relinquish_even_with_relinquish_default(self):
+        import asyncio
+
+        from custom_components.bacnet.climate import HVACMode
+
+        # After relinquish the device reports its Relinquish Default, not None.
+        entity = _climate_with_client({"2:1": {"presentValue": 18.0}})
+        asyncio.run(entity.async_set_hvac_mode(HVACMode.OFF))
+        assert entity.hvac_mode == HVACMode.OFF
+
+    def test_set_temperature_turns_back_to_heat(self):
+        import asyncio
+
+        from custom_components.bacnet.climate import HVACMode
+
+        entity = _climate_with_client({"2:1": {"presentValue": 18.0}})
+        asyncio.run(entity.async_set_hvac_mode(HVACMode.OFF))
+        asyncio.run(entity.async_set_temperature(temperature=21.0))
+        assert entity.hvac_mode == HVACMode.HEAT

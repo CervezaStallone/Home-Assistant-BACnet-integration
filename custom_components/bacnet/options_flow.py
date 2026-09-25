@@ -31,7 +31,6 @@ from .const import (
     CONF_USE_DESCRIPTION,
     DATA_CLIENT,
     DEFAULT_COV_INCREMENT,
-    DEFAULT_DOMAIN_MAP,
     DEFAULT_ENABLE_COV,
     DEFAULT_LIVE_METADATA_PROPERTIES,
     DEFAULT_POLLING_INTERVAL,
@@ -40,6 +39,7 @@ from .const import (
     LIVE_METADATA_PROPERTY_CHOICES,
     SUPPORTED_DOMAINS,
 )
+from .helpers import default_domain_for
 from .helpers import object_key as _object_key
 from .helpers import object_label as _object_label
 from .helpers import select_objects_by_key as _select_objects_by_key
@@ -227,31 +227,40 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
             CONF_SELECTED_OBJECTS, []
         )
 
+        global_cov_default = self._options_so_far.get(
+            CONF_ENABLE_COV,
+            self._config_entry.options.get(CONF_ENABLE_COV, DEFAULT_ENABLE_COV),
+        )
+
         if user_input is not None:
-            # Build the domain mapping dict from form values
-            domain_mapping: dict[str, str] = {}
-            cov_overrides: dict[str, bool] = {}
+            # Only persist values that differ from the default. Storing every
+            # form value would freeze today's defaults as explicit overrides:
+            # a later commandable change or enable_cov toggle would then never
+            # take effect for any object.
+            #
+            # Objects removed by a rescan keep their custom domain/COV settings
+            # so they are restored if re-selected later (issue #30).
+            domain_mapping = dict(
+                self._config_entry.options.get(CONF_DOMAIN_MAPPING, {})
+            )
+            cov_overrides = dict(self._config_entry.options.get(CONF_COV_OVERRIDES, {}))
             for obj in selected_objects:
-                obj_key = f"{obj['object_type']}:{obj['instance']}"
-                domain_field_key = f"domain_{obj_key}"
-                if domain_field_key in user_input:
-                    domain_mapping[obj_key] = user_input[domain_field_key]
+                obj_key = _object_key(obj)
+                domain_mapping.pop(obj_key, None)
+                cov_overrides.pop(obj_key, None)
 
-                cov_field_key = f"cov_{obj_key}"
-                if cov_field_key in user_input:
-                    cov_overrides[obj_key] = user_input[cov_field_key]
+                domain = user_input.get(f"domain_{obj_key}")
+                if domain is not None and domain != default_domain_for(obj):
+                    domain_mapping[obj_key] = domain
 
-            # Store in options and create entry. Merge with existing mappings so
-            # objects removed by a rescan keep their custom domain/COV settings —
-            # they are restored if the object is re-selected later (issue #30).
-            # Form values win for objects still selected; stale entries for
-            # removed objects stay as harmless, re-usable leftovers.
-            existing_mapping = self._config_entry.options.get(CONF_DOMAIN_MAPPING, {})
-            existing_cov = self._config_entry.options.get(CONF_COV_OVERRIDES, {})
+                cov = user_input.get(f"cov_{obj_key}")
+                if cov is not None and cov != global_cov_default:
+                    cov_overrides[obj_key] = cov
+
             final_options = {
                 **self._options_so_far,
-                CONF_DOMAIN_MAPPING: {**existing_mapping, **domain_mapping},
-                CONF_COV_OVERRIDES: {**existing_cov, **cov_overrides},
+                CONF_DOMAIN_MAPPING: domain_mapping,
+                CONF_COV_OVERRIDES: cov_overrides,
             }
             return self.async_create_entry(title="", data=final_options)
 
@@ -262,19 +271,12 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
         current_cov_overrides: dict[str, bool] = self._config_entry.options.get(
             CONF_COV_OVERRIDES, {}
         )
-        global_cov_default = self._options_so_far.get(
-            CONF_ENABLE_COV,
-            self._config_entry.options.get(CONF_ENABLE_COV, DEFAULT_ENABLE_COV),
-        )
-
         schema_fields: dict[Any, Any] = {}
         for obj in selected_objects:
             obj_key = f"{obj['object_type']}:{obj['instance']}"
 
-            # Current domain: user override → default map → "sensor"
-            current_domain = current_mapping.get(
-                obj_key, DEFAULT_DOMAIN_MAP.get(obj["object_type"], "sensor")
-            )
+            # Current domain: user override → commandable-aware default
+            current_domain = current_mapping.get(obj_key, default_domain_for(obj))
 
             domain_field_key = f"domain_{obj_key}"
             schema_fields[
