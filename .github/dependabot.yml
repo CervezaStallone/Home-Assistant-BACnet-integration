@@ -8,3 +8,16 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+
+  # tests_ha/requirements-min.txt pins the MINIMUM supported Home Assistant
+  # (2024.4) and its test harness on purpose, so CI keeps proving the
+  # integration still works there. Bumping any pin defeats that (a security
+  # update once moved it to HA 2026.7 + pytest 9 and broke the job). These
+  # are CI-only test dependencies, never shipped to users. The ignore rule
+  # also applies to Dependabot security updates.
+  - package-ecosystem: "pip"
+    directory: "/tests_ha"
+    schedule:
+      interval: "monthly"
+    ignore:
+      - dependency-name: "*"
