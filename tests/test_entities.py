@@ -544,12 +544,16 @@ class TestFaultFlagAvailability:
         obj = {"object_type": 0, "instance": 1, "object_name": "T"}
         return _sensor(obj, {"0:1": {"presentValue": 1.0, "statusFlags": flags}})
 
-    def test_fault_flag_makes_entity_unavailable(self):
-        # statusFlags = [in_alarm, fault, overridden, out_of_service]
-        assert self._entity([False, True, False, False]).available is False
-
+    # statusFlags = [in_alarm, fault, overridden, out_of_service]. Issue #48:
+    # a gateway set FAULT on every object while its values were live.
     @pytest.mark.parametrize(
-        "flags", [[True, False, False, False], [False, False, True, True], None]
+        "flags",
+        [
+            [False, True, False, False],
+            [True, False, False, False],
+            [False, False, True, True],
+            None,
+        ],
     )
-    def test_other_flags_keep_entity_available(self, flags):
+    def test_status_flags_keep_entity_available(self, flags):
         assert self._entity(flags).available is True

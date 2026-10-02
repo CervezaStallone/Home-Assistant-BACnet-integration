@@ -198,7 +198,7 @@ Every entity exposes additional BACnet metadata as state attributes:
 
 Only `bacnet_status_flags` and `bacnet_state_text` are stored in the recorder history — the other attributes don't change and aren't stored again with every state change.
 
-An entity is **unavailable** when the device doesn't respond, or when the object's status flags report **FAULT** (the device itself says the value is unreliable). In-alarm, overridden and out-of-service objects stay available.
+An entity is **unavailable** when the device doesn't respond. Status flags (in-alarm, FAULT, overridden, out-of-service) don't change availability — some gateways report FAULT on every object while their values are live. Check `bacnet_status_flags` to see them.
 
 Analog sensors keep the full precision of the device value; Home Assistant shows 2 decimals by default, which you can change per entity.
 
@@ -270,7 +270,7 @@ data:
 |---|---|---|
 | "No devices found" | Device not running or on a different subnet | Verify the device is reachable on UDP 47808 |
 | "Cannot connect" | Port 47808 already in use | Stop other BACnet software or use a different port |
-| Entities show "Unavailable" | Device went offline, or the object reports FAULT | Check the device (and **Settings → Repairs**) — entities recover automatically. A single unavailable entity with others fine: check its `bacnet_status_flags`. |
+| Entities show "Unavailable" | Device went offline | Check the device (and **Settings → Repairs**) — entities recover automatically. |
 | "The BACnet device rejected the write" | Wrong write priority, or object not writable | Check the log for the reason; enable the **Write Priority** entity or check `bacnet_commandable` |
 | Want to release an override | Turn off commands `inactive`, it doesn't release | Use the `bacnet.relinquish` service |
 | COV not working | Device doesn't support COV | This is normal — polling activates as fallback |

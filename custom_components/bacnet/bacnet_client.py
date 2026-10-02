@@ -20,6 +20,7 @@ from collections.abc import Callable
 from typing import Any, ClassVar
 
 from bacpypes3.apdu import ErrorRejectAbortNack, SubscribeCOVPropertyRequest
+from bacpypes3.basetypes import ErrorType
 from bacpypes3.ipv4.app import ForeignApplication, NormalApplication
 from bacpypes3.local.device import DeviceObject
 from bacpypes3.pdu import Address, IPv4Address
@@ -1112,7 +1113,7 @@ class BACnetClient:
                 continue
             prop = self._HYPHEN_TO_CAMEL.get(str(prop_id), str(prop_id))
             raw.setdefault(f"{obj_type_int}:{int(obj_id[1])}", {})[prop] = (
-                None if isinstance(value, BaseException) else value
+                None if isinstance(value, (BaseException, ErrorType)) else value
             )
         return raw
 
@@ -1347,10 +1348,10 @@ class BACnetClient:
                     continue
                 obj_key = f"{obj_type_int}:{instance}"
                 prop_camel = self._HYPHEN_TO_CAMEL.get(str(prop_id), str(prop_id))
-                # Per-property errors arrive as exception-like objects in the tuple
+                # Per-property errors arrive as ErrorType values in the tuple
                 coerced = (
                     None
-                    if isinstance(value, BaseException)
+                    if isinstance(value, (BaseException, ErrorType))
                     else self._coerce_value(value)
                 )
                 data.setdefault(obj_key, {})[prop_camel] = coerced
