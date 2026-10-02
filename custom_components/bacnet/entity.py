@@ -185,21 +185,19 @@ class BACnetEntity(CoordinatorEntity[BACnetCoordinator]):
 
     @property
     def available(self) -> bool:
-        """Return True if the last poll succeeded, it has data, and no FAULT flag.
+        """Return True if the last poll succeeded and it has data for this object.
 
         super().available carries the coordinator's last_update_success, so
         an outage (UpdateFailed) marks entities unavailable instead of
         showing stale values as if the device were still online.
+
+        statusFlags (FAULT included) do not affect availability: some
+        gateways set FAULT on every object while reporting live values
+        (issue #48). The flags stay visible as bacnet_status_flags.
         """
         if not super().available or self.coordinator.data is None:
             return False
-        if self._obj_key not in self.coordinator.data:
-            return False
-        # statusFlags = [in_alarm, fault, overridden, out_of_service]. FAULT
-        # means the device itself says presentValue is unreliable. Alarm,
-        # overridden and out-of-service values are still real values.
-        flags = self.get_status_flags()
-        return not (isinstance(flags, list) and len(flags) > 1 and flags[1])
+        return self._obj_key in self.coordinator.data
 
     # ------------------------------------------------------------------
     # Helpers

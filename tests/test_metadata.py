@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 
 from bacpypes3.apdu import RejectPDU
+from bacpypes3.basetypes import ErrorType
 
 from custom_components.bacnet.bacnet_client import BACnetClient
 
@@ -49,7 +50,11 @@ _OBJECTS = [
 
 
 class _FakeDevice:
-    """Answers RPM and ReadProperty from _DEVICE; missing props are errors."""
+    """Answers RPM and ReadProperty from _DEVICE; missing props are errors.
+
+    Like bacpypes3, RPM reports a missing property as an ErrorType value in
+    the result list (issue #48), not as an exception.
+    """
 
     def __init__(self, rpm=True):
         self.rpm = rpm
@@ -65,7 +70,9 @@ class _FakeDevice:
             type_str, inst = oid_str.split(",")
             values = _DEVICE[(type_str, int(inst))]
             for prop in props:
-                value = values.get(prop, RejectPDU(reason="unrecognized-service"))
+                value = values.get(
+                    prop, ErrorType(errorClass="property", errorCode="unknownProperty")
+                )
                 results.append(((type_str, int(inst)), prop, None, value))
         return results
 
