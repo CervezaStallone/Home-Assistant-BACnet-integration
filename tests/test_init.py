@@ -222,3 +222,49 @@ class TestSetupFailureReleasesClient:
         coordinator.async_shutdown.assert_awaited_once()
         client.disconnect.assert_awaited_once()
         assert hass.data["bacnet"]["_port_clients"] == {}
+
+
+class TestConcurrentSetupSharesClient:
+    """Issue #50: concurrent setups on one port must bind only one socket."""
+
+    def test_concurrent_setup_creates_one_client(self, monkeypatch):
+        import asyncio
+        from unittest.mock import AsyncMock, MagicMock
+
+        import custom_components.bacnet as integration
+        import custom_components.bacnet.bacnet_client as client_mod
+        import custom_components.bacnet.coordinator as coord_mod
+
+        async def slow_connect(**_):
+            await asyncio.sleep(0.01)
+
+        client = MagicMock()
+        client.connect = AsyncMock(side_effect=slow_connect)
+        client.local_port = 47808
+        factory = MagicMock(return_value=client)
+        monkeypatch.setattr(client_mod, "BACnetClient", factory)
+        # Stop setup right after the client is acquired.
+        monkeypatch.setattr(
+            coord_mod, "BACnetCoordinator", MagicMock(side_effect=RuntimeError)
+        )
+
+        hass = MagicMock()
+        hass.data = {}
+
+        def make_entry():
+            entry = MagicMock()
+            entry.data = {"local_port": 47808}
+            entry.options = {}
+            return entry
+
+        async def run():
+            await asyncio.gather(
+                integration.async_setup_entry(hass, make_entry()),
+                integration.async_setup_entry(hass, make_entry()),
+                return_exceptions=True,
+            )
+
+        asyncio.run(run())
+
+        assert factory.call_count == 1
+        assert hass.data["bacnet"]["_port_clients"][47808]["ref_count"] == 2

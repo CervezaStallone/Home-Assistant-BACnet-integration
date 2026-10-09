@@ -367,7 +367,8 @@ class BACnetClient:
 
         BACpypes3 schedules ``create_datagram_endpoint`` as background tasks
         in the ``IPv4DatagramServer`` constructor.  If the requested port is
-        already in use, ``retrying_create_datagram_endpoint`` keeps retrying
+        already in use or the local address is not available yet (EADDRNOTAVAIL
+        early at boot), ``retrying_create_datagram_endpoint`` keeps retrying
         forever — our timeout detects that and raises early.
         """
         server = self._get_datagram_server()
@@ -386,13 +387,15 @@ class BACnetClient:
             except asyncio.TimeoutError:
                 _LOGGER.error(
                     "UDP socket failed to bind within %.0fs — port %d may "
-                    "already be in use. Try a different 'Local port' (e.g. 47809).",
+                    "already be in use, or local IP %s is not available "
+                    "(yet).",
                     timeout,
                     self._local_port,
+                    _mask_address(self._local_ip),
                 )
                 raise RuntimeError(
                     f"UDP port {self._local_port} could not be bound "
-                    f"(already in use?). Choose a different local port."
+                    f"(port in use, or local address not available yet)"
                 ) from None
 
         # Log the actual bound address

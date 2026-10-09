@@ -13,6 +13,7 @@ All configuration is done via the GUI (config_flow / options_flow).
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -284,31 +285,35 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # trying to bind the same port a second time (which would fail at the OS level).
     port_clients: dict = hass.data[DOMAIN].setdefault("_port_clients", {})
 
-    if local_port in port_clients:
-        client = port_clients[local_port]["client"]
-        port_clients[local_port]["ref_count"] += 1
-        _LOGGER.info(
-            "Reusing shared BACnet client on port %d (ref_count=%d)",
-            local_port,
-            port_clients[local_port]["ref_count"],
-        )
-    else:
-        client = BACnetClient(
-            local_ip=local_ip,
-            local_port=local_port,
-        )
-        try:
-            await client.connect(
-                bbmd_address=bbmd_address if use_bbmd else None,
-                bbmd_ttl=bbmd_ttl,
+    # HA sets up entries concurrently at startup; without this lock two entries
+    # on the same port both miss port_clients across the connect() await and
+    # both try to bind (issue #50).
+    async with _port_lock(hass):
+        if local_port in port_clients:
+            client = port_clients[local_port]["client"]
+            port_clients[local_port]["ref_count"] += 1
+            _LOGGER.info(
+                "Reusing shared BACnet client on port %d (ref_count=%d)",
+                local_port,
+                port_clients[local_port]["ref_count"],
             )
-        except Exception as exc:
-            _LOGGER.error("Failed to start BACnet client: %s", exc)
-            raise ConfigEntryNotReady(
-                f"Cannot connect to BACnet network: {exc}"
-            ) from exc
-        port_clients[local_port] = {"client": client, "ref_count": 1}
-        _LOGGER.info("Created shared BACnet client on port %d", local_port)
+        else:
+            client = BACnetClient(
+                local_ip=local_ip,
+                local_port=local_port,
+            )
+            try:
+                await client.connect(
+                    bbmd_address=bbmd_address if use_bbmd else None,
+                    bbmd_ttl=bbmd_ttl,
+                )
+            except Exception as exc:
+                _LOGGER.error("Failed to start BACnet client: %s", exc)
+                raise ConfigEntryNotReady(
+                    f"Cannot connect to BACnet network: {exc}"
+                ) from exc
+            port_clients[local_port] = {"client": client, "ref_count": 1}
+            _LOGGER.info("Created shared BACnet client on port %d", local_port)
 
     # ---- 4. Build coordinator ----
     coordinator = BACnetCoordinator(
@@ -404,23 +409,29 @@ async def _async_release_client(hass: HomeAssistant, client: Any) -> None:
     # The client's own port, not entry.data: a reconfigure may have changed
     # the configured port before this reload.
     local_port = client.local_port
-    port_clients = hass.data[DOMAIN].get("_port_clients", {})
-    shared = port_clients.get(local_port)
-    if shared is None or shared["client"] is not client:
-        # Fallback for entries created before shared-client support
-        await client.disconnect()
-        return
-    shared["ref_count"] -= 1
-    if shared["ref_count"] <= 0:
-        port_clients.pop(local_port)
-        await client.disconnect()
-        _LOGGER.debug("Disconnected shared BACnet client on port %d", local_port)
-    else:
-        _LOGGER.debug(
-            "Released client reference for port %d (ref_count=%d remaining)",
-            local_port,
-            shared["ref_count"],
-        )
+    async with _port_lock(hass):
+        port_clients = hass.data[DOMAIN].get("_port_clients", {})
+        shared = port_clients.get(local_port)
+        if shared is None or shared["client"] is not client:
+            # Fallback for entries created before shared-client support
+            await client.disconnect()
+            return
+        shared["ref_count"] -= 1
+        if shared["ref_count"] <= 0:
+            port_clients.pop(local_port)
+            await client.disconnect()
+            _LOGGER.debug("Disconnected shared BACnet client on port %d", local_port)
+        else:
+            _LOGGER.debug(
+                "Released client reference for port %d (ref_count=%d remaining)",
+                local_port,
+                shared["ref_count"],
+            )
+
+
+def _port_lock(hass: HomeAssistant) -> asyncio.Lock:
+    """Lock serialising shared-client acquire/release across all entries."""
+    return hass.data[DOMAIN].setdefault("_port_lock", asyncio.Lock())
 
 
 async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
