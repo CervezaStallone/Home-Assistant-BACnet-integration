@@ -66,3 +66,7 @@ write_schedule:
       example: '{"start": "2026-01-01", "end": "2026-12-31"}'
       selector:
         object:
+    allow_removal:
+      default: false
+      selector:
+        boolean:

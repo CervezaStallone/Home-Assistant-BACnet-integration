@@ -227,6 +227,40 @@ class TestWriteSchedule:
         with pytest.raises(ScheduleError, match="reads back differently"):
             asyncio.run(client.write_schedule(ADDR, 1, {"schedule_default": 15.0}))
 
+    def test_dropping_existing_exceptions_is_refused(self):
+        """One new holiday must not silently erase the ones on the device."""
+        client, app = _client()
+        new = [{"period": {"date": "2026-12-25"}, "time_values": []}]
+        with pytest.raises(ScheduleError, match="would remove 1 exception"):
+            asyncio.run(client.write_schedule(ADDR, 1, {"exception_schedule": new}))
+        assert app.writes == []
+
+    def test_keeping_existing_exceptions_is_allowed(self):
+        client, _ = _client()
+        current = asyncio.run(client.read_schedule(ADDR, 1))["exception_schedule"]
+        new = [*current, {"period": {"date": "2026-12-25"}, "time_values": []}]
+        data = asyncio.run(client.write_schedule(ADDR, 1, {"exception_schedule": new}))
+        assert len(data["exception_schedule"]) == 2
+
+    def test_allow_removal_replaces_the_list(self):
+        client, _ = _client()
+        new = [{"period": {"date": "2026-12-25"}, "time_values": []}]
+        data = asyncio.run(
+            client.write_schedule(
+                ADDR, 1, {"exception_schedule": new}, allow_removal=True
+            )
+        )
+        assert [e["period"] for e in data["exception_schedule"]] == [
+            {"date": {"year": 2026, "month": 12, "day": 25, "weekday": 5}}
+        ]
+
+    def test_unreadable_exceptions_are_not_overwritten_blindly(self):
+        client, app = _client()
+        del app.props["exceptionSchedule"]
+        with pytest.raises(ScheduleError, match="could not read"):
+            asyncio.run(client.write_schedule(ADDR, 1, {"exception_schedule": []}))
+        assert app.writes == []
+
     @pytest.mark.parametrize(
         "changes",
         [
@@ -276,7 +310,7 @@ class TestScheduleService:
         result = asyncio.run(services.async_handle_schedule(None, call, write=True))
         assert result == {"sensor.sched": {"x": 2}}
         coordinator.client.write_schedule.assert_awaited_once_with(
-            ADDR, 1, {"schedule_default": None}
+            ADDR, 1, {"schedule_default": None}, allow_removal=False
         )
         coordinator.async_refresh_object.assert_awaited_once_with(obj)
 

@@ -73,6 +73,7 @@ WRITE_SCHEDULE_SCHEMA = cv.make_entity_service_schema(
         vol.Optional("exception_schedule"): list,
         vol.Optional("schedule_default"): vol.Any(None, bool, int, float, str),
         vol.Optional("effective_period"): dict,
+        vol.Optional("allow_removal", default=False): cv.boolean,
     }
 )
 _SCHEDULE_FIELDS = (
@@ -182,7 +183,10 @@ async def async_handle_schedule(
         try:
             if write:
                 response[entity_id] = await client.write_schedule(
-                    address, obj["instance"], changes
+                    address,
+                    obj["instance"],
+                    changes,
+                    allow_removal=call.data.get("allow_removal", False),
                 )
                 await coordinator.async_refresh_object(obj)
             else:

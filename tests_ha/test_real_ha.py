@@ -178,7 +178,9 @@ class FakeClient:
     async def read_schedule(self, device_address, instance):
         return {"schedule_default": 16.0, "instance": instance}
 
-    async def write_schedule(self, device_address, instance, changes):
+    async def write_schedule(
+        self, device_address, instance, changes, allow_removal=False
+    ):
         self.writes.append({"schedule": instance, **changes})
         return {"schedule_default": changes.get("schedule_default")}
 
