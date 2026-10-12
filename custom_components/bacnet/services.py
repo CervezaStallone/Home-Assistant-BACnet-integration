@@ -20,8 +20,9 @@ from typing import Any
 
 import homeassistant.helpers.config_validation as cv
 import voluptuous as vol
+from homeassistant.auth.permissions.const import POLICY_CONTROL, POLICY_READ
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, Unauthorized, UnknownUser
 from homeassistant.helpers import entity_registry as er
 
 try:  # Newer HA; the helpers.service variant is removed in HA 2026.8
@@ -156,6 +157,18 @@ async def async_handle_schedule(
                 translation_key="not_a_schedule",
                 translation_placeholders={"entity_id": entity_id},
             )
+    # A handler registered with async_register gets no permission check from
+    # Home Assistant, unlike a platform entity service.
+    if call.context.user_id:
+        user = await hass.auth.async_get_user(call.context.user_id)
+        if user is None:
+            raise UnknownUser(context=call.context)
+        policy = POLICY_CONTROL if write else POLICY_READ
+        for _, _, entity_id in targets:
+            if not user.permissions.check_entity(entity_id, policy):
+                raise Unauthorized(
+                    context=call.context, entity_id=entity_id, permission=policy
+                )
     changes = {key: call.data[key] for key in _SCHEDULE_FIELDS if key in call.data}
 
     response: dict[str, Any] = {}

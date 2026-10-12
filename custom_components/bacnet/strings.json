@@ -227,7 +227,7 @@
       "fields": {
         "weekly_schedule": {
           "name": "Weekly schedule",
-          "description": "Weekdays (monday … sunday) mapped to a list of {time, value} entries. Only the days given are changed; a value of null releases the schedule to its default. If the device refuses single-day writes, pass all seven days."
+          "description": "Weekdays (monday … sunday) mapped to a list of entries, each with a time and a value. Only the days given are changed; a value of null releases the schedule to its default. If the device refuses single-day writes, pass all seven days."
         },
         "exception_schedule": {
           "name": "Exception schedule",
@@ -239,7 +239,7 @@
         },
         "effective_period": {
           "name": "Effective period",
-          "description": "Start and end date between which the schedule is active. A date is YYYY-MM-DD, or {year, month, day, weekday} where null means any."
+          "description": "Start and end date between which the schedule is active. A date is YYYY-MM-DD, or an object with year, month, day and weekday where null means any."
         }
       }
     }

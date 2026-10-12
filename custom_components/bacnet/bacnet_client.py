@@ -154,6 +154,10 @@ _ATOMIC_TYPES: dict[str, type] = {
     "enumerated": Enumerated,
     "character-string": CharacterString,
 }
+# Bounds on what one read_schedule() call may cost: the device decides how
+# many calendars its exceptions refer to, so that fan-out is capped.
+_SCHEDULE_MAX_CALENDARS = 32
+_SCHEDULE_READ_TIMEOUT = 60.0
 _SCHEDULE_PROPERTIES = (
     "presentValue",
     "scheduleDefault",
@@ -700,7 +704,7 @@ class BACnetClient:
             try:
                 await asyncio.wait_for(asyncio.gather(*tasks), timeout=timeout)
                 server._transport_tasks = []
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 raise self._bind_error() from None
 
         # Log the actual bound address
@@ -865,7 +869,7 @@ class BACnetClient:
                     device_id,
                     _mask_address(i_am.pduSource),
                 )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass  # normal - discovery just timed out
         except Exception as exc:  # noqa: BLE001
             _LOGGER.error("Error during Who-Is discovery: %s", exc)
@@ -935,7 +939,7 @@ class BACnetClient:
                 self._read_device_info_inner(device_address, device_id),
                 timeout=timeout,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             _LOGGER.warning(
                 "Timeout (%.0fs) reaching device at %s",
                 timeout,
@@ -1002,7 +1006,7 @@ class BACnetClient:
                     )
                     if name and not isinstance(name, ErrorRejectAbortNack):
                         device_name = str(name)
-                except (asyncio.TimeoutError, ErrorRejectAbortNack, Exception):  # noqa: BLE001
+                except (TimeoutError, ErrorRejectAbortNack, Exception):  # noqa: BLE001
                     _LOGGER.debug("Could not read objectName, using default")
                 extras = await self._read_device_extras(addr, device_id)
                 return {
@@ -1050,7 +1054,7 @@ class BACnetClient:
                         )
                         if name and not isinstance(name, ErrorRejectAbortNack):
                             device_name = str(name)
-                    except (asyncio.TimeoutError, ErrorRejectAbortNack, Exception):  # noqa: BLE001
+                    except (TimeoutError, ErrorRejectAbortNack, Exception):  # noqa: BLE001
                         _LOGGER.debug("  Could not read objectName")
                     extras = await self._read_device_extras(addr, device_id)
                     return {
@@ -1059,7 +1063,7 @@ class BACnetClient:
                         "address": device_address,
                         **extras,
                     }
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 _LOGGER.debug("  ReadProperty timeout for device,%d", test_id)
                 continue
             except ErrorRejectAbortNack as exc:
@@ -1122,7 +1126,7 @@ class BACnetClient:
                 return list(result)
         except asyncio.CancelledError:
             raise
-        except (ErrorRejectAbortNack, asyncio.TimeoutError, Exception) as exc:  # noqa: BLE001
+        except (TimeoutError, ErrorRejectAbortNack, Exception) as exc:  # noqa: BLE001
             _LOGGER.info(
                 "Bulk objectList read failed for %s: %s (%s) — "
                 "falling back to element-by-element array indexing",
@@ -1401,7 +1405,7 @@ class BACnetClient:
             results = await asyncio.wait_for(
                 self._app.read_property_multiple(addr, param_list), timeout=30.0
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return None
         except ErrorRejectAbortNack as exc:
             self._handle_rpm_rejection(
@@ -1525,7 +1529,7 @@ class BACnetClient:
             if isinstance(result, ErrorRejectAbortNack):
                 return None
             return result
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return None
         except asyncio.CancelledError:
             raise
@@ -1676,7 +1680,7 @@ class BACnetClient:
             )
             return data
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             _LOGGER.debug("RPM poll timed out for %s", _mask_address(device_address))
             return None
         except ErrorRejectAbortNack as exc:
@@ -1914,11 +1918,20 @@ class BACnetClient:
         Calendars referenced by the exception schedule are read too, so the
         caller gets the actual holiday dates.
 
-        Raises ScheduleError when the device does not answer at all.
+        Raises ScheduleError when the device does not answer at all, or the
+        whole read takes longer than _SCHEDULE_READ_TIMEOUT.
         """
         if self._app is None:
             raise RuntimeError("Client not connected")
+        try:
+            async with asyncio.timeout(_SCHEDULE_READ_TIMEOUT):
+                return await self._read_schedule(device_address, instance)
+        except TimeoutError:
+            raise ScheduleError(f"timeout reading schedule {instance}") from None
 
+    async def _read_schedule(
+        self, device_address: str, instance: int
+    ) -> dict[str, Any]:
         addr = Address(device_address)
         oid = ObjectIdentifier(("schedule", instance))
         raw = {
@@ -1947,7 +1960,7 @@ class BACnetClient:
                 for event in exceptions or []
                 if event.period.calendarReference is not None
             }
-        ):
+        )[:_SCHEDULE_MAX_CALENDARS]:
             date_list = await self._safe_read(
                 addr, ObjectIdentifier(("calendar", cal_instance)), "dateList"
             )
@@ -2095,7 +2108,7 @@ class BACnetClient:
                     self._app.write_property(addr, oid, prop, value, index),
                     timeout=10,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 raise ScheduleError(f"timeout writing {prop}") from None
             except ErrorRejectAbortNack as err:
                 result = err
@@ -2190,7 +2203,7 @@ class BACnetClient:
             # so ready_event being set means the subscription is truly active.
             try:
                 await asyncio.wait_for(ready_event.wait(), timeout=10.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 _LOGGER.warning(
                     "COV subscription timed out for %s:%d at %s. Falling back to polling.",
                     type_str,
@@ -2297,7 +2310,7 @@ class BACnetClient:
                                 str(extra_id), str(extra_id)
                             )
                             changes[extra_key] = self._coerce_value(extra_val)
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         pass
                     _LOGGER.debug("COV notification %s: %s", sub_key, changes)
                     try:
@@ -2351,7 +2364,7 @@ class BACnetClient:
             stop_event.set()
             try:
                 await asyncio.wait_for(asyncio.shield(task), timeout=10.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
             except asyncio.CancelledError:
                 pass
@@ -2502,7 +2515,7 @@ class BACnetClient:
 
             try:
                 await asyncio.wait_for(ready_event.wait(), timeout=10.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 _LOGGER.warning(
                     "COV-Property subscription (%s) timed out for %s:%d at %s.",
                     property_name,
@@ -2622,7 +2635,7 @@ class BACnetClient:
             stop_event.set()
             try:
                 await asyncio.wait_for(asyncio.shield(task), timeout=10.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
             except asyncio.CancelledError:
                 pass

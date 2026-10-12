@@ -174,6 +174,24 @@ class TestReadSchedule:
         data = asyncio.run(client.read_schedule(ADDR, 1))
         assert len(data["weekly_schedule"]) == 7
 
+    def test_calendar_reads_are_capped(self):
+        """The device decides how many calendars it refers to."""
+        client, app = _client()
+        event = app.props["exceptionSchedule"][0]
+        app.props["exceptionSchedule"] = [
+            SpecialEvent(
+                period=SpecialEventPeriod(
+                    calendarReference=ObjectIdentifier(("calendar", number))
+                ),
+                listOfTimeValues=event.listOfTimeValues,
+                eventPriority=1,
+            )
+            for number in range(1, 200)
+        ]
+        data = asyncio.run(client.read_schedule(ADDR, 1))
+        assert len(data["exception_schedule"]) == 199
+        assert len(data["calendars"]) == bc._SCHEDULE_MAX_CALENDARS
+
     def test_silent_device_raises(self):
         client, app = _client()
         app.props.clear()
@@ -225,6 +243,10 @@ class TestWriteSchedule:
         assert app.writes == []
 
 
+def _call(data=None, user_id=None):
+    return MagicMock(data=data or {}, context=MagicMock(user_id=user_id))
+
+
 class TestScheduleService:
     def _setup(self, monkeypatch, object_type=17):
         from custom_components.bacnet import services
@@ -244,15 +266,13 @@ class TestScheduleService:
 
     def test_read_returns_response_per_entity(self, monkeypatch):
         services, coordinator, _ = self._setup(monkeypatch)
-        result = asyncio.run(
-            services.async_handle_schedule(None, MagicMock(data={}), write=False)
-        )
+        result = asyncio.run(services.async_handle_schedule(None, _call(), write=False))
         assert result == {"sensor.sched": {"x": 1}}
         coordinator.client.read_schedule.assert_awaited_once_with(ADDR, 1)
 
     def test_write_passes_only_schedule_fields_and_refreshes(self, monkeypatch):
         services, coordinator, obj = self._setup(monkeypatch)
-        call = MagicMock(data={"entity_id": "sensor.sched", "schedule_default": None})
+        call = _call({"entity_id": "sensor.sched", "schedule_default": None})
         result = asyncio.run(services.async_handle_schedule(None, call, write=True))
         assert result == {"sensor.sched": {"x": 2}}
         coordinator.client.write_schedule.assert_awaited_once_with(
@@ -265,10 +285,24 @@ class TestScheduleService:
 
         services, coordinator, _ = self._setup(monkeypatch, object_type=2)
         with pytest.raises(HomeAssistantError) as err:
-            asyncio.run(
-                services.async_handle_schedule(None, MagicMock(data={}), write=True)
-            )
+            asyncio.run(services.async_handle_schedule(None, _call(), write=True))
         assert err.value.translation_key == "not_a_schedule"
+        coordinator.client.write_schedule.assert_not_awaited()
+
+    @pytest.mark.parametrize("write", [False, True])
+    def test_user_without_permission_is_refused(self, monkeypatch, write):
+        from homeassistant.exceptions import Unauthorized
+
+        services, coordinator, _ = self._setup(monkeypatch)
+        user = MagicMock()
+        user.permissions.check_entity.return_value = False
+        hass = MagicMock()
+        hass.auth.async_get_user = AsyncMock(return_value=user)
+        with pytest.raises(Unauthorized):
+            asyncio.run(
+                services.async_handle_schedule(hass, _call(user_id="u1"), write=write)
+            )
+        coordinator.client.read_schedule.assert_not_awaited()
         coordinator.client.write_schedule.assert_not_awaited()
 
     def test_schedule_error_becomes_ha_error(self, monkeypatch):
@@ -277,9 +311,7 @@ class TestScheduleService:
         services, coordinator, _ = self._setup(monkeypatch)
         coordinator.client.read_schedule.side_effect = ScheduleError("boom")
         with pytest.raises(HomeAssistantError) as err:
-            asyncio.run(
-                services.async_handle_schedule(None, MagicMock(data={}), write=False)
-            )
+            asyncio.run(services.async_handle_schedule(None, _call(), write=False))
         assert err.value.translation_placeholders["error"] == "boom"
 
 
