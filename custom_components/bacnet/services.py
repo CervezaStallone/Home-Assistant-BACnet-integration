@@ -149,6 +149,23 @@ async def async_handle_schedule(
 
     Returns {entity_id: schedule}; after a write that is the read-back.
     """
+    # A handler registered with async_register gets no permission check from
+    # Home Assistant, unlike a platform entity service. Checked before the
+    # entities are resolved, so the errors below reveal nothing about an
+    # entity the user may not access. A write returns the schedule as well,
+    # so it needs read permission too.
+    if call.context.user_id:
+        user = await hass.auth.async_get_user(call.context.user_id)
+        if user is None:
+            raise UnknownUser(context=call.context)
+        selected = _referenced(hass, call)
+        for entity_id in sorted(selected.referenced | selected.indirectly_referenced):
+            for policy in (POLICY_READ, POLICY_CONTROL) if write else (POLICY_READ,):
+                if not user.permissions.check_entity(entity_id, policy):
+                    raise Unauthorized(
+                        context=call.context, entity_id=entity_id, permission=policy
+                    )
+
     targets = _targets(hass, call)
     for _, obj, entity_id in targets:
         if obj["object_type"] != OBJECT_TYPE_SCHEDULE:
@@ -157,18 +174,6 @@ async def async_handle_schedule(
                 translation_key="not_a_schedule",
                 translation_placeholders={"entity_id": entity_id},
             )
-    # A handler registered with async_register gets no permission check from
-    # Home Assistant, unlike a platform entity service.
-    if call.context.user_id:
-        user = await hass.auth.async_get_user(call.context.user_id)
-        if user is None:
-            raise UnknownUser(context=call.context)
-        policy = POLICY_CONTROL if write else POLICY_READ
-        for _, _, entity_id in targets:
-            if not user.permissions.check_entity(entity_id, policy):
-                raise Unauthorized(
-                    context=call.context, entity_id=entity_id, permission=policy
-                )
     changes = {key: call.data[key] for key in _SCHEDULE_FIELDS if key in call.data}
 
     response: dict[str, Any] = {}

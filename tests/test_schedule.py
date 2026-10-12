@@ -289,21 +289,51 @@ class TestScheduleService:
         assert err.value.translation_key == "not_a_schedule"
         coordinator.client.write_schedule.assert_not_awaited()
 
-    @pytest.mark.parametrize("write", [False, True])
-    def test_user_without_permission_is_refused(self, monkeypatch, write):
-        from homeassistant.exceptions import Unauthorized
-
-        services, coordinator, _ = self._setup(monkeypatch)
+    def _as_user(self, monkeypatch, services, allowed):
         user = MagicMock()
-        user.permissions.check_entity.return_value = False
+        user.permissions.check_entity.side_effect = lambda _id, policy: (
+            policy in allowed
+        )
         hass = MagicMock()
         hass.auth.async_get_user = AsyncMock(return_value=user)
+        monkeypatch.setattr(
+            services,
+            "_referenced",
+            lambda hass, call: MagicMock(
+                referenced={"sensor.sched"}, indirectly_referenced=set()
+            ),
+        )
+        return hass
+
+    @pytest.mark.parametrize(
+        ("write", "allowed"),
+        [(False, set()), (True, set()), (True, {"read"}), (True, {"control"})],
+    )
+    def test_user_without_permission_is_refused(self, monkeypatch, write, allowed):
+        """A write returns the schedule too, so it needs read and control."""
+        from homeassistant.exceptions import Unauthorized
+
+        services, coordinator, _ = self._setup(monkeypatch, object_type=2)
+        monkeypatch.setattr(services, "POLICY_READ", "read")
+        monkeypatch.setattr(services, "POLICY_CONTROL", "control")
+        hass = self._as_user(monkeypatch, services, allowed)
+        # Unauthorized, not "not_a_schedule": nothing about the entity leaks.
         with pytest.raises(Unauthorized):
             asyncio.run(
                 services.async_handle_schedule(hass, _call(user_id="u1"), write=write)
             )
         coordinator.client.read_schedule.assert_not_awaited()
         coordinator.client.write_schedule.assert_not_awaited()
+
+    def test_permitted_user_can_write(self, monkeypatch):
+        services, coordinator, _ = self._setup(monkeypatch)
+        monkeypatch.setattr(services, "POLICY_READ", "read")
+        monkeypatch.setattr(services, "POLICY_CONTROL", "control")
+        hass = self._as_user(monkeypatch, services, {"read", "control"})
+        asyncio.run(
+            services.async_handle_schedule(hass, _call(user_id="u1"), write=True)
+        )
+        coordinator.client.write_schedule.assert_awaited_once()
 
     def test_schedule_error_becomes_ha_error(self, monkeypatch):
         from homeassistant.exceptions import HomeAssistantError
