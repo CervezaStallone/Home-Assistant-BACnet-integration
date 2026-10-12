@@ -17,6 +17,7 @@ import contextlib
 import datetime
 import errno
 import hashlib
+import json
 import logging
 import socket
 from collections.abc import Callable
@@ -2018,7 +2019,12 @@ class BACnetClient:
         }
 
     async def write_schedule(
-        self, device_address: str, instance: int, changes: dict[str, Any]
+        self,
+        device_address: str,
+        instance: int,
+        changes: dict[str, Any],
+        *,
+        allow_removal: bool = False,
     ) -> dict[str, Any]:
         """Write parts of a Schedule object, then read it back and verify.
 
@@ -2026,6 +2032,10 @@ class BACnetClient:
         ``schedule_default`` and ``effective_period``, in the same shape
         read_schedule() returns them; anything left out is not touched.
         Values are written in the schedule's own datatype.
+
+        ``exception_schedule`` replaces the device's whole list. Unless
+        *allow_removal* is set, a write that would drop exceptions the
+        device currently has is refused before anything is written.
 
         Returns the schedule as read back. Raises ScheduleError when the
         data is invalid, the device rejects a write, or the read-back
@@ -2097,6 +2107,10 @@ class BACnetClient:
                 expected["exception_schedule"] = [
                     _special_event_to_json(event) for event in events
                 ]
+                if not allow_removal:
+                    await self._refuse_exception_removal(
+                        addr, oid, expected["exception_schedule"]
+                    )
         except (AttributeError, KeyError, TypeError, ValueError) as err:
             raise ScheduleError(f"invalid schedule data: {err!r}") from err
         if not writes:
@@ -2126,6 +2140,31 @@ class BACnetClient:
                     f"device accepted the write but {key} reads back differently"
                 )
         return readback
+
+    async def _refuse_exception_removal(
+        self, addr: Address, oid: ObjectIdentifier, new: list[dict[str, Any]]
+    ) -> None:
+        """Raise ScheduleError if writing *new* would drop existing exceptions.
+
+        The read-back check cannot catch this: the device stores exactly
+        what it was sent, the other holidays are simply gone.
+        """
+        current = await self._safe_read(addr, oid, "exceptionSchedule")
+        if current is None:
+            raise ScheduleError(
+                "could not read the current exception schedule to check what "
+                "would be removed; set allow_removal to write anyway"
+            )
+        removed = [
+            entry for entry in map(_special_event_to_json, current) if entry not in new
+        ]
+        if removed:
+            periods = "; ".join(json.dumps(entry["period"]) for entry in removed[:5])
+            raise ScheduleError(
+                f"this would remove {len(removed)} exception(s) the device "
+                f"currently has ({periods}{' …' if len(removed) > 5 else ''}). "
+                "Include the ones to keep, or set allow_removal to remove them"
+            )
 
     # ------------------------------------------------------------------
     # COV (Change of Value) subscriptions

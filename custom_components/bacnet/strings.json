@@ -231,7 +231,7 @@
         },
         "exception_schedule": {
           "name": "Exception schedule",
-          "description": "Complete list of exceptions, replacing the existing one. Each has a period (date, date_range, week_n_day or calendar_reference), a priority (1-16) and time_values."
+          "description": "Complete list of exceptions, replacing the existing one. Each has a period (date, date_range, week_n_day or calendar_reference), a priority (1-16) and time_values. If this would remove exceptions the device currently has, the action fails and lists them, unless Allow removal is on."
         },
         "schedule_default": {
           "name": "Default value",
@@ -240,6 +240,10 @@
         "effective_period": {
           "name": "Effective period",
           "description": "Start and end date between which the schedule is active. A date is YYYY-MM-DD, or an object with year, month, day and weekday where null means any."
+        },
+        "allow_removal": {
+          "name": "Allow removal",
+          "description": "Allow the exception schedule to be written even if that removes exceptions the device currently has."
         }
       }
     }

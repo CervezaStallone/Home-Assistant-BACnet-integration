@@ -291,7 +291,7 @@ response_variable: schedule
 ```
 
 - **Weekly schedule** — only the weekdays you pass are changed (one write per day). Pass all seven days to send the week as a single write, which some devices require.
-- **Exception schedule** — always replaces the complete list. A `period` is one of `date`, `date_range` (`start`/`end`), `week_n_day` (`month`, `week_of_month`, `weekday`) or `calendar_reference` (Calendar object instance).
+- **Exception schedule** — always replaces the complete list. To protect the controller, the action fails (and lists them) if that would remove exceptions the device currently has. Pass the full list including the ones to keep, or set `allow_removal: true` if removing them is what you want. A `period` is one of `date`, `date_range` (`start`/`end`), `week_n_day` (`month`, `week_of_month`, `weekday`) or `calendar_reference` (Calendar object instance).
 - **Dates** — write `"YYYY-MM-DD"`, or `{year, month, day, weekday}` where `null` means *any*. Dates are always returned in the second form, with raw BACnet numbers (month 13/14 = odd/even months, day 32 = last day of the month, weekday 1 = Monday).
 - **Values** are written in the schedule's own datatype (`value_type`).
 

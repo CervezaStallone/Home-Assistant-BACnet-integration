@@ -231,7 +231,7 @@
         },
         "exception_schedule": {
           "name": "Uitzonderingsschema",
-          "description": "Volledige lijst met uitzonderingen; vervangt de bestaande lijst. Elke uitzondering heeft een period (date, date_range, week_n_day of calendar_reference), een priority (1-16) en time_values."
+          "description": "Volledige lijst met uitzonderingen; vervangt de bestaande lijst. Elke uitzondering heeft een period (date, date_range, week_n_day of calendar_reference), een priority (1-16) en time_values. Zou dit uitzonderingen verwijderen die nu in het apparaat staan, dan mislukt de actie en worden ze genoemd, tenzij Verwijderen toestaan aan staat."
         },
         "schedule_default": {
           "name": "Standaardwaarde",
@@ -240,6 +240,10 @@
         "effective_period": {
           "name": "Geldigheidsperiode",
           "description": "Begin- en einddatum waartussen het schema actief is. Een datum is JJJJ-MM-DD, of een object met year, month, day en weekday waarbij null 'elke' betekent."
+        },
+        "allow_removal": {
+          "name": "Verwijderen toestaan",
+          "description": "Sta toe dat het uitzonderingsschema wordt geschreven, ook als daardoor uitzonderingen verdwijnen die nu in het apparaat staan."
         }
       }
     }
