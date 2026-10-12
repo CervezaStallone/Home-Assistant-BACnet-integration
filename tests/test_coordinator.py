@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC
+
 import pytest
 
 from custom_components.bacnet.const import (
@@ -615,7 +617,7 @@ class TestMetadataRefreshTiming:
 
     def test_triggered_once_interval_elapses(self):
         import asyncio
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
         from unittest.mock import AsyncMock, MagicMock
 
         coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
@@ -624,7 +626,7 @@ class TestMetadataRefreshTiming:
             return_value={"0:1": {"presentValue": 1.0, "statusFlags": [False] * 4}}
         )
         coord.async_refresh_metadata = AsyncMock()
-        coord._last_metadata_refresh = datetime.now(timezone.utc) - timedelta(hours=2)
+        coord._last_metadata_refresh = datetime.now(UTC) - timedelta(hours=2)
         scheduled = []
         coord.hass.async_create_background_task = MagicMock(
             side_effect=lambda coro, name: scheduled.append(coro)
@@ -640,7 +642,7 @@ class TestMetadataRefreshTiming:
     def test_not_triggered_on_failed_poll(self):
         """A failed poll must not attempt a metadata refresh either."""
         import asyncio
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
         from unittest.mock import AsyncMock
 
         coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
@@ -649,7 +651,7 @@ class TestMetadataRefreshTiming:
             return_value={"0:1": {"presentValue": None, "statusFlags": None}}
         )
         coord.async_refresh_metadata = AsyncMock()
-        coord._last_metadata_refresh = datetime.now(timezone.utc) - timedelta(hours=2)
+        coord._last_metadata_refresh = datetime.now(UTC) - timedelta(hours=2)
 
         asyncio.run(coord._async_update_data())
 
@@ -692,7 +694,7 @@ class TestCovTriggeredMetadataCheck:
         captured[0].close()
 
     def test_notification_after_throttle_window_schedules_again(self):
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
         coord.data = {"0:1": {"presentValue": 20.0}}
@@ -701,9 +703,9 @@ class TestCovTriggeredMetadataCheck:
         coord.hass.async_create_task = lambda coro: captured.append(coro) or coro
 
         coord._handle_cov_notification("0:1", {"presentValue": 25.0})
-        coord._last_object_metadata_check["0:1"] = datetime.now(
-            timezone.utc
-        ) - timedelta(minutes=10)
+        coord._last_object_metadata_check["0:1"] = datetime.now(UTC) - timedelta(
+            minutes=10
+        )
         coord._handle_cov_notification("0:1", {"presentValue": 26.0})
 
         assert len(captured) == 2
@@ -1112,7 +1114,7 @@ class TestPerObjectCovListeners:
 
 class TestMetadataSweepBackground:
     def _polling_coord(self):
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
         from unittest.mock import AsyncMock, MagicMock
 
         coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
@@ -1120,7 +1122,7 @@ class TestMetadataSweepBackground:
         coord.client.poll_objects = AsyncMock(
             return_value={"0:1": {"presentValue": 1.0, "statusFlags": [False] * 4}}
         )
-        coord._last_metadata_refresh = datetime.now(timezone.utc) - timedelta(hours=2)
+        coord._last_metadata_refresh = datetime.now(UTC) - timedelta(hours=2)
         coord.hass.async_create_background_task = MagicMock(
             side_effect=lambda coro, name: coro.close() or MagicMock(done=lambda: False)
         )
@@ -1128,11 +1130,11 @@ class TestMetadataSweepBackground:
 
     def test_running_sweep_is_not_started_twice(self):
         import asyncio
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         coord = self._polling_coord()
         asyncio.run(coord._async_update_data())
-        coord._last_metadata_refresh = datetime.now(timezone.utc) - timedelta(hours=2)
+        coord._last_metadata_refresh = datetime.now(UTC) - timedelta(hours=2)
         asyncio.run(coord._async_update_data())
         assert coord.hass.async_create_background_task.call_count == 1
 
