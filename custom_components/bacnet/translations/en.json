@@ -184,6 +184,12 @@
     },
     "not_a_bacnet_object": {
       "message": "{entity_id} is not a BACnet object entity of this integration."
+    },
+    "not_a_schedule": {
+      "message": "{entity_id} is not a BACnet Schedule object."
+    },
+    "schedule_failed": {
+      "message": "Schedule {entity_id}: {error}"
     }
   },
   "services": {
@@ -208,6 +214,32 @@
         "priority": {
           "name": "Priority",
           "description": "Priority level to write at (1-16). Defaults to the device's Write Priority."
+        }
+      }
+    },
+    "read_schedule": {
+      "name": "Read schedule",
+      "description": "Read a BACnet Schedule object: weekly schedule, exception schedule (with the dates of referenced calendars), default value, effective period and the objects it controls. Returns the data as a response."
+    },
+    "write_schedule": {
+      "name": "Write schedule",
+      "description": "Change parts of a BACnet Schedule object, using the same data shape read_schedule returns. Fields left out are not touched. The schedule is read back afterwards; the action fails if the device rejected the change or stored something different.",
+      "fields": {
+        "weekly_schedule": {
+          "name": "Weekly schedule",
+          "description": "Weekdays (monday … sunday) mapped to a list of {time, value} entries. Only the days given are changed; a value of null releases the schedule to its default. If the device refuses single-day writes, pass all seven days."
+        },
+        "exception_schedule": {
+          "name": "Exception schedule",
+          "description": "Complete list of exceptions, replacing the existing one. Each has a period (date, date_range, week_n_day or calendar_reference), a priority (1-16) and time_values."
+        },
+        "schedule_default": {
+          "name": "Default value",
+          "description": "Value used when no weekly or exception entry applies."
+        },
+        "effective_period": {
+          "name": "Effective period",
+          "description": "Start and end date between which the schedule is active. A date is YYYY-MM-DD, or {year, month, day, weekday} where null means any."
         }
       }
     }
