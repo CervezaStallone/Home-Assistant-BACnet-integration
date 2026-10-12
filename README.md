@@ -49,6 +49,7 @@ In plain terms: if your building has BACnet controllers, thermostats, sensors, o
 - **Selective import** — only import the objects you actually need
 - **Configurable write priority** — per-device select entity to change the BACnet write priority (disabled by default)
 - **Relinquish & one-off writes** — `bacnet.relinquish` and `bacnet.write_value` services for full Priority Array control
+- **Schedules** — BACnet Schedule objects as a sensor, with `bacnet.read_schedule` and `bacnet.write_schedule` services for the weekly schedule, exceptions and default
 - **Device limits & state texts** — number limits from `minPresValue`/`maxPresValue`/`resolution`, multi-state objects as a select with their `stateText` labels
 - **Climate with a real room temperature** — pair a setpoint with a separate temperature object
 - **Automatic outage recovery** — detects network outages, reconnects automatically and tells you in Repairs when a device stays unreachable
@@ -72,6 +73,7 @@ In plain terms: if your building has BACnet controllers, thermostats, sensors, o
 | Multi-State Input | Sensor | No |
 | Multi-State Output | Number | Yes |
 | Multi-State Value | Sensor | Auto-detected |
+| Schedule | Sensor (current value) | Via `bacnet.write_schedule` |
 
 > Value objects may or may not support writes — the integration auto-detects this by checking for a Priority Array during discovery.
 >
@@ -261,6 +263,37 @@ target:
 data:
   priority: 8
 ```
+
+### Schedules
+
+A BACnet Schedule object is imported as a sensor showing the value the schedule currently commands. The schedule itself is read and changed with two services that target that sensor:
+
+| Service | What it does |
+|---|---|
+| `bacnet.read_schedule` | Returns the schedule as response data: `weekly_schedule`, `exception_schedule`, `calendars` (the dates of calendars the exceptions refer to), `schedule_default`, `effective_period`, `controlled_objects`, `value_type`, `priority_for_writing`. |
+| `bacnet.write_schedule` | Changes `weekly_schedule`, `exception_schedule`, `schedule_default` and/or `effective_period`, in the same shape `read_schedule` returns. Fields you leave out are not touched. The schedule is read back afterwards and the action fails if the device rejected the change or stored something different. |
+
+```yaml
+action: bacnet.write_schedule
+target:
+  entity_id: sensor.ddc_heating_schedule
+data:
+  weekly_schedule:
+    monday:
+      - { time: "06:30:00", value: 21.5 }
+      - { time: "22:00:00", value: null }   # null = back to the default
+  exception_schedule:
+    - period: { date: "2026-12-25" }
+      priority: 10
+      time_values:
+        - { time: "00:00:00", value: 16 }
+response_variable: schedule
+```
+
+- **Weekly schedule** — only the weekdays you pass are changed (one write per day). Pass all seven days to send the week as a single write, which some devices require.
+- **Exception schedule** — always replaces the complete list. A `period` is one of `date`, `date_range` (`start`/`end`), `week_n_day` (`month`, `week_of_month`, `weekday`) or `calendar_reference` (Calendar object instance).
+- **Dates** — write `"YYYY-MM-DD"`, or `{year, month, day, weekday}` where `null` means *any*. Dates are always returned in the second form, with raw BACnet numbers (month 13/14 = odd/even months, day 32 = last day of the month, weekday 1 = Monday).
+- **Values** are written in the schedule's own datatype (`value_type`).
 
 ---
 

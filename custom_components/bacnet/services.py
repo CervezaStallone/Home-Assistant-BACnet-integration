@@ -5,6 +5,11 @@ bacnet.relinquish   — release HA's command (write Null) at a priority level,
 bacnet.write_value  — write a presentValue once at a chosen priority,
                       without changing the device's Write Priority setting.
 
+bacnet.read_schedule  — return a Schedule object (weekly schedule, exceptions,
+                        default, controlled objects) as response data.
+bacnet.write_schedule — change parts of a Schedule object; the device is read
+                        back afterwards to verify it accepted the change.
+
 Registered once in async_setup and resolved through the entity registry,
 so one service covers the switch, number and climate platforms alike.
 """
@@ -15,7 +20,7 @@ from typing import Any
 
 import homeassistant.helpers.config_validation as cv
 import voluptuous as vol
-from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 
@@ -35,12 +40,15 @@ except ImportError:  # older Home Assistant (minimum supported: 2024.4)
         return async_extract_referenced_entity_ids(hass, call)
 
 
-from .const import DOMAIN
+from .bacnet_client import ScheduleError
+from .const import DOMAIN, OBJECT_TYPE_SCHEDULE
 from .entity import async_write_object_value
 from .helpers import object_key
 
 SERVICE_RELINQUISH = "relinquish"
 SERVICE_WRITE_VALUE = "write_value"
+SERVICE_READ_SCHEDULE = "read_schedule"
+SERVICE_WRITE_SCHEDULE = "write_schedule"
 ATTR_PRIORITY = "priority"
 ATTR_VALUE = "value"
 
@@ -54,6 +62,23 @@ WRITE_VALUE_SCHEMA = cv.make_entity_service_schema(
         vol.Required(ATTR_VALUE): vol.Coerce(float),
         vol.Optional(ATTR_PRIORITY): _PRIORITY,
     }
+)
+READ_SCHEDULE_SCHEMA = cv.make_entity_service_schema({})
+# Only the outer shape is checked here; the client validates the contents
+# while converting them to BACnet types.
+WRITE_SCHEDULE_SCHEMA = cv.make_entity_service_schema(
+    {
+        vol.Optional("weekly_schedule"): dict,
+        vol.Optional("exception_schedule"): list,
+        vol.Optional("schedule_default"): vol.Any(None, bool, int, float, str),
+        vol.Optional("effective_period"): dict,
+    }
+)
+_SCHEDULE_FIELDS = (
+    "weekly_schedule",
+    "exception_schedule",
+    "schedule_default",
+    "effective_period",
 )
 
 
@@ -116,6 +141,45 @@ async def async_handle_write_value(hass: HomeAssistant, call: ServiceCall) -> No
         )
 
 
+async def async_handle_schedule(
+    hass: HomeAssistant, call: ServiceCall, *, write: bool
+) -> dict[str, Any]:
+    """Handle bacnet.read_schedule / bacnet.write_schedule.
+
+    Returns {entity_id: schedule}; after a write that is the read-back.
+    """
+    targets = _targets(hass, call)
+    for _, obj, entity_id in targets:
+        if obj["object_type"] != OBJECT_TYPE_SCHEDULE:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="not_a_schedule",
+                translation_placeholders={"entity_id": entity_id},
+            )
+    changes = {key: call.data[key] for key in _SCHEDULE_FIELDS if key in call.data}
+
+    response: dict[str, Any] = {}
+    for coordinator, obj, entity_id in targets:
+        client, address = coordinator.client, coordinator.device_address
+        try:
+            if write:
+                response[entity_id] = await client.write_schedule(
+                    address, obj["instance"], changes
+                )
+                await coordinator.async_refresh_object(obj)
+            else:
+                response[entity_id] = await client.read_schedule(
+                    address, obj["instance"]
+                )
+        except ScheduleError as err:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="schedule_failed",
+                translation_placeholders={"entity_id": entity_id, "error": str(err)},
+            ) from err
+    return response
+
+
 def async_setup_services(hass: HomeAssistant) -> None:
     """Register the integration's services (once, from async_setup)."""
 
@@ -125,6 +189,26 @@ def async_setup_services(hass: HomeAssistant) -> None:
     async def _write_value(call: ServiceCall) -> None:
         await async_handle_write_value(hass, call)
 
+    async def _read_schedule(call: ServiceCall) -> dict[str, Any]:
+        return await async_handle_schedule(hass, call, write=False)
+
+    async def _write_schedule(call: ServiceCall) -> dict[str, Any]:
+        return await async_handle_schedule(hass, call, write=True)
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_READ_SCHEDULE,
+        _read_schedule,
+        schema=READ_SCHEDULE_SCHEMA,
+        supports_response=SupportsResponse.ONLY,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_WRITE_SCHEDULE,
+        _write_schedule,
+        schema=WRITE_SCHEDULE_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
     hass.services.async_register(
         DOMAIN, SERVICE_RELINQUISH, _relinquish, schema=RELINQUISH_SCHEMA
     )
