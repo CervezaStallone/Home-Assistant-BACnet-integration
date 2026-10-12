@@ -227,7 +227,7 @@
       "fields": {
         "weekly_schedule": {
           "name": "Weekschema",
-          "description": "Weekdagen (monday … sunday) met elk een lijst van {time, value}-regels. Alleen de opgegeven dagen worden gewijzigd; de waarde null laat het schema terugvallen op de standaardwaarde. Weigert het apparaat schrijfacties per dag, geef dan alle zeven dagen op."
+          "description": "Weekdagen (monday … sunday) met elk een lijst van regels met een time en een value. Alleen de opgegeven dagen worden gewijzigd; de waarde null laat het schema terugvallen op de standaardwaarde. Weigert het apparaat schrijfacties per dag, geef dan alle zeven dagen op."
         },
         "exception_schedule": {
           "name": "Uitzonderingsschema",
@@ -239,7 +239,7 @@
         },
         "effective_period": {
           "name": "Geldigheidsperiode",
-          "description": "Begin- en einddatum waartussen het schema actief is. Een datum is JJJJ-MM-DD, of {year, month, day, weekday} waarbij null 'elke' betekent."
+          "description": "Begin- en einddatum waartussen het schema actief is. Een datum is JJJJ-MM-DD, of een object met year, month, day en weekday waarbij null 'elke' betekent."
         }
       }
     }
