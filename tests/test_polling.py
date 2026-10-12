@@ -116,7 +116,7 @@ class _FakeReadOnlyApp:
         try:
             await asyncio.sleep(0.001)
             if not self.online:
-                raise asyncio.TimeoutError
+                raise TimeoutError
             return 1.0
         finally:
             self.in_flight -= 1
