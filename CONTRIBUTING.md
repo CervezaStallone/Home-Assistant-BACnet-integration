@@ -137,7 +137,7 @@ custom_components/bacnet/
 
    # Smoke tests — the integration in a real Home Assistant (BACnet faked).
    # Catches HA API changes the stubs can't see. Needs its own environment:
-   pip install pytest-homeassistant-custom-component "BACpypes3==0.0.99"
+   pip install pytest-homeassistant-custom-component "BACpypes3==0.0.110"
    cd tests_ha && pytest
    ```
    CI runs the smoke tests against both the minimum supported and the latest Home Assistant (see `tests_ha/requirements-min.txt`).

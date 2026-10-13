@@ -184,6 +184,12 @@
     },
     "not_a_bacnet_object": {
       "message": "{entity_id} is geen BACnet-objectentiteit van deze integratie."
+    },
+    "not_a_schedule": {
+      "message": "{entity_id} is geen BACnet Schedule-object."
+    },
+    "schedule_failed": {
+      "message": "Schema {entity_id}: {error}"
     }
   },
   "services": {
@@ -208,6 +214,36 @@
         "priority": {
           "name": "Prioriteit",
           "description": "Prioriteitsniveau waarop wordt geschreven (1-16). Standaard de schrijfprioriteit van het apparaat."
+        }
+      }
+    },
+    "read_schedule": {
+      "name": "Schema lezen",
+      "description": "Leest een BACnet Schedule-object: weekschema, uitzonderingsschema (met de datums van gekoppelde kalenders), standaardwaarde, geldigheidsperiode en de objecten die het aanstuurt. Geeft de gegevens terug als respons."
+    },
+    "write_schedule": {
+      "name": "Schema schrijven",
+      "description": "Wijzigt onderdelen van een BACnet Schedule-object, in dezelfde gegevensvorm die read_schedule teruggeeft. Weggelaten velden blijven ongewijzigd. Het schema wordt daarna teruggelezen; de actie mislukt als het apparaat de wijziging weigerde of iets anders heeft opgeslagen.",
+      "fields": {
+        "weekly_schedule": {
+          "name": "Weekschema",
+          "description": "Weekdagen (monday … sunday) met elk een lijst van regels met een time en een value. Alleen de opgegeven dagen worden gewijzigd; de waarde null laat het schema terugvallen op de standaardwaarde. Weigert het apparaat schrijfacties per dag, geef dan alle zeven dagen op."
+        },
+        "exception_schedule": {
+          "name": "Uitzonderingsschema",
+          "description": "Volledige lijst met uitzonderingen; vervangt de bestaande lijst. Elke uitzondering heeft een period (date, date_range, week_n_day of calendar_reference), een priority (1-16) en time_values. Zou dit uitzonderingen verwijderen die nu in het apparaat staan, dan mislukt de actie en worden ze genoemd, tenzij Verwijderen toestaan aan staat."
+        },
+        "schedule_default": {
+          "name": "Standaardwaarde",
+          "description": "Waarde die geldt als geen regel uit het week- of uitzonderingsschema van toepassing is."
+        },
+        "effective_period": {
+          "name": "Geldigheidsperiode",
+          "description": "Begin- en einddatum waartussen het schema actief is. Een datum is JJJJ-MM-DD, of een object met year, month, day en weekday waarbij null 'elke' betekent."
+        },
+        "allow_removal": {
+          "name": "Verwijderen toestaan",
+          "description": "Sta toe dat het uitzonderingsschema wordt geschreven, ook als daardoor uitzonderingen verdwijnen die nu in het apparaat staan."
         }
       }
     }

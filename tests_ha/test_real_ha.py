@@ -19,8 +19,8 @@ from unittest.mock import patch
 import pytest
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntryState
-from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.core import Context, HomeAssistant
+from homeassistant.exceptions import HomeAssistantError, Unauthorized
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -72,9 +72,17 @@ OBJECTS = [
         "description": "",
         "commandable": False,
     },
+    {
+        "object_type": 17,
+        "instance": 6,
+        "object_name": "Heating Schedule",
+        "units": None,
+        "description": "",
+        "commandable": False,
+    },
 ]
 
-VALUES = {"0:1": 21.46, "4:2": 1, "2:3": 20.0, "19:4": 2, "5:5": 0}
+VALUES = {"0:1": 21.46, "4:2": 1, "2:3": 20.0, "19:4": 2, "5:5": 0, "17:6": 21.5}
 
 DATA = {
     "local_ip": "",
@@ -166,6 +174,15 @@ class FakeClient:
     async def relinquish(self, **kwargs):
         self.relinquishes.append(kwargs)
         return FakeClient.write_ok
+
+    async def read_schedule(self, device_address, instance):
+        return {"schedule_default": 16.0, "instance": instance}
+
+    async def write_schedule(
+        self, device_address, instance, changes, allow_removal=False
+    ):
+        self.writes.append({"schedule": instance, **changes})
+        return {"schedule_default": changes.get("schedule_default")}
 
     async def read_objects_metadata(self, device_address, objects):
         return {f"{o['object_type']}:{o['instance']}": dict(o) for o in objects}
@@ -286,6 +303,73 @@ async def test_services(hass: HomeAssistant) -> None:
             {"entity_id": _entity_id(hass, ("select", "write_priority"))},
             blocking=True,
         )
+
+
+async def test_schedule_services(hass: HomeAssistant) -> None:
+    await _setup(hass)
+    schedule = _entity_id(hass, ("sensor", "17_6"))
+    # The entity shows the value the schedule currently commands, untruncated.
+    assert hass.states.get(schedule).state == "21.5"
+
+    response = await hass.services.async_call(
+        DOMAIN,
+        "read_schedule",
+        {"entity_id": schedule},
+        blocking=True,
+        return_response=True,
+    )
+    assert response == {schedule: {"schedule_default": 16.0, "instance": 6}}
+
+    response = await hass.services.async_call(
+        DOMAIN,
+        "write_schedule",
+        {
+            "entity_id": schedule,
+            "schedule_default": 15.0,
+            "weekly_schedule": {"monday": [{"time": "08:00:00", "value": 21.0}]},
+        },
+        blocking=True,
+        return_response=True,
+    )
+    assert response == {schedule: {"schedule_default": 15.0}}
+    assert FakeClient.instances[-1].writes[-1]["schedule"] == 6
+
+    with pytest.raises(HomeAssistantError):  # not a Schedule object
+        await hass.services.async_call(
+            DOMAIN,
+            "read_schedule",
+            {"entity_id": _entity_id(hass, ("sensor", "0_1"))},
+            blocking=True,
+            return_response=True,
+        )
+
+
+async def test_schedule_services_check_user_permission(
+    hass: HomeAssistant, hass_read_only_user
+) -> None:
+    await _setup(hass)
+    schedule = _entity_id(hass, ("sensor", "17_6"))
+    context = Context(user_id=hass_read_only_user.id)
+
+    response = await hass.services.async_call(
+        DOMAIN,
+        "read_schedule",
+        {"entity_id": schedule},
+        blocking=True,
+        return_response=True,
+        context=context,
+    )
+    assert schedule in response
+
+    with pytest.raises(Unauthorized):
+        await hass.services.async_call(
+            DOMAIN,
+            "write_schedule",
+            {"entity_id": schedule, "schedule_default": 15.0},
+            blocking=True,
+            context=context,
+        )
+    assert not any("schedule" in w for w in FakeClient.instances[-1].writes)
 
 
 async def test_rejected_write_raises(hass: HomeAssistant) -> None:

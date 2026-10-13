@@ -803,3 +803,45 @@ class TestCovGracefulUnsubscribe:
     def test_unsubscribe_unknown_key_is_noop(self):
         client = BACnetClient(local_ip="127.0.0.1", local_port=47817)
         asyncio.run(client.unsubscribe_cov("does-not-exist"))  # must not raise
+
+
+# ---------------------------------------------------------------------------
+# BACpypes3 0.0.110 upgrade — issue #52
+# ---------------------------------------------------------------------------
+
+
+class TestNullCoercion:
+    """Newer BACpypes3 returns Null for a Null-valued atomic property."""
+
+    def test_null_becomes_none(self):
+        from bacpypes3.primitivedata import Null
+
+        assert BACnetClient._coerce_value(Null(())) is None
+
+    def test_any_atomic_is_unwrapped(self):
+        from bacpypes3.constructeddata import AnyAtomic
+        from bacpypes3.primitivedata import Null, Real
+
+        assert BACnetClient._coerce_value(AnyAtomic(Real(21.5))) == 21.5
+        assert BACnetClient._coerce_value(AnyAtomic(Null(()))) is None
+
+
+class TestFreePortProbe:
+    """SO_REUSEPORT (BACpypes3 >= 0.0.105) hides port conflicts; the probe
+    must still detect a port that another socket already holds."""
+
+    def test_port_in_use_raises_then_passes_once_freed(self):
+        import socket
+
+        holder = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        if hasattr(socket, "SO_REUSEPORT"):
+            holder.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+        holder.bind(("127.0.0.1", 0))
+        addr = holder.getsockname()
+        client = BACnetClient(local_ip=addr[0], local_port=addr[1])
+        try:
+            with pytest.raises(RuntimeError, match="could not be bound"):
+                asyncio.run(client._wait_for_free_port(addr, timeout=0))
+        finally:
+            holder.close()
+        asyncio.run(client._wait_for_free_port(addr, timeout=0))

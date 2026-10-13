@@ -35,3 +35,38 @@ write_value:
           min: 1
           max: 16
           mode: box
+
+read_schedule:
+  target:
+    entity:
+      integration: bacnet
+      domain:
+        - sensor
+
+write_schedule:
+  target:
+    entity:
+      integration: bacnet
+      domain:
+        - sensor
+  fields:
+    weekly_schedule:
+      example: '{"monday": [{"time": "08:00:00", "value": 21.0}, {"time": "17:00:00", "value": 16.0}]}'
+      selector:
+        object:
+    exception_schedule:
+      example: '[{"period": {"date": "2026-12-25"}, "priority": 10, "time_values": [{"time": "00:00:00", "value": 12.0}]}]'
+      selector:
+        object:
+    schedule_default:
+      example: "16.0"
+      selector:
+        object:
+    effective_period:
+      example: '{"start": "2026-01-01", "end": "2026-12-31"}'
+      selector:
+        object:
+    allow_removal:
+      default: false
+      selector:
+        boolean:

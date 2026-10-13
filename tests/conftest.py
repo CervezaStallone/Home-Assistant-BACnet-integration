@@ -241,6 +241,18 @@ _ha_exceptions = MagicMock()
 _ha_exceptions.ConfigEntryNotReady = Exception
 _ha_exceptions.HomeAssistantError = _HomeAssistantError
 
+
+class _Unauthorized(_HomeAssistantError):
+    """Stub accepting HA's context / entity_id / permission kwargs."""
+
+    def __init__(self, context=None, entity_id=None, permission=None):
+        super().__init__()
+        self.entity_id = entity_id
+        self.permission = permission
+
+
+_ha_exceptions.Unauthorized = _Unauthorized
+
 _ha_coordinator_mod = MagicMock()
 _ha_coordinator_mod.CoordinatorEntity = _CoordinatorEntity
 _ha_coordinator_mod.DataUpdateCoordinator = _DataUpdateCoordinator
@@ -318,6 +330,9 @@ sys.modules.update(
         "homeassistant.config_entries": _ha_config_entries,
         "homeassistant.const": _ha_const,
         "homeassistant.exceptions": _ha_exceptions,
+        "homeassistant.auth": MagicMock(),
+        "homeassistant.auth.permissions": MagicMock(),
+        "homeassistant.auth.permissions.const": MagicMock(),
         "homeassistant.components": MagicMock(),
         "homeassistant.components.sensor": _ha_sensor_mod,
         "homeassistant.components.binary_sensor": _ha_binary_sensor_mod,

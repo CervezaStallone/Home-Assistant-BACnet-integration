@@ -32,6 +32,7 @@ from .const import (
     OBJECT_TYPE_ANALOG_INPUT,
     OBJECT_TYPE_ANALOG_OUTPUT,
     OBJECT_TYPE_ANALOG_VALUE,
+    OBJECT_TYPE_SCHEDULE,
 )
 from .coordinator import BACnetCoordinator
 from .entity import BACnetEntity, bacnet_device_info
@@ -134,6 +135,9 @@ class BACnetSensor(BACnetEntity, SensorEntity):
                 return float(f"{float(value):.7g}")
             except (ValueError, TypeError):
                 return None
+        if self.object_type == OBJECT_TYPE_SCHEDULE:
+            # A schedule's value can be any primitive type (real, enumerated…)
+            return float(f"{value:.7g}") if isinstance(value, float) else value
         # Multi-state values are integers
         try:
             return int(value)
