@@ -780,6 +780,14 @@ class BACnetClient:
 
         if self._app is not None:
             try:
+                # ForeignApplication.close() only closes the socket: the BBMD
+                # re-registration timer keeps firing and sends on the closed
+                # transport forever (issue #54). unregister() stops it and
+                # queues a deregistration; yield once so that is sent first.
+                unregister = getattr(self._app, "unregister", None)
+                if unregister is not None:
+                    unregister()
+                    await asyncio.sleep(0)
                 # close() is synchronous in BACpypes3
                 self._app.close()
             except Exception:  # noqa: BLE001
@@ -834,27 +842,30 @@ class BACnetClient:
                     continue
                 seen_ids.add(device_id)
 
-                # Try to read the device name
+                # Try to read the device name. _safe_read() because a device
+                # that answers Who-Is (e.g. forwarded by a BBMD) may still not
+                # answer unicast reads, and BACpypes3 reports that as an
+                # AbortPDU — a BaseException that would escape this method
+                # and crash the config flow (issue #54).
+                addr = Address(str(i_am.pduSource))
                 device_name = f"Device {device_id}"
-                try:
-                    name = await self._app.read_property(
-                        i_am.pduSource,
-                        ObjectIdentifier(("device", device_id)),
-                        "objectName",
-                    )
-                    if name:
-                        device_name = str(name)
-                except Exception:
-                    _LOGGER.debug(
-                        "Could not read objectName for device %s, using default name",
-                        device_id,
-                        exc_info=True,
-                    )
-
-                # Read vendor, model, firmware, software version
-                extras = await self._read_device_extras(
-                    Address(str(i_am.pduSource)), device_id
+                name = await self._safe_read(
+                    addr, ObjectIdentifier(("device", device_id)), "objectName"
                 )
+                extras: dict[str, str] = {}
+                if name:
+                    device_name = str(name)
+                    # Read vendor, model, firmware, software version
+                    extras = await self._read_device_extras(addr, device_id)
+                else:
+                    # Not answering reads — don't spend four more timeouts.
+                    _LOGGER.warning(
+                        "Device %s at %s answered Who-Is but not a unicast "
+                        "read — check routing between Home Assistant and "
+                        "the device",
+                        device_id,
+                        _mask_address(i_am.pduSource),
+                    )
 
                 devices.append(
                     {
@@ -872,8 +883,8 @@ class BACnetClient:
                 )
         except TimeoutError:
             pass  # normal - discovery just timed out
-        except Exception as exc:  # noqa: BLE001
-            _LOGGER.error("Error during Who-Is discovery: %s", exc)
+        except (Exception, ErrorRejectAbortNack) as exc:  # noqa: BLE001
+            _LOGGER.error("Error during Who-Is discovery: %r", exc)
 
         _LOGGER.info("Discovery complete: found %d device(s)", len(devices))
         return devices
@@ -933,11 +944,15 @@ class BACnetClient:
         Returns a dict compatible with the discovery result format:
             {"device_id": int, "device_name": str, "address": str}
 
-        Returns None if the device does not respond within *timeout* seconds.
+        Returns None if the device is not identified within *timeout*
+        seconds. *timeout* only covers identification: the name and the
+        optional metadata are read afterwards, each read with its own
+        timeout, so a slow device that did answer is not reported as
+        unreachable (issue #52).
         """
         try:
-            return await asyncio.wait_for(
-                self._read_device_info_inner(device_address, device_id),
+            found_id = await asyncio.wait_for(
+                self._identify_device(device_address, device_id),
                 timeout=timeout,
             )
         except TimeoutError:
@@ -947,11 +962,25 @@ class BACnetClient:
                 _mask_address(device_address),
             )
             return None
+        if found_id is None:
+            return None
 
-    async def _read_device_info_inner(
+        addr = Address(device_address)
+        name = await self._safe_read(
+            addr, ObjectIdentifier(("device", found_id)), "objectName"
+        )
+        extras = await self._read_device_extras(addr, found_id)
+        return {
+            "device_id": found_id,
+            "device_name": str(name) if name else f"Device {found_id}",
+            "address": device_address,
+            **extras,
+        }
+
+    async def _identify_device(
         self, device_address: str, known_device_id: int | None = None
-    ) -> dict[str, Any] | None:
-        """Internal implementation of read_device_info (no outer timeout)."""
+    ) -> int | None:
+        """Find the device instance at an address (no outer timeout)."""
         if self._app is None:
             raise RuntimeError("Client not connected")
 
@@ -993,29 +1022,7 @@ class BACnetClient:
                 "Who-Is returned %d I-Am(s)", len(i_am_list) if i_am_list else 0
             )
             if i_am_list:
-                i_am = i_am_list[0]
-                device_id = i_am.iAmDeviceIdentifier[1]
-                device_name = f"Device {device_id}"
-                try:
-                    name = await asyncio.wait_for(
-                        self._app.read_property(
-                            addr,
-                            ObjectIdentifier(("device", device_id)),
-                            "objectName",
-                        ),
-                        timeout=3,
-                    )
-                    if name and not isinstance(name, ErrorRejectAbortNack):
-                        device_name = str(name)
-                except (TimeoutError, ErrorRejectAbortNack, Exception):  # noqa: BLE001
-                    _LOGGER.debug("Could not read objectName, using default")
-                extras = await self._read_device_extras(addr, device_id)
-                return {
-                    "device_id": device_id,
-                    "device_name": device_name,
-                    "address": device_address,
-                    **extras,
-                }
+                return i_am_list[0].iAmDeviceIdentifier[1]
         except (ErrorRejectAbortNack, Exception) as exc:  # noqa: BLE001
             _LOGGER.debug(
                 "Strategy 1 (Who-Is) failed for %s: %s (%s)",
@@ -1046,24 +1053,7 @@ class BACnetClient:
                 )
                 _LOGGER.debug("  ReadProperty returned: %s", obj_id)
                 if obj_id is not None and not isinstance(obj_id, ErrorRejectAbortNack):
-                    device_id = obj_id[1]
-                    device_name = f"Device {device_id}"
-                    try:
-                        name = await asyncio.wait_for(
-                            self._app.read_property(addr, oid, "objectName"),
-                            timeout=3,
-                        )
-                        if name and not isinstance(name, ErrorRejectAbortNack):
-                            device_name = str(name)
-                    except (TimeoutError, ErrorRejectAbortNack, Exception):  # noqa: BLE001
-                        _LOGGER.debug("  Could not read objectName")
-                    extras = await self._read_device_extras(addr, device_id)
-                    return {
-                        "device_id": device_id,
-                        "device_name": device_name,
-                        "address": device_address,
-                        **extras,
-                    }
+                    return obj_id[1]
             except TimeoutError:
                 _LOGGER.debug("  ReadProperty timeout for device,%d", test_id)
                 continue

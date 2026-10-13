@@ -845,3 +845,94 @@ class TestFreePortProbe:
         finally:
             holder.close()
         asyncio.run(client._wait_for_free_port(addr, timeout=0))
+
+
+# ---------------------------------------------------------------------------
+# BBMD / foreign-device discovery — issue #54
+# ---------------------------------------------------------------------------
+
+
+class TestDiscoveryUnansweredRead:
+    """A device can answer Who-Is (forwarded by a BBMD) and still not answer
+    unicast reads. BACpypes3 raises AbortPDU for that — a BaseException, so
+    `except Exception` in the config flow missed it and HA showed
+    "Unknown error occurred"."""
+
+    def test_abort_on_name_read_does_not_escape(self):
+        from bacpypes3.apdu import AbortPDU, IAmRequest
+        from bacpypes3.pdu import Address
+
+        i_am = IAmRequest(iAmDeviceIdentifier=("device", 1234))
+        i_am.pduSource = Address("10.0.5.20")
+
+        class _App:
+            async def who_is(self, **kwargs):
+                return [i_am]
+
+            async def read_property(self, addr, oid, prop_name, array_index=None):
+                raise AbortPDU()
+
+        client = BACnetClient(local_ip="127.0.0.1", local_port=47830)
+        client._app = _App()
+
+        devices = asyncio.run(client.discover_devices(timeout=1))
+
+        assert [(d["device_id"], d["device_name"]) for d in devices] == [
+            (1234, "Device 1234")
+        ]
+
+
+class TestDisconnectStopsForeignRegistration:
+    """ForeignApplication.close() leaves the BBMD re-registration timer
+    running, which then sends on the closed socket every 5 s forever."""
+
+    def test_unregister_called_before_close(self):
+        calls: list[str] = []
+
+        class _ForeignApp:
+            def unregister(self):
+                calls.append("unregister")
+
+            def close(self):
+                calls.append("close")
+
+        client = BACnetClient(local_ip="127.0.0.1", local_port=47831)
+        client._app = _ForeignApp()
+
+        asyncio.run(client.disconnect())
+
+        assert calls == ["unregister", "close"]
+        assert client._app is None
+
+
+# ---------------------------------------------------------------------------
+# read_device_info() on a slow device — issue #52
+# ---------------------------------------------------------------------------
+
+
+class TestReadDeviceInfoSlowMetadata:
+    """The overall timeout used to cover the optional metadata reads too, so
+    a slow controller that had already identified itself was reported as
+    unreachable."""
+
+    def test_slow_metadata_does_not_fail_identification(self):
+        from bacpypes3.apdu import IAmRequest
+
+        i_am = IAmRequest(iAmDeviceIdentifier=("device", 10002))
+
+        class _App:
+            async def who_is(self, **kwargs):
+                return [i_am]
+
+            async def read_property(self, addr, oid, prop_name, array_index=None):
+                await asyncio.sleep(0.05)  # slower than the timeout below
+                return {"objectName": "DDC4000"}.get(prop_name)
+
+        client = BACnetClient(local_ip="127.0.0.1", local_port=47832)
+        client._app = _App()
+
+        info = asyncio.run(client.read_device_info("10.0.0.5", timeout=0.02))
+
+        assert info["device_id"] == 10002
+        assert info["device_name"] == "DDC4000"
+        assert info["address"] == "10.0.0.5"
