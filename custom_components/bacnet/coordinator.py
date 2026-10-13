@@ -18,7 +18,7 @@ import logging
 import math
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any, ClassVar
 
 from homeassistant.config_entries import ConfigEntry
@@ -169,7 +169,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         # Metadata refresh (issue #26). Skip an immediate refresh right after
         # setup — the config flow just read fresh metadata during discovery.
-        self._last_metadata_refresh: datetime = datetime.now(timezone.utc)
+        self._last_metadata_refresh: datetime = datetime.now(UTC)
         self._last_object_metadata_check: dict[str, datetime] = {}
         self._metadata_task: asyncio.Task | None = None
         self._persist_handle: asyncio.TimerHandle | None = None
@@ -254,7 +254,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # BACpypes3 timeouts surface as None values rather than exceptions.
         if self._poll_yielded_data(polled):
             self._consecutive_failures = 0
-            self.last_successful_poll = datetime.now(timezone.utc)
+            self.last_successful_poll = datetime.now(UTC)
             if self._outage_issue_raised:
                 ir.async_delete_issue(self.hass, DOMAIN, self._outage_issue_id)
                 self._outage_issue_raised = False
@@ -268,7 +268,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # reachable, so this is the cheapest point to check for changes.
             # Runs in the background: a sweep is several reads per object and
             # must not hold up this poll (or writes waiting on a refresh).
-            elapsed = datetime.now(timezone.utc) - self._last_metadata_refresh
+            elapsed = datetime.now(UTC) - self._last_metadata_refresh
             sweep_running = (
                 self._metadata_task is not None and not self._metadata_task.done()
             )
@@ -276,7 +276,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 elapsed >= timedelta(seconds=DEFAULT_METADATA_REFRESH_INTERVAL)
                 and not sweep_running
             ):
-                self._last_metadata_refresh = datetime.now(timezone.utc)
+                self._last_metadata_refresh = datetime.now(UTC)
                 self._metadata_task = self.hass.async_create_background_task(
                     self.async_refresh_metadata(), name=f"{self.name} metadata sweep"
                 )
@@ -464,7 +464,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         Returns True if any object's metadata changed.
         """
-        self._last_metadata_refresh = datetime.now(timezone.utc)
+        self._last_metadata_refresh = datetime.now(UTC)
         snapshot = self.objects
         try:
             fresh_by_key = await self.client.read_objects_metadata(
@@ -779,7 +779,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         background task — the same pattern used elsewhere in this integration
         for scheduling async cleanup from a sync HA callback.
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         last_check = self._last_object_metadata_check.get(obj_key)
         if last_check is not None and (now - last_check) < timedelta(
             seconds=COV_METADATA_CHECK_INTERVAL

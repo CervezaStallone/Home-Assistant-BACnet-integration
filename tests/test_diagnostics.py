@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 from custom_components.bacnet.coordinator import UpdateFailed
@@ -105,7 +105,7 @@ class TestDiagnosticSensors:
 
     def test_values_and_categories(self):
         coord = _polling_coordinator(1.0)
-        coord.last_successful_poll = datetime(2026, 9, 25, tzinfo=timezone.utc)
+        coord.last_successful_poll = datetime(2026, 9, 25, tzinfo=UTC)
         coord._cov_subscriptions = {"a": 1, "b": 2}
         coord._consecutive_failures = 3
         sensors = self._sensors(coord)

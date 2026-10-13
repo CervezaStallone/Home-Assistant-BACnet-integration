@@ -14,22 +14,41 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import datetime
+import errno
 import hashlib
+import json
 import logging
+import socket
 from collections.abc import Callable
 from typing import Any, ClassVar
 
 from bacpypes3.apdu import ErrorRejectAbortNack, SubscribeCOVPropertyRequest
-from bacpypes3.basetypes import ErrorType
+from bacpypes3.basetypes import (
+    CalendarEntry,
+    DailySchedule,
+    DateRange,
+    ErrorType,
+    SpecialEvent,
+    SpecialEventPeriod,
+    TimeValue,
+    WeekNDay,
+)
+from bacpypes3.constructeddata import AnyAtomic, ArrayOf
 from bacpypes3.ipv4.app import ForeignApplication, NormalApplication
 from bacpypes3.local.device import DeviceObject
 from bacpypes3.pdu import Address, IPv4Address
 from bacpypes3.primitivedata import (
+    Boolean,
     CharacterString,
+    Date,
+    Double,
     Enumerated,
+    Integer,
     Null,
     ObjectIdentifier,
     Real,
+    Time,
     Unsigned,
 )
 from bacpypes3.service.cov import SubscriptionContextManager
@@ -46,6 +65,7 @@ from .const import (
     OBJECT_TYPE_MULTI_STATE_INPUT,
     OBJECT_TYPE_MULTI_STATE_OUTPUT,
     OBJECT_TYPE_MULTI_STATE_VALUE,
+    OBJECT_TYPE_SCHEDULE,
     RPM_MAX_OBJECTS,
 )
 from .helpers import mask_address as _mask_address
@@ -64,6 +84,7 @@ SUPPORTED_OBJECT_TYPES: set[int] = {
     OBJECT_TYPE_MULTI_STATE_INPUT,
     OBJECT_TYPE_MULTI_STATE_OUTPUT,
     OBJECT_TYPE_MULTI_STATE_VALUE,
+    OBJECT_TYPE_SCHEDULE,
 }
 
 # Object types that are inherently commandable (have a Priority Array)
@@ -103,6 +124,261 @@ _RPM_UNSUPPORTED_REASONS = {
     "optional-functionality-not-supported",
     "service-request-denied",
 }
+
+# ---------------------------------------------------------------------------
+# Schedule object <-> plain JSON data (issue #52)
+# ---------------------------------------------------------------------------
+
+
+class ScheduleError(Exception):
+    """A Schedule object could not be read, or a write to it failed."""
+
+
+WEEKDAYS = (
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+)
+
+# Primitive types a Schedule value may have, by BACnet name. A Schedule uses
+# one of them for all its values (ASHRAE 135 Clause 12.24).
+_ATOMIC_TYPES: dict[str, type] = {
+    "boolean": Boolean,
+    "real": Real,
+    "double": Double,
+    "unsigned": Unsigned,
+    "integer": Integer,
+    "enumerated": Enumerated,
+    "character-string": CharacterString,
+}
+# Bounds on what one read_schedule() call may cost: the device decides how
+# many calendars its exceptions refer to, so that fan-out is capped.
+_SCHEDULE_MAX_CALENDARS = 32
+_SCHEDULE_READ_TIMEOUT = 60.0
+_SCHEDULE_PROPERTIES = (
+    "presentValue",
+    "scheduleDefault",
+    "effectivePeriod",
+    "weeklySchedule",
+    "exceptionSchedule",
+    "listOfObjectPropertyReferences",
+    "priorityForWriting",
+    "outOfService",
+)
+
+
+def _wild(number: int) -> int | None:
+    """BACnet wildcard (255, "any") -> None."""
+    return None if number == 255 else int(number)
+
+
+def _unwild(number: int | None) -> int:
+    return 255 if number is None else int(number)
+
+
+def _date_to_json(date: Date) -> dict[str, int | None]:
+    """BACnet Date -> dict; None = any.
+
+    Numbers stay raw BACnet so nothing is lost: month 13/14 = odd/even
+    months, day 32 = last day of month, 33/34 = odd/even days, weekday
+    1 = Monday … 7 = Sunday.
+    """
+    year, month, day, weekday = date
+    return {
+        "year": None if year == 255 else year + 1900,
+        "month": _wild(month),
+        "day": _wild(day),
+        "weekday": _wild(weekday),
+    }
+
+
+def _date_from_json(data: Any) -> Date:
+    """Dict as built by _date_to_json(), or an ISO "YYYY-MM-DD" date."""
+    if isinstance(data, str):
+        data = datetime.date.fromisoformat(data)
+    if isinstance(data, datetime.date):  # YAML parses an unquoted date itself
+        return Date((data.year - 1900, data.month, data.day, data.isoweekday()))
+    year = data.get("year")
+    return Date(
+        (
+            255 if year is None else int(year) - 1900,
+            _unwild(data.get("month")),
+            _unwild(data.get("day")),
+            _unwild(data.get("weekday")),
+        )
+    )
+
+
+def _time_to_json(time: Time) -> str:
+    """BACnet Time -> "HH:MM:SS" (".hh" hundredths only if set, "*" = any)."""
+    hour, minute, second, hundredths = (
+        "*" if part == 255 else f"{part:02d}" for part in time
+    )
+    text = f"{hour}:{minute}:{second}"
+    return text if hundredths == "00" else f"{text}.{hundredths}"
+
+
+def _time_from_json(data: Any) -> Time:
+    """ "HH:MM[:SS[.hh]]" with "*" wildcards -> BACnet Time."""
+    if isinstance(data, int):
+        # YAML 1.1 reads an unquoted 22:00:00 as the sexagesimal int 79200.
+        minutes, second = divmod(data, 60)
+        return Time((*divmod(minutes, 60), second, 0))
+    main, _, hundredths = str(data).strip().partition(".")
+    parts = [*main.split(":"), "0", "0"][:3]
+    parts.append("*" if hundredths == "*" else (hundredths + "00")[:2])
+    return Time(tuple(255 if part == "*" else int(part) for part in parts))
+
+
+def _atomic_unwrap(value: Any) -> Any:
+    """Unwrap AnyAtomic; Null and missing both become None."""
+    if isinstance(value, AnyAtomic):
+        value = value.get_value()
+    return None if isinstance(value, Null) else value
+
+
+def _atomic_to_json(value: Any) -> Any:
+    value = _atomic_unwrap(value)
+    if value is None:
+        return None
+    if isinstance(value, Boolean):
+        return bool(value)
+    if isinstance(value, Real):
+        # float32: drop the float64 conversion noise (21.100000381…)
+        return float(f"{float(value):.7g}")
+    if isinstance(value, float):
+        return float(value)
+    if isinstance(value, int):
+        return int(value)
+    return str(value)
+
+
+def _atomic_from_json(value: Any, value_class: type | None) -> Any:
+    """Plain value -> BACnet primitive of *value_class* (None -> Null).
+
+    Without a known class (a schedule holding only Nulls) the type is
+    guessed from the Python type.
+    """
+    if value is None:
+        return Null(())
+    if value_class is None:
+        if isinstance(value, bool):
+            value_class = Boolean
+        elif isinstance(value, float):
+            value_class = Real
+        elif isinstance(value, int):
+            value_class = Unsigned if value >= 0 else Integer
+        else:
+            value_class = CharacterString
+    if value_class in (Unsigned, Integer, Enumerated):
+        if float(value) != int(value):
+            raise ValueError(f"{value!r} is not a whole number")
+        value = int(value)
+    return value_class(value)
+
+
+def _time_values_to_json(time_values: Any) -> list[dict[str, Any]]:
+    return [
+        {"time": _time_to_json(tv.time), "value": _atomic_to_json(tv.value)}
+        for tv in time_values or []
+    ]
+
+
+def _time_values_from_json(items: Any, value_class: type | None) -> list[TimeValue]:
+    return [
+        TimeValue(
+            time=_time_from_json(item["time"]),
+            value=_atomic_from_json(item.get("value"), value_class),
+        )
+        for item in items or []
+    ]
+
+
+def _date_range_to_json(date_range: DateRange) -> dict[str, Any]:
+    return {
+        "start": _date_to_json(date_range.startDate),
+        "end": _date_to_json(date_range.endDate),
+    }
+
+
+def _date_range_from_json(data: Any) -> DateRange:
+    return DateRange(
+        startDate=_date_from_json(data["start"]), endDate=_date_from_json(data["end"])
+    )
+
+
+def _calendar_entry_to_json(entry: CalendarEntry) -> dict[str, Any]:
+    if entry.date is not None:
+        return {"date": _date_to_json(entry.date)}
+    if entry.dateRange is not None:
+        return {"date_range": _date_range_to_json(entry.dateRange)}
+    month, week, weekday = bytes(entry.weekNDay)
+    return {
+        "week_n_day": {
+            "month": _wild(month),
+            "week_of_month": _wild(week),
+            "weekday": _wild(weekday),
+        }
+    }
+
+
+def _calendar_entry_from_json(data: Any) -> CalendarEntry:
+    if "date" in data:
+        return CalendarEntry(date=_date_from_json(data["date"]))
+    if "date_range" in data:
+        return CalendarEntry(dateRange=_date_range_from_json(data["date_range"]))
+    wnd = data["week_n_day"]
+    return CalendarEntry(
+        weekNDay=WeekNDay(
+            bytes(
+                _unwild(wnd.get(key)) for key in ("month", "week_of_month", "weekday")
+            )
+        )
+    )
+
+
+def _special_event_to_json(event: SpecialEvent) -> dict[str, Any]:
+    period = event.period
+    return {
+        "period": (
+            {"calendar_reference": int(period.calendarReference[1])}
+            if period.calendarReference is not None
+            else _calendar_entry_to_json(period.calendarEntry)
+        ),
+        "priority": int(event.eventPriority),
+        "time_values": _time_values_to_json(event.listOfTimeValues),
+    }
+
+
+def _special_event_from_json(data: Any, value_class: type | None) -> SpecialEvent:
+    period = data["period"]
+    return SpecialEvent(
+        period=(
+            SpecialEventPeriod(
+                calendarReference=ObjectIdentifier(
+                    ("calendar", int(period["calendar_reference"]))
+                )
+            )
+            if "calendar_reference" in period
+            else SpecialEventPeriod(calendarEntry=_calendar_entry_from_json(period))
+        ),
+        listOfTimeValues=_time_values_from_json(data.get("time_values"), value_class),
+        eventPriority=int(data.get("priority", 16)),
+    )
+
+
+def _schedule_value_class(*sources: Any) -> type | None:
+    """First non-Null value's BACnet type among defaults / time values."""
+    for source in sources:
+        value = _atomic_unwrap(source)
+        if value is not None:
+            return type(value)
+    return None
+
 
 # Type alias for the application — either Normal or Foreign
 _AppType = NormalApplication | ForeignApplication
@@ -308,6 +584,8 @@ class BACnetClient:
         self._last_bbmd_address = bbmd_address
         self._last_bbmd_ttl = bbmd_ttl
 
+        await self._wait_for_free_port(local_addr.addrTuple)
+
         if bbmd_address:
             _LOGGER.debug(
                 "Creating Foreign BACnet application on %s (BBMD=%s)",
@@ -348,6 +626,49 @@ class BACnetClient:
             self._app = None
             raise
 
+    def _bind_error(self) -> RuntimeError:
+        """Log and build the error for a UDP port that could not be bound."""
+        _LOGGER.error(
+            "UDP socket failed to bind — port %d may already be in use, or "
+            "local IP %s is not available (yet).",
+            self._local_port,
+            _mask_address(self._local_ip),
+        )
+        return RuntimeError(
+            f"UDP port {self._local_port} could not be bound "
+            f"(port in use, or local address not available yet)"
+        )
+
+    async def _wait_for_free_port(
+        self, addr_tuple: tuple[str, int], timeout: float = 5.0
+    ) -> None:
+        """Fail if another socket already holds our UDP port.
+
+        BACpypes3 >= 0.0.105 binds with SO_REUSEPORT on non-Windows, so a
+        second bind on a port in use *succeeds* and the kernel then splits
+        incoming replies between both sockets (random timeouts instead of a
+        clear error). A plain probe socket without SO_REUSEPORT still gets
+        EADDRINUSE, which restores the conflict detection.
+
+        Retries for *timeout* seconds: right after disconnect() the old
+        socket is only closed on the next event-loop iteration. Any other
+        bind error (e.g. EADDRNOTAVAIL early at boot) is left to BACpypes3's
+        own retry loop and _wait_for_transport().
+        """
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout
+        while True:
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+                    probe.bind(addr_tuple)
+                return
+            except OSError as err:
+                if err.errno != errno.EADDRINUSE:
+                    return
+                if loop.time() >= deadline:
+                    raise self._bind_error() from None
+            await asyncio.sleep(0.25)
+
     def _get_datagram_server(self):
         """Return the IPv4DatagramServer from the application stack.
 
@@ -384,19 +705,8 @@ class BACnetClient:
             try:
                 await asyncio.wait_for(asyncio.gather(*tasks), timeout=timeout)
                 server._transport_tasks = []
-            except asyncio.TimeoutError:
-                _LOGGER.error(
-                    "UDP socket failed to bind within %.0fs — port %d may "
-                    "already be in use, or local IP %s is not available "
-                    "(yet).",
-                    timeout,
-                    self._local_port,
-                    _mask_address(self._local_ip),
-                )
-                raise RuntimeError(
-                    f"UDP port {self._local_port} could not be bound "
-                    f"(port in use, or local address not available yet)"
-                ) from None
+            except TimeoutError:
+                raise self._bind_error() from None
 
         # Log the actual bound address
         transport = getattr(server, "local_transport", None)
@@ -560,7 +870,7 @@ class BACnetClient:
                     device_id,
                     _mask_address(i_am.pduSource),
                 )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass  # normal - discovery just timed out
         except Exception as exc:  # noqa: BLE001
             _LOGGER.error("Error during Who-Is discovery: %s", exc)
@@ -630,7 +940,7 @@ class BACnetClient:
                 self._read_device_info_inner(device_address, device_id),
                 timeout=timeout,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             _LOGGER.warning(
                 "Timeout (%.0fs) reaching device at %s",
                 timeout,
@@ -697,7 +1007,7 @@ class BACnetClient:
                     )
                     if name and not isinstance(name, ErrorRejectAbortNack):
                         device_name = str(name)
-                except (asyncio.TimeoutError, ErrorRejectAbortNack, Exception):  # noqa: BLE001
+                except (TimeoutError, ErrorRejectAbortNack, Exception):  # noqa: BLE001
                     _LOGGER.debug("Could not read objectName, using default")
                 extras = await self._read_device_extras(addr, device_id)
                 return {
@@ -745,7 +1055,7 @@ class BACnetClient:
                         )
                         if name and not isinstance(name, ErrorRejectAbortNack):
                             device_name = str(name)
-                    except (asyncio.TimeoutError, ErrorRejectAbortNack, Exception):  # noqa: BLE001
+                    except (TimeoutError, ErrorRejectAbortNack, Exception):  # noqa: BLE001
                         _LOGGER.debug("  Could not read objectName")
                     extras = await self._read_device_extras(addr, device_id)
                     return {
@@ -754,7 +1064,7 @@ class BACnetClient:
                         "address": device_address,
                         **extras,
                     }
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 _LOGGER.debug("  ReadProperty timeout for device,%d", test_id)
                 continue
             except ErrorRejectAbortNack as exc:
@@ -817,7 +1127,7 @@ class BACnetClient:
                 return list(result)
         except asyncio.CancelledError:
             raise
-        except (ErrorRejectAbortNack, asyncio.TimeoutError, Exception) as exc:  # noqa: BLE001
+        except (TimeoutError, ErrorRejectAbortNack, Exception) as exc:  # noqa: BLE001
             _LOGGER.info(
                 "Bulk objectList read failed for %s: %s (%s) — "
                 "falling back to element-by-element array indexing",
@@ -1096,7 +1406,7 @@ class BACnetClient:
             results = await asyncio.wait_for(
                 self._app.read_property_multiple(addr, param_list), timeout=30.0
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return None
         except ErrorRejectAbortNack as exc:
             self._handle_rpm_rejection(
@@ -1194,26 +1504,33 @@ class BACnetClient:
         return metadata
 
     async def _safe_read(
-        self, addr: Address, oid: ObjectIdentifier, prop_name: str
+        self,
+        addr: Address,
+        oid: ObjectIdentifier,
+        prop_name: str,
+        array_index: int | None = None,
     ) -> Any | None:
         """Read a single property, returning None on any error or timeout.
 
-        BACpypes3 v0.0.99 quirk: when a device responds with a BACnet Error
+        BACpypes3 quirk: when a device responds with a BACnet Error
         (e.g. ``unknown-property``), the library raises
         ``ErrorRejectAbortNack`` which extends ``BaseException`` — NOT
         ``Exception``.  A bare ``except Exception`` will miss it, so we
         catch it explicitly.
         """
         try:
+            args = (addr, oid, prop_name)
+            if array_index is not None:
+                args += (array_index,)
             result = await asyncio.wait_for(
-                self._app.read_property(addr, oid, prop_name),
+                self._app.read_property(*args),
                 timeout=5,
             )
             # read_property may also RETURN an error object instead of raising
             if isinstance(result, ErrorRejectAbortNack):
                 return None
             return result
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return None
         except asyncio.CancelledError:
             raise
@@ -1364,7 +1681,7 @@ class BACnetClient:
             )
             return data
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             _LOGGER.debug("RPM poll timed out for %s", _mask_address(device_address))
             return None
         except ErrorRejectAbortNack as exc:
@@ -1592,6 +1909,264 @@ class BACnetClient:
         )
 
     # ------------------------------------------------------------------
+    # Schedule objects (issue #52)
+    # ------------------------------------------------------------------
+
+    async def read_schedule(self, device_address: str, instance: int) -> dict[str, Any]:
+        """Read a Schedule object as plain JSON-serialisable data.
+
+        Optional properties the device does not have come back as None.
+        Calendars referenced by the exception schedule are read too, so the
+        caller gets the actual holiday dates.
+
+        Raises ScheduleError when the device does not answer at all, or the
+        whole read takes longer than _SCHEDULE_READ_TIMEOUT.
+        """
+        if self._app is None:
+            raise RuntimeError("Client not connected")
+        try:
+            async with asyncio.timeout(_SCHEDULE_READ_TIMEOUT):
+                return await self._read_schedule(device_address, instance)
+        except TimeoutError:
+            raise ScheduleError(f"timeout reading schedule {instance}") from None
+
+    async def _read_schedule(
+        self, device_address: str, instance: int
+    ) -> dict[str, Any]:
+        addr = Address(device_address)
+        oid = ObjectIdentifier(("schedule", instance))
+        raw = {
+            prop: await self._safe_read(addr, oid, prop)
+            for prop in _SCHEDULE_PROPERTIES
+        }
+        if all(value is None for value in raw.values()):
+            raise ScheduleError(f"no answer from schedule {instance}")
+
+        weekly = raw["weeklySchedule"]
+        if weekly is None:
+            # A device without segmentation cannot return the whole array;
+            # read the 7 days one by one (Clause 12.19 array indexing).
+            days = [
+                await self._safe_read(addr, oid, "weeklySchedule", index)
+                for index in range(1, 8)
+            ]
+            if all(day is not None for day in days):
+                weekly = days
+
+        exceptions = raw["exceptionSchedule"]
+        calendars = []
+        for cal_instance in sorted(
+            {
+                int(event.period.calendarReference[1])
+                for event in exceptions or []
+                if event.period.calendarReference is not None
+            }
+        )[:_SCHEDULE_MAX_CALENDARS]:
+            date_list = await self._safe_read(
+                addr, ObjectIdentifier(("calendar", cal_instance)), "dateList"
+            )
+            calendars.append(
+                {
+                    "instance": cal_instance,
+                    "date_list": None
+                    if date_list is None
+                    else [_calendar_entry_to_json(entry) for entry in date_list],
+                }
+            )
+
+        value_class = _schedule_value_class(
+            raw["scheduleDefault"],
+            *(tv.value for day in weekly or [] for tv in day.daySchedule or []),
+        )
+        period = raw["effectivePeriod"]
+        return {
+            "present_value": _atomic_to_json(raw["presentValue"]),
+            "schedule_default": _atomic_to_json(raw["scheduleDefault"]),
+            "value_type": next(
+                (name for name, cls in _ATOMIC_TYPES.items() if cls is value_class),
+                None,
+            ),
+            "effective_period": None if period is None else _date_range_to_json(period),
+            "weekly_schedule": None
+            if weekly is None
+            else {
+                day: _time_values_to_json(daily.daySchedule)
+                for day, daily in zip(WEEKDAYS, weekly, strict=False)
+            },
+            "exception_schedule": None
+            if exceptions is None
+            else [_special_event_to_json(event) for event in exceptions],
+            "calendars": calendars,
+            "controlled_objects": [
+                {
+                    "device_id": None
+                    if ref.deviceIdentifier is None
+                    else int(ref.deviceIdentifier[1]),
+                    "object_type": int(ref.objectIdentifier[0]),
+                    "object_type_name": str(ref.objectIdentifier[0]),
+                    "instance": int(ref.objectIdentifier[1]),
+                    "property": str(ref.propertyIdentifier),
+                    "array_index": None
+                    if ref.propertyArrayIndex is None
+                    else int(ref.propertyArrayIndex),
+                }
+                for ref in raw["listOfObjectPropertyReferences"] or []
+            ],
+            "priority_for_writing": self._coerce_value(raw["priorityForWriting"]),
+            "out_of_service": None
+            if raw["outOfService"] is None
+            else bool(raw["outOfService"]),
+        }
+
+    async def write_schedule(
+        self,
+        device_address: str,
+        instance: int,
+        changes: dict[str, Any],
+        *,
+        allow_removal: bool = False,
+    ) -> dict[str, Any]:
+        """Write parts of a Schedule object, then read it back and verify.
+
+        *changes* may hold ``weekly_schedule``, ``exception_schedule``,
+        ``schedule_default`` and ``effective_period``, in the same shape
+        read_schedule() returns them; anything left out is not touched.
+        Values are written in the schedule's own datatype.
+
+        ``exception_schedule`` replaces the device's whole list. Unless
+        *allow_removal* is set, a write that would drop exceptions the
+        device currently has is refused before anything is written.
+
+        Returns the schedule as read back. Raises ScheduleError when the
+        data is invalid, the device rejects a write, or the read-back
+        differs from what was written.
+        """
+        if self._app is None:
+            raise RuntimeError("Client not connected")
+
+        addr = Address(device_address)
+        oid = ObjectIdentifier(("schedule", instance))
+
+        # The schedule's datatype: from its default, else its current values.
+        raw_default = await self._safe_read(addr, oid, "scheduleDefault")
+        value_class = _schedule_value_class(raw_default)
+        if value_class is None:
+            raw_weekly = await self._safe_read(addr, oid, "weeklySchedule")
+            value_class = _schedule_value_class(
+                *(tv.value for day in raw_weekly or [] for tv in day.daySchedule or [])
+            )
+
+        writes: list[tuple[str, Any, int | None]] = []
+        expected: dict[str, Any] = {}
+        try:
+            if "schedule_default" in changes:
+                default = _atomic_from_json(changes["schedule_default"], value_class)
+                writes.append(("scheduleDefault", default, None))
+                expected["schedule_default"] = _atomic_to_json(default)
+            if "effective_period" in changes:
+                period = _date_range_from_json(changes["effective_period"])
+                writes.append(("effectivePeriod", period, None))
+                expected["effective_period"] = _date_range_to_json(period)
+            if "weekly_schedule" in changes:
+                days = {
+                    day: DailySchedule(
+                        daySchedule=_time_values_from_json(time_values, value_class)
+                    )
+                    for day, time_values in changes["weekly_schedule"].items()
+                }
+                if unknown := set(days) - set(WEEKDAYS):
+                    raise ValueError(f"unknown weekday(s): {sorted(unknown)}")
+                # ponytail: all 7 days go as one array write, fewer as indexed
+                # writes of just those days. A device refusing indexed writes
+                # needs all 7 days passed; no automatic fallback.
+                if len(days) == len(WEEKDAYS):
+                    writes.append(
+                        (
+                            "weeklySchedule",
+                            ArrayOf(DailySchedule)([days[day] for day in WEEKDAYS]),
+                            None,
+                        )
+                    )
+                else:
+                    writes.extend(
+                        ("weeklySchedule", daily, WEEKDAYS.index(day) + 1)
+                        for day, daily in days.items()
+                    )
+                expected["weekly_schedule"] = {
+                    day: _time_values_to_json(daily.daySchedule)
+                    for day, daily in days.items()
+                }
+            if "exception_schedule" in changes:
+                events = [
+                    _special_event_from_json(event, value_class)
+                    for event in changes["exception_schedule"]
+                ]
+                writes.append(
+                    ("exceptionSchedule", ArrayOf(SpecialEvent)(events), None)
+                )
+                expected["exception_schedule"] = [
+                    _special_event_to_json(event) for event in events
+                ]
+                if not allow_removal:
+                    await self._refuse_exception_removal(
+                        addr, oid, expected["exception_schedule"]
+                    )
+        except (AttributeError, KeyError, TypeError, ValueError) as err:
+            raise ScheduleError(f"invalid schedule data: {err!r}") from err
+        if not writes:
+            raise ScheduleError("nothing to write")
+
+        for prop, value, index in writes:
+            try:
+                result = await asyncio.wait_for(
+                    self._app.write_property(addr, oid, prop, value, index),
+                    timeout=10,
+                )
+            except TimeoutError:
+                raise ScheduleError(f"timeout writing {prop}") from None
+            except ErrorRejectAbortNack as err:
+                result = err
+            # BACpypes3 may return the error instead of raising it.
+            if isinstance(result, ErrorRejectAbortNack):
+                raise ScheduleError(f"device rejected {prop}: {result}")
+
+        readback = await self.read_schedule(device_address, instance)
+        for key, want in expected.items():
+            got = readback[key]
+            if key == "weekly_schedule":
+                got = {day: (got or {}).get(day) for day in want}
+            if got != want:
+                raise ScheduleError(
+                    f"device accepted the write but {key} reads back differently"
+                )
+        return readback
+
+    async def _refuse_exception_removal(
+        self, addr: Address, oid: ObjectIdentifier, new: list[dict[str, Any]]
+    ) -> None:
+        """Raise ScheduleError if writing *new* would drop existing exceptions.
+
+        The read-back check cannot catch this: the device stores exactly
+        what it was sent, the other holidays are simply gone.
+        """
+        current = await self._safe_read(addr, oid, "exceptionSchedule")
+        if current is None:
+            raise ScheduleError(
+                "could not read the current exception schedule to check what "
+                "would be removed; set allow_removal to write anyway"
+            )
+        removed = [
+            entry for entry in map(_special_event_to_json, current) if entry not in new
+        ]
+        if removed:
+            periods = "; ".join(json.dumps(entry["period"]) for entry in removed[:5])
+            raise ScheduleError(
+                f"this would remove {len(removed)} exception(s) the device "
+                f"currently has ({periods}{' …' if len(removed) > 5 else ''}). "
+                "Include the ones to keep, or set allow_removal to remove them"
+            )
+
+    # ------------------------------------------------------------------
     # COV (Change of Value) subscriptions
     # ------------------------------------------------------------------
 
@@ -1667,7 +2242,7 @@ class BACnetClient:
             # so ready_event being set means the subscription is truly active.
             try:
                 await asyncio.wait_for(ready_event.wait(), timeout=10.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 _LOGGER.warning(
                     "COV subscription timed out for %s:%d at %s. Falling back to polling.",
                     type_str,
@@ -1774,7 +2349,7 @@ class BACnetClient:
                                 str(extra_id), str(extra_id)
                             )
                             changes[extra_key] = self._coerce_value(extra_val)
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         pass
                     _LOGGER.debug("COV notification %s: %s", sub_key, changes)
                     try:
@@ -1828,7 +2403,7 @@ class BACnetClient:
             stop_event.set()
             try:
                 await asyncio.wait_for(asyncio.shield(task), timeout=10.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
             except asyncio.CancelledError:
                 pass
@@ -1979,7 +2554,7 @@ class BACnetClient:
 
             try:
                 await asyncio.wait_for(ready_event.wait(), timeout=10.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 _LOGGER.warning(
                     "COV-Property subscription (%s) timed out for %s:%d at %s.",
                     property_name,
@@ -2099,7 +2674,7 @@ class BACnetClient:
             stop_event.set()
             try:
                 await asyncio.wait_for(asyncio.shield(task), timeout=10.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
             except asyncio.CancelledError:
                 pass
@@ -2128,7 +2703,12 @@ class BACnetClient:
         Order matters: check specific BACpypes3 types before falling back to
         Python builtins, because some BACpypes3 types subclass list or int.
         """
-        if value is None:
+        # Schedule presentValue arrives wrapped in AnyAtomic (any primitive).
+        if isinstance(value, AnyAtomic):
+            value = value.get_value()
+        # BACpypes3 >= 0.0.105 returns Null for a Null-valued atomic property
+        # instead of raising; str(Null) would be the bogus state "()".
+        if value is None or isinstance(value, Null):
             return None
         if isinstance(value, Real):
             return float(value)
@@ -2209,6 +2789,7 @@ class BACnetClient:
         "multiStateInput": OBJECT_TYPE_MULTI_STATE_INPUT,
         "multiStateOutput": OBJECT_TYPE_MULTI_STATE_OUTPUT,
         "multiStateValue": OBJECT_TYPE_MULTI_STATE_VALUE,
+        "schedule": OBJECT_TYPE_SCHEDULE,
         # hyphenated (ASHRAE 135 / BACpypes3 str() output)
         "analog-input": OBJECT_TYPE_ANALOG_INPUT,
         "analog-output": OBJECT_TYPE_ANALOG_OUTPUT,
@@ -2250,6 +2831,7 @@ class BACnetClient:
         OBJECT_TYPE_MULTI_STATE_INPUT: "multi-state-input",
         OBJECT_TYPE_MULTI_STATE_OUTPUT: "multi-state-output",
         OBJECT_TYPE_MULTI_STATE_VALUE: "multi-state-value",
+        OBJECT_TYPE_SCHEDULE: "schedule",
     }
 
     @classmethod
