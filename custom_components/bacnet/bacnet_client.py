@@ -20,7 +20,7 @@ import hashlib
 import json
 import logging
 import socket
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Any, ClassVar
 
 from bacpypes3.apdu import ErrorRejectAbortNack, SubscribeCOVPropertyRequest
@@ -1331,21 +1331,18 @@ class BACnetClient:
             raise RuntimeError("Client not connected")
         addr = Address(device_address)
         result: dict[str, dict[str, Any] | None] = {}
-        failed: list[dict[str, Any]] = []
 
-        chunk_size = self._rpm_metadata_chunk_size.get(
-            device_address, RPM_METADATA_MAX_OBJECTS
+        raw, failed = await self._rpm_in_chunks(
+            device_address,
+            objects,
+            self._rpm_metadata_chunk_size,
+            RPM_METADATA_MAX_OBJECTS,
+            lambda chunk: self._try_rpm_metadata(addr, device_address, chunk),
         )
-        for start in range(0, len(objects), chunk_size):
-            chunk = objects[start : start + chunk_size]
-            raw = None
-            if self._rpm_supported.get(device_address, True):
-                raw = await self._try_rpm_metadata(addr, device_address, chunk)
-            if raw is None:
-                failed.extend(chunk)
-                continue
-            for obj in chunk:
-                key = f"{obj['object_type']}:{obj['instance']}"
+        failed_keys = {f"{o['object_type']}:{o['instance']}" for o in failed}
+        for obj in objects:
+            key = f"{obj['object_type']}:{obj['instance']}"
+            if key not in failed_keys:
                 result[key] = self._build_metadata(obj, raw.get(key, {}))
 
         semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
@@ -1591,19 +1588,13 @@ class BACnetClient:
 
         # One RPM per chunk; a chunk that fails is read individually this
         # poll instead of failing (or slowing down) the whole batch.
-        data: dict[str, dict[str, Any]] = {}
-        failed: list[dict[str, Any]] = []
-        chunk_size = self._rpm_chunk_size.get(device_address, RPM_MAX_OBJECTS)
-        for start in range(0, len(objects), chunk_size):
-            chunk = objects[start : start + chunk_size]
-            if not self._rpm_supported.get(device_address, True):
-                failed.extend(chunk)
-                continue
-            result = await self._try_rpm_poll(device_address, chunk, property_names)
-            if result is None:
-                failed.extend(chunk)
-            else:
-                data.update(result)
+        data, failed = await self._rpm_in_chunks(
+            device_address,
+            objects,
+            self._rpm_chunk_size,
+            RPM_MAX_OBJECTS,
+            lambda chunk: self._try_rpm_poll(device_address, chunk, property_names),
+        )
 
         if failed:
             data.update(
@@ -1612,6 +1603,47 @@ class BACnetClient:
                 )
             )
         return data
+
+    async def _rpm_in_chunks(
+        self,
+        device_address: str,
+        objects: list[dict[str, Any]],
+        chunk_sizes: dict[str, int],
+        default_size: int,
+        read_chunk: Callable[
+            [list[dict[str, Any]]], Awaitable[dict[str, dict[str, Any]] | None]
+        ],
+    ) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
+        """Run *read_chunk* over *objects* in RPM-sized chunks.
+
+        When the device rejects a chunk as too big, _handle_rpm_rejection()
+        lowers the size in *chunk_sizes* and the same chunk is retried at the
+        new size right away, so the first read converges (25 → 12 → 6 → 3)
+        instead of sending every remaining object to individual reads
+        (issue #58). Returns the merged results and the objects whose chunk
+        failed otherwise (timeout, error, RPM unsupported).
+        """
+        data: dict[str, dict[str, Any]] = {}
+        failed: list[dict[str, Any]] = []
+        start = 0
+        while start < len(objects):
+            if not self._rpm_supported.get(device_address, True):
+                failed.extend(objects[start:])
+                break
+            chunk = objects[
+                start : start + chunk_sizes.get(device_address, default_size)
+            ]
+            result = await read_chunk(chunk)
+            if result is None and chunk_sizes.get(device_address, default_size) < len(
+                chunk
+            ):
+                continue  # rejected as too big: retry this chunk smaller
+            if result is None:
+                failed.extend(chunk)
+            else:
+                data.update(result)
+            start += len(chunk)
+        return data, failed
 
     async def _try_rpm_poll(
         self,

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 
-from bacpypes3.apdu import RejectPDU
+from bacpypes3.apdu import AbortPDU, RejectPDU
 from bacpypes3.basetypes import ErrorType
 
 from custom_components.bacnet.bacnet_client import BACnetClient
@@ -56,8 +56,9 @@ class _FakeDevice:
     the result list (issue #48), not as an exception.
     """
 
-    def __init__(self, rpm=True):
+    def __init__(self, rpm=True, max_objects=None):
         self.rpm = rpm
+        self.max_objects = max_objects
         self.rpm_calls = 0
         self.reads = 0
 
@@ -65,6 +66,8 @@ class _FakeDevice:
         self.rpm_calls += 1
         if not self.rpm:
             raise RejectPDU(reason="unrecognized-service")
+        if self.max_objects is not None and len(param_list) // 2 > self.max_objects:
+            raise AbortPDU(reason="segmentation-not-supported")
         results = []
         for oid_str, props in zip(param_list[::2], param_list[1::2], strict=True):
             type_str, inst = oid_str.split(",")
@@ -104,6 +107,14 @@ class TestBatchedMetadata:
         )
         assert result["19:2"]["state_text"] == ["Off", "Heat", "Cool"]
         assert result["19:2"]["number_of_states"] == 3
+
+    def test_size_rejection_retries_smaller_without_individual_reads(self):
+        """Issue #58: a too-big chunk is retried smaller in the same read."""
+        _, via_rpm = _read(_FakeDevice(rpm=True))
+        app = _FakeDevice(rpm=True, max_objects=1)
+        _, result = _read(app)
+        assert app.reads == 0
+        assert result == via_rpm
 
     def test_commandable_from_priority_array(self):
         _, result = _read(_FakeDevice(rpm=True))
