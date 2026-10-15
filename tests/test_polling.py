@@ -71,7 +71,7 @@ class TestRpmChunking:
     def test_size_abort_shrinks_chunks_instead_of_disabling_rpm(self):
         app = _FakeRpmApp(max_objects=5)
         client = _client(app)
-        # First poll: every chunk too big → data still complete via fallback.
+        # First poll: chunks too big for the device → data still complete.
         assert len(_poll(client, 40)) == 40
         assert client._rpm_supported.get(_ADDR, True) is True
         # Chunk size converges below the device limit; RPM stays in use.
@@ -82,6 +82,20 @@ class TestRpmChunking:
         assert len(_poll(client, 40)) == 40
         assert app.rpm_sizes and max(app.rpm_sizes) <= 5
         assert app.reads == 0
+
+    def test_first_poll_converges_without_individual_reads(self):
+        """Issue #58: a rejected chunk is retried smaller within the same poll.
+
+        Before, the rest of the first poll kept sending full-size chunks and
+        every object fell back to individual reads, holding up HA startup
+        for minutes on a device that only takes 3 objects per request.
+        """
+        app = _FakeRpmApp(max_objects=3)
+        client = _client(app)
+        assert len(_poll(client, 184)) == 184
+        assert app.reads == 0
+        assert app.rpm_sizes[:4] == [RPM_MAX_OBJECTS, 12, 6, 3]
+        assert max(app.rpm_sizes[4:]) <= 3
 
     def test_unrecognized_service_disables_rpm_immediately(self):
         app = _FakeRpmApp(reject_all=RejectPDU(reason="unrecognized-service"))
