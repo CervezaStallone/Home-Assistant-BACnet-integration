@@ -49,7 +49,7 @@ In plain terms: if your building has BACnet controllers, thermostats, sensors, o
 - **Selective import** — only import the objects you actually need
 - **Configurable write priority** — per-device select entity to change the BACnet write priority (disabled by default)
 - **Relinquish & one-off writes** — `bacnet.relinquish` and `bacnet.write_value` services for full Priority Array control
-- **Schedules** — BACnet Schedule objects as a sensor, with `bacnet.read_schedule` and `bacnet.write_schedule` services for the weekly schedule, exceptions and default
+- **Schedules** *(1.0.50 beta)* — BACnet Schedule objects as a sensor, with `bacnet.read_schedule` and `bacnet.write_schedule` services for the weekly schedule, exceptions and default
 - **Device limits & state texts** — number limits from `minPresValue`/`maxPresValue`/`resolution`, multi-state objects as a select with their `stateText` labels
 - **Climate with a real room temperature** — pair a setpoint with a separate temperature object
 - **Automatic outage recovery** — detects network outages, reconnects automatically and tells you in Repairs when a device stays unreachable
@@ -73,7 +73,7 @@ In plain terms: if your building has BACnet controllers, thermostats, sensors, o
 | Multi-State Input | Sensor | No |
 | Multi-State Output | Number | Yes |
 | Multi-State Value | Sensor | Auto-detected |
-| Schedule | Sensor (current value) | Via `bacnet.write_schedule` |
+| Schedule *(1.0.50 beta)* | Sensor (current value) | Via `bacnet.write_schedule` |
 
 > Value objects may or may not support writes — the integration auto-detects this by checking for a Priority Array during discovery.
 >
@@ -264,7 +264,9 @@ data:
   priority: 8
 ```
 
-### Schedules
+### Schedules *(1.0.50 beta)*
+
+> **Beta:** Schedule support is available in the 1.0.50 pre-releases. In HACS, enable *Show beta versions* for this integration to try it; the current stable release does not include it yet.
 
 A BACnet Schedule object is imported as a sensor showing the value the schedule currently commands. The schedule itself is read and changed with two services that target that sensor:
 
@@ -294,6 +296,168 @@ response_variable: schedule
 - **Exception schedule** — always replaces the complete list. To protect the controller, the action fails (and lists them) if that would remove exceptions the device currently has. Pass the full list including the ones to keep, or set `allow_removal: true` if removing them is what you want. A `period` is one of `date`, `date_range` (`start`/`end`), `week_n_day` (`month`, `week_of_month`, `weekday`) or `calendar_reference` (Calendar object instance).
 - **Dates** — write `"YYYY-MM-DD"`, or `{year, month, day, weekday}` where `null` means *any*. Dates are always returned in the second form, with raw BACnet numbers (month 13/14 = odd/even months, day 32 = last day of the month, weekday 1 = Monday).
 - **Values** are written in the schedule's own datatype (`value_type`).
+
+---
+
+## Examples
+
+Complete automations for common tasks. Replace the entity IDs with your own. The examples use the automation syntax of Home Assistant 2024.10 and newer.
+
+### Occupancy override from a calendar
+
+Command an area to *occupied* while a calendar event runs, and release the command when it ends so the controller's own schedule takes over again. The occupancy object here is a Multi-State Output (a `number` entity); check its `bacnet_state_text` attribute for which value means *occupied* on your device.
+
+```yaml
+alias: Meeting room occupied during calendar events
+triggers:
+  - trigger: calendar
+    event: start
+    entity_id: calendar.meeting_room
+    id: start
+  - trigger: calendar
+    event: end
+    entity_id: calendar.meeting_room
+    id: end
+actions:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: start
+        sequence:
+          - action: bacnet.write_value
+            target:
+              entity_id: number.meeting_room_occupancy
+            data:
+              value: 1        # occupied on this device
+              priority: 11
+    default:
+      - action: bacnet.relinquish
+        target:
+          entity_id: number.meeting_room_occupancy
+        data:
+          priority: 11        # release the same priority you wrote at
+```
+
+Always relinquish at the priority you wrote at. Turning a switch off or writing `0` *commands* the object off; only `bacnet.relinquish` releases it.
+
+### Temporary setpoint with a climate entity
+
+Set a comfort setpoint in the morning and hand control back to the controller in the evening. Turning a BACnet climate entity **off** relinquishes its setpoint.
+
+```yaml
+alias: Office comfort setpoint on weekdays
+triggers:
+  - trigger: time
+    at: "07:00:00"
+    id: "on"
+  - trigger: time
+    at: "18:00:00"
+    id: "off"
+conditions:
+  - condition: time
+    weekday: [mon, tue, wed, thu, fri]
+actions:
+  - if:
+      - condition: trigger
+        id: "on"
+    then:
+      - action: climate.set_temperature
+        target:
+          entity_id: climate.office_setpoint
+        data:
+          temperature: 21.5
+    else:
+      - action: climate.set_hvac_mode
+        target:
+          entity_id: climate.office_setpoint
+        data:
+          hvac_mode: "off"
+```
+
+### Get notified when a device stops responding
+
+Entities become unavailable when their device doesn't answer. After 10 failed polls a message also appears in **Settings → Repairs**; this automation notifies you sooner.
+
+```yaml
+alias: BACnet device offline
+triggers:
+  - trigger: state
+    entity_id: sensor.ahu_1_supply_temperature
+    to: unavailable
+    for: "00:05:00"
+actions:
+  - action: notify.notify
+    data:
+      message: "AHU 1 is not responding to BACnet requests."
+```
+
+### Calendar events as schedule exceptions *(1.0.50 beta)*
+
+Instead of overriding the controller, add each calendar event to its Schedule object as an exception. The controller then knows about the event in advance, so features like optimal start can prepare the space. This automation adds the exception 12 hours before the event and removes it when the event ends.
+
+```yaml
+alias: Calendar events as BACnet schedule exceptions
+triggers:
+  - trigger: calendar
+    event: start
+    entity_id: calendar.meeting_room
+    offset: "-12:00:00"
+    id: add
+  - trigger: calendar
+    event: end
+    entity_id: calendar.meeting_room
+    id: remove
+actions:
+  - action: bacnet.read_schedule
+    target:
+      entity_id: sensor.meeting_room_schedule
+    response_variable: schedule
+  - variables:
+      event_start: "{{ trigger.calendar_event.start }}"
+      event_end: "{{ trigger.calendar_event.end }}"
+      current: "{{ schedule['sensor.meeting_room_schedule'].exception_schedule or [] }}"
+  - if:
+      - condition: trigger
+        id: add
+    then:
+      - action: bacnet.write_schedule
+        target:
+          entity_id: sensor.meeting_room_schedule
+        data:
+          exception_schedule: >-
+            {% set start = as_local(as_datetime(event_start)) %}
+            {% set end = as_local(as_datetime(event_end)) %}
+            {{ current + [{
+                 'period': {'date': start.date().isoformat()},
+                 'priority': 11,
+                 'time_values': [
+                   {'time': start.strftime('%H:%M:%S'), 'value': 1},
+                   {'time': end.strftime('%H:%M:%S'), 'value': none}
+                 ]
+               }] }}
+    else:
+      - action: bacnet.write_schedule
+        target:
+          entity_id: sensor.meeting_room_schedule
+        data:
+          exception_schedule: >-
+            {% set start = as_local(as_datetime(event_start)) %}
+            {% set ns = namespace(keep=[]) %}
+            {% for ex in current %}
+              {% set d = ex.period.get('date') %}
+              {% if not (d and ex.priority == 11 and d.year == start.year
+                         and d.month == start.month and d.day == start.day) %}
+                {% set ns.keep = ns.keep + [ex] %}
+              {% endif %}
+            {% endfor %}
+            {{ ns.keep }}
+          allow_removal: true
+```
+
+- `value: 1` is the occupied value and must match the schedule's `value_type`; run `bacnet.read_schedule` once in **Developer tools → Actions** to see what your schedule uses.
+- `none` at the end time hands control back to the weekly schedule.
+- The removal step drops every priority-11 exception on the event's date. Use a priority that nothing else on the controller uses for exceptions.
+- Events that run past midnight need a `date_range` period instead of a single `date`.
 
 ---
 
