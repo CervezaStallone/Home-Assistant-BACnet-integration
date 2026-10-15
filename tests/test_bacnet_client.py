@@ -12,12 +12,14 @@ import asyncio
 import contextlib
 
 import pytest
+from bacpypes3.primitivedata import Null
 
 from custom_components.bacnet.bacnet_client import BACnetClient
 from custom_components.bacnet.const import (
     OBJECT_TYPE_ANALOG_OUTPUT,
     OBJECT_TYPE_ANALOG_VALUE,
     OBJECT_TYPE_BINARY_VALUE,
+    OBJECT_TYPE_MULTI_STATE_OUTPUT,
 )
 
 
@@ -260,7 +262,7 @@ class _FakeApp:
         self.calls: list[dict] = []
 
     async def write_property(self, addr, oid, property_name, value, **kwargs):
-        self.calls.append({"property_name": property_name, **kwargs})
+        self.calls.append({"property_name": property_name, "value": value, **kwargs})
 
 
 class TestWritePropertyPriorityGating:
@@ -359,6 +361,21 @@ class TestWritePropertyPriorityGating:
             )
         )
         assert "priority" not in client._app.calls[0]
+
+    def test_relinquish_sends_null_instance(self):
+        """Null() without args returns the Null *class*; BACpypes3 then fails
+        its isinstance(value, Null) check and the write dies with TypeError."""
+        client = self._client()
+        asyncio.run(
+            client.relinquish(
+                device_address="192.168.1.1",
+                object_type=OBJECT_TYPE_MULTI_STATE_OUTPUT,
+                instance=1,
+                priority=11,
+            )
+        )
+        assert isinstance(client._app.calls[0]["value"], Null)
+        assert isinstance(client._python_to_bacnet_value(None, 0), Null)
 
 
 # ---------------------------------------------------------------------------
