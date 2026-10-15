@@ -1822,7 +1822,7 @@ class BACnetClient:
 
         # Convert None -> Null for relinquish
         if value is None:
-            bacnet_value = Null()
+            bacnet_value = Null(())  # Null() returns the class, not a value
         else:
             bacnet_value = self._python_to_bacnet_value(value, object_type)
 
@@ -2735,7 +2735,7 @@ class BACnetClient:
         - Multi-state types -> Unsigned
         """
         if value is None:
-            return Null()
+            return Null(())
 
         if object_type in {
             OBJECT_TYPE_ANALOG_INPUT,
