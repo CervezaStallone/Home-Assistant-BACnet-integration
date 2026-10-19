@@ -65,6 +65,14 @@ _METADATA_KEYS = (
     "resolution",
 )
 
+
+def _same(old: Any, new: Any) -> bool:
+    """Equality that treats NaN as equal to NaN (entries stored before #62)."""
+    if isinstance(old, float) and isinstance(new, float):
+        return old == new or (math.isnan(old) and math.isnan(new))
+    return old == new
+
+
 # COV subscription lifetime.  BACpypes3's change_of_value() context manager
 # automatically renews the subscription before it expires.
 COV_LIFETIME_SECONDS = 300
@@ -409,7 +417,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """
         changed: dict[str, Any] = {}
         for key in _METADATA_KEYS:
-            if key in fresh and obj.get(key) != fresh[key]:
+            if key in fresh and not _same(obj.get(key), fresh[key]):
                 changed[key] = fresh[key]
         return changed
 
@@ -438,6 +446,25 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self.entry is None:
             return
         _LOGGER.info("BACnet object metadata changed on device — reloading entry")
+        # TEMP(#62): remove once #62 is resolved — logs exactly what changed.
+        stored = {
+            f"{o['object_type']}:{o['instance']}": o
+            for o in self.entry.data.get(CONF_SELECTED_OBJECTS, [])
+        }
+        for obj in self.objects:
+            old = stored.get(f"{obj['object_type']}:{obj['instance']}", {})
+            for key in _METADATA_KEYS:
+                if not _same(old.get(key), obj.get(key)):
+                    _LOGGER.warning(
+                        "TEMP(#62) %s:%s %s: %r (%s) -> %r (%s)",
+                        obj["object_type"],
+                        obj["instance"],
+                        key,
+                        old.get(key),
+                        type(old.get(key)).__name__,
+                        obj.get(key),
+                        type(obj.get(key)).__name__,
+                    )
         self.hass.config_entries.async_update_entry(
             self.entry,
             data={**self.entry.data, CONF_SELECTED_OBJECTS: self.objects},
