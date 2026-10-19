@@ -385,3 +385,16 @@ def test_read_trend_log_on_other_entity_is_refused(monkeypatch):
     with pytest.raises(HomeAssistantError) as err:
         asyncio.run(services.async_handle_read_trend_log(hass, _call({})))
     assert err.value.translation_key == "not_a_trend_log"
+
+
+def test_read_trend_log_by_device_needs_admin(monkeypatch):
+    from homeassistant.exceptions import Unauthorized
+
+    services, hass, client, coordinator = _setup(monkeypatch)
+    _with_device(monkeypatch, services, hass, coordinator, is_admin=False)
+    client.read_trend_log = AsyncMock(return_value=[])
+    call = _call({"device": "dev1", "instance": 4})
+    call.context.user_id = "u1"
+    with pytest.raises(Unauthorized):
+        asyncio.run(services.async_handle_read_trend_log(hass, call))
+    client.read_trend_log.assert_not_awaited()

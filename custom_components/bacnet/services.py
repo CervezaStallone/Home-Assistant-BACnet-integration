@@ -396,7 +396,9 @@ async def async_handle_read_trend_log(
     Targets a Trend Log entity, or the device field plus instance for a
     Trend Log that isn't imported (administrators only).
     """
-    await _check_permissions(hass, call, (POLICY_READ,))
+    await _check_permissions(
+        hass, call, (POLICY_READ,), admin_only=ATTR_DEVICE in call.data
+    )
     if ATTR_DEVICE in call.data:
         if ATTR_INSTANCE not in call.data:
             raise HomeAssistantError(
