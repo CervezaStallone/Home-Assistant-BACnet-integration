@@ -81,10 +81,7 @@ def test_render_table_escapes_untrusted_text():
     assert "<img" not in row and "![" not in row and "\n" not in row
     assert "http://t" not in row  # GitHub would turn a bare URL into a link
     assert "| Evil Corp |" in row
-    assert row.endswith(
-        "| Reading values, COV (live updates) | "
-        "[#70](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/issues/70) |"
-    )
+    assert row == "| Evil Corp | img srcx onerroralert1 | — |"
 
 
 def test_add_report_updates_json_and_readme(tmp_path):
@@ -110,8 +107,17 @@ def test_add_report_updates_json_and_readme(tmp_path):
     assert text.endswith("<!-- tested-devices:end -->\nend\n")
 
 
-def test_render_table_shows_dash_for_unknown_version():
-    row = device_report.render_table(
-        [{"vendor": "V", "model": "M", "version": "", "works": [], "issue": 1}]
-    ).splitlines()[-1]
-    assert row.startswith("| V | M | — | — | — | — |")
+def test_render_table_lists_only_make_model_and_firmware():
+    """No report links or feature columns: just what it works on."""
+    table = device_report.render_table(
+        [
+            {"vendor": "V", "model": "M", "firmware": "", "version": "", "issue": 1},
+            {"vendor": "A", "model": "B", "firmware": "2.1", "version": "", "issue": 2},
+        ]
+    )
+    assert table.splitlines() == [
+        "| Manufacturer | Model | Firmware |",
+        "|---|---|---|",
+        "| A | B | 2.1 |",
+        "| V | M | — |",
+    ]

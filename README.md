@@ -88,17 +88,17 @@ In plain terms: if your building has BACnet controllers, thermostats, sensors, o
 Devices that users have reported working with this integration. BACnet is a standard, so devices that aren't listed usually work too — this is what has actually been tried.
 
 <!-- tested-devices:start -->
-| Manufacturer | Model | Firmware | Tested with | Connection | What works | Report |
-|---|---|---|---|---|---|---|
-| Control Solutions | Babel Buster BB2-7010-01 | 2.39.1 | 1.0.49.1 | — | Reading values, COV (live updates) | [#48](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/issues/48) |
-| Control Solutions | Babel Buster BB3-7101 | 3.15.18 | 1.0.49.1 | — | Reading values, COV (live updates) | [#48](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/issues/48) |
-| Kieback&Peter | DDC4000 | — | 1.0.50-beta.2 | — | Reading values, Schedules | [#52](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/issues/52) |
-| Kieback&Peter | DDC420 | — | 1.0.50-beta.2 | — | Reading values, Schedules | [#52](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/issues/52) |
-| Signify | Interact BACnet gateway | — | 1.0.49 | — | Reading values, COV (live updates), Writing values | [#50](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/issues/50) |
-| Tridium | Niagara JACE | — | 1.0.44 | — | Reading values, COV (live updates) | [#28](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/issues/28) |
+| Manufacturer | Model | Firmware |
+|---|---|---|
+| Control Solutions | Babel Buster BB2-7010-01 | 2.39.1 |
+| Control Solutions | Babel Buster BB3-7101 | 3.15.18 |
+| Kieback&Peter | DDC4000 | — |
+| Kieback&Peter | DDC420 | — |
+| Signify | Interact BACnet gateway | — |
+| Tridium | Niagara JACE | — |
 <!-- tested-devices:end -->
 
-**Works on your device?** Please [send a device report](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/issues/new?template=device_report.yml): manufacturer, model and what you've used. It helps others decide, and it shows which devices get real-world testing. Once checked, it's added here with a link to your report.
+**Works on your device?** Please [send a device report](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/issues/new?template=device_report.yml): manufacturer, model and what you've used. It helps others decide, and it shows which devices get real-world testing. Once checked, it's added here.
 
 ---
 
