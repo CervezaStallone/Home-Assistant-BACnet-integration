@@ -45,6 +45,7 @@ from .const import (
     OBJECT_TYPE_ANALOG_INPUT,
     OBJECT_TYPE_ANALOG_OUTPUT,
     OBJECT_TYPE_ANALOG_VALUE,
+    OBJECT_TYPE_NAMES,
     RECONNECT_THRESHOLD,
 )
 from .helpers import default_domain_for, mask_address
@@ -114,6 +115,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         cov_increment: float = DEFAULT_COV_INCREMENT,
         live_metadata_properties: list[str] | None = None,
         climate_temperature_sources: dict[str, str] | None = None,
+        extra_properties: dict[str, list[str]] | None = None,
     ) -> None:
         """Initialise the coordinator.
 
@@ -136,6 +138,8 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             climate_temperature_sources: climate obj_key → obj_key of the
                 object whose presentValue is that climate's current
                 temperature (options flow).
+            extra_properties: obj_key → extra BACnet properties (camelCase)
+                polled with every poll and shown as their own entities.
         """
         self.client = client
         self.objects = objects
@@ -148,6 +152,10 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.cov_increment = cov_increment
         self.live_metadata_properties = live_metadata_properties or []
         self.climate_temperature_sources = climate_temperature_sources or {}
+        self.extra_properties = extra_properties or {}
+        # Active alarms from GetEventInformation; None until the first fetch
+        # (and for devices without the service).
+        self.active_alarms: list[dict[str, Any]] | None = None
         self.write_priority: int = DEFAULT_WRITE_PRIORITY
 
         # Track which objects have active COV and which need polling
@@ -181,6 +189,8 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._last_object_metadata_check: dict[str, datetime] = {}
         self._metadata_task: asyncio.Task | None = None
         self._persist_handle: asyncio.TimerHandle | None = None
+        # A COV-triggered check found a change the sweep must persist.
+        self._metadata_pending: bool = False
 
         # Device address for reads/writes (from config entry data)
         self.device_address: str = ""
@@ -246,7 +256,9 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 property_names=["presentValue", "statusFlags"],
                 device_id=self.entry.data.get("device_id") if self.entry else None,
             )
-            data.update(polled)
+            # Merge rather than replace, so extra properties survive.
+            for obj_key, values in polled.items():
+                data[obj_key] = {**data.get(obj_key, {}), **values}
         except Exception as exc:  # noqa: BLE001
             _LOGGER.warning("Batch poll failed: %s — keeping stale data", exc)
             polled = None
@@ -266,6 +278,8 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if self._outage_issue_raised:
                 ir.async_delete_issue(self.hass, DOMAIN, self._outage_issue_id)
                 self._outage_issue_raised = False
+            await self._poll_extra_properties(data)
+            await self._refresh_alarms()
             # After a reconnect, rebuild COV subscriptions once the device is
             # confirmed reachable again.
             if self._needs_resubscribe:
@@ -292,6 +306,89 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             await self._handle_poll_failure()
 
         return data
+
+    async def _refresh_alarms(self) -> None:
+        """Fetch the device's active alarms and fire bacnet_alarm on changes.
+
+        The first fetch only sets the baseline, so a restart doesn't
+        announce alarms that were already active. A failed fetch keeps the
+        last list.
+        """
+        try:
+            fetched = await self.client.get_event_information(self.device_address)
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.debug("GetEventInformation failed: %s", exc)
+            return
+        if fetched is None:
+            return
+        names = {
+            f"{o['object_type']}:{o['instance']}": self.get_entity_name(o)
+            for o in self.objects
+        }
+        alarms = []
+        for alarm in fetched:
+            object_type, instance = alarm["object_type"], alarm["instance"]
+            type_name = OBJECT_TYPE_NAMES.get(object_type, f"Type {object_type}")
+            alarms.append(
+                {
+                    **alarm,
+                    "object_name": names.get(
+                        f"{object_type}:{instance}", f"{type_name} {instance}"
+                    ),
+                }
+            )
+        previous = self.active_alarms
+        self.active_alarms = alarms
+        if previous is None:
+            return
+
+        def _states(items: list[dict[str, Any]]) -> dict[tuple[int, int], dict]:
+            return {(a["object_type"], a["instance"]): a for a in items}
+
+        old, new = _states(previous), _states(alarms)
+        for key in sorted(old.keys() | new.keys()):
+            before = old[key]["event_state"] if key in old else "normal"
+            current = new.get(key) or {**old[key], "event_state": "normal"}
+            if current["event_state"] == before:
+                continue
+            self.hass.bus.async_fire(
+                f"{DOMAIN}_alarm",
+                {
+                    "device_id": self.entry.data.get("device_id")
+                    if self.entry
+                    else None,
+                    "object_type": key[0],
+                    "instance": key[1],
+                    "object_name": current["object_name"],
+                    "event_state": current["event_state"],
+                    "previous_event_state": before,
+                },
+            )
+
+    async def _poll_extra_properties(self, data: dict[str, Any]) -> None:
+        """Poll the extra properties, one batched poll per distinct list.
+
+        A failure only leaves those values as they were; the regular poll
+        and its outage detection don't depend on them.
+        """
+        groups: dict[tuple[str, ...], list[dict[str, Any]]] = {}
+        for obj in self.objects:
+            props = self.extra_properties.get(f"{obj['object_type']}:{obj['instance']}")
+            if props:
+                groups.setdefault(tuple(props), []).append(obj)
+        for props, objects in groups.items():
+            try:
+                polled = await self.client.poll_objects(
+                    device_address=self.device_address,
+                    objects=objects,
+                    property_names=list(props),
+                    extra_properties=True,
+                )
+            except Exception as exc:  # noqa: BLE001
+                _LOGGER.debug("Extra property poll failed: %s", exc)
+                continue
+            for obj_key, values in polled.items():
+                data[obj_key] = {**data.get(obj_key, {}), **values}
 
     @property
     def _outage_issue_id(self) -> str:
@@ -443,6 +540,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self._persist_handle is not None:
             self._persist_handle.cancel()
             self._persist_handle = None
+        self._metadata_pending = False
         if self.entry is None:
             return
         _LOGGER.info("BACnet object metadata changed on device — reloading entry")
@@ -524,7 +622,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._replace_object(f"{obj['object_type']}:{obj['instance']}", updates)
                 changed = True
 
-        if changed:
+        if changed or self._metadata_pending:
             self._persist_metadata_change()
 
         return changed
@@ -582,7 +680,16 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 value,
             )
         self._replace_object(obj_key, updates)
-        self._schedule_metadata_persist()
+        # One changed object suggests others changed too (issue #62: entries
+        # with placeholder names from a failed discovery read). Check all of
+        # them in one batched sweep and reload once, instead of one reload
+        # per COV notification.
+        self._metadata_pending = True
+        if self._metadata_task is None or self._metadata_task.done():
+            self._last_metadata_refresh = datetime.now(UTC)
+            self._metadata_task = self.hass.async_create_background_task(
+                self.async_refresh_metadata(), name=f"{self.name} metadata sweep"
+            )
 
     # ------------------------------------------------------------------
     # COV subscription management
@@ -783,6 +890,24 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             await self.async_request_refresh()
             return
         self._merge_object_data(obj_key, values)
+
+    async def async_refresh_properties(
+        self, obj: dict[str, Any], properties: list[str]
+    ) -> None:
+        """Re-read some properties of one object after writing one of them."""
+        obj_key = f"{obj['object_type']}:{obj['instance']}"
+        try:
+            polled = await self.client.poll_objects(
+                device_address=self.device_address,
+                objects=[obj],
+                property_names=properties,
+                extra_properties=True,
+            )
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.debug("Post-write read failed for %s: %s", obj_key, exc)
+            return
+        if obj_key in polled:
+            self._merge_object_data(obj_key, polled[obj_key])
 
     @callback
     def async_add_object_listener(

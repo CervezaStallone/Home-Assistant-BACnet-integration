@@ -50,6 +50,10 @@ CONF_CUSTOMIZE_OBJECTS = "customize_objects"
 # object (climate obj_key -> temperature obj_key).
 CONF_CLIMATE_TEMPERATURE_SOURCES = "climate_temperature_sources"
 
+# Extra BACnet properties shown as their own entities
+# (obj_key -> [camelCase property, ...]), picked per object in the options.
+CONF_EXTRA_PROPERTIES = "extra_properties"
+
 # Per-object COV override (obj_key -> bool). Objects with no entry fall back
 # to the device-wide CONF_ENABLE_COV value.
 CONF_COV_OVERRIDES = "cov_overrides"
@@ -241,3 +245,30 @@ PROP_POLARITY = 84
 DEFAULT_WRITE_PRIORITY = 16  # Lowest priority — safe default
 CONF_WRITE_PRIORITY = "write_priority"
 WRITE_PRIORITY_OPTIONS: list[int] = [8, 9, 12, 13, 14, 15, 16]  # BACnet: 1-16
+
+# ---------------------------------------------------------------------------
+# Extra properties offered per object in the options flow
+# ---------------------------------------------------------------------------
+_ANALOG = frozenset({0, 1, 2})
+_BINARY = frozenset({3, 4, 5})
+_MULTI_STATE = frozenset({13, 14, 19})
+_PRESENT_VALUE_TYPES = _ANALOG | _BINARY | _MULTI_STATE
+
+# property -> (HA platform, object types it exists on, unit). The unit is
+# "object" for the object's own units, an HA unit, or None. Any other
+# property the user types in becomes a read-only sensor.
+EXTRA_PROPERTY_SPECS: dict[str, tuple[str, frozenset[int], str | None]] = {
+    "minimumOnTime": ("number", frozenset({4, 5}), "s"),
+    "minimumOffTime": ("number", frozenset({4, 5}), "s"),
+    "timeDelay": ("number", _PRESENT_VALUE_TYPES, "s"),
+    "highLimit": ("number", _ANALOG, "object"),
+    "lowLimit": ("number", _ANALOG, "object"),
+    "deadband": ("number", _ANALOG, "object"),
+    "covIncrement": ("number", _ANALOG, "object"),
+    "relinquishDefault": ("number", frozenset({1, 2}), "object"),
+    "outOfService": ("switch", _PRESENT_VALUE_TYPES | {17}, None),
+    "eventState": ("sensor", _PRESENT_VALUE_TYPES, None),
+    "reliability": ("sensor", _PRESENT_VALUE_TYPES | {17}, None),
+    "changeOfStateCount": ("sensor", _BINARY | _MULTI_STATE, None),
+    "elapsedActiveTime": ("sensor", _BINARY, "s"),
+}

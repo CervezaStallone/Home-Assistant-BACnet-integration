@@ -111,6 +111,14 @@
       },
       "consecutive_failed_polls": {
         "name": "Consecutive failed polls"
+      },
+      "active_alarms": {
+        "name": "Active alarms"
+      }
+    },
+    "binary_sensor": {
+      "alarm": {
+        "name": "Alarm"
       }
     }
   },
@@ -149,13 +157,14 @@
       },
       "customize_objects": {
         "title": "Customize objects",
-        "description": "Per object: the Home Assistant entity type, whether COV is used, and — for objects that are already a climate entity — which object provides the room temperature. Changed an object to climate just now? Save, then open the options again to pick its temperature sensor."
+        "description": "Per object: the Home Assistant entity type, whether COV is used, and — for objects that are already a climate entity — which object provides the room temperature. Changed an object to climate just now? Save, then open the options again to pick its temperature sensor. Extra properties: pick properties (for example Minimum On Time or High Limit) to show as their own entity; type any other property by name or number under other properties."
       }
     },
     "error": {
       "invalid_polling_interval": "The polling interval must be at least 10 seconds.",
       "no_objects_found": "No readable BACnet objects were found on this device.",
-      "unknown": "An unexpected error occurred."
+      "unknown": "An unexpected error occurred.",
+      "unknown_property": "Unknown BACnet property. Use names such as minimumOnTime or minimum-on-time, or numbers such as 67, separated by commas."
     },
     "abort": {
       "cannot_connect": "Could not reach the BACnet device to rescan its object list. Make sure the device is online and try again."
@@ -190,6 +199,18 @@
     },
     "schedule_failed": {
       "message": "Schedule {entity_id}: {error}"
+    },
+    "unknown_property": {
+      "message": "Unknown BACnet property: {property}. Use the property name (e.g. minimumOnTime) or its number (e.g. 67)."
+    },
+    "property_read_failed": {
+      "message": "Reading {property} of object {object} failed: {error}"
+    },
+    "invalid_object": {
+      "message": "Give both an object type (name or number) and an instance when a device is given."
+    },
+    "no_bacnet_device": {
+      "message": "Pick a BACnet device of this integration in the Device field."
     }
   },
   "services": {
@@ -205,15 +226,31 @@
     },
     "write_value": {
       "name": "Write value",
-      "description": "Write a value to a BACnet object's present value once, at a chosen priority, without changing the device's Write Priority setting.",
+      "description": "Write a value once: an object's present value at a chosen priority (without changing the device's Write Priority setting), or any other property.",
       "fields": {
         "value": {
           "name": "Value",
-          "description": "Value to write. Binary objects: 0 = inactive, 1 = active."
+          "description": "Value to write. Binary objects: 0 = inactive, 1 = active. Other properties take a number, true/false or text."
         },
         "priority": {
           "name": "Priority",
           "description": "Priority level to write at (1-16). Defaults to the device's Write Priority."
+        },
+        "property": {
+          "name": "Property",
+          "description": "BACnet property to write, by name (minimumOnTime) or number (67). Defaults to the present value; the priority only applies to the present value."
+        },
+        "object_type": {
+          "name": "Object type",
+          "description": "Only with Device: type of the object to use, by name (analog-value, trend-log) or number. Reaches objects that were not imported."
+        },
+        "instance": {
+          "name": "Object instance",
+          "description": "Only with Device: instance number of the object."
+        },
+        "device": {
+          "name": "Device",
+          "description": "Only for objects that aren't imported: the BACnet device. Then also give the object type and instance; the target entity is ignored."
         }
       }
     },
@@ -244,6 +281,54 @@
         "allow_removal": {
           "name": "Allow removal",
           "description": "Allow the exception schedule to be written even if that removes exceptions the device currently has."
+        }
+      }
+    },
+    "read_property": {
+      "name": "Read property",
+      "description": "Read any property of a BACnet object and return it as response data.",
+      "fields": {
+        "property": {
+          "name": "Property",
+          "description": "BACnet property to read, by name (minimumOnTime, eventState) or number (67)."
+        },
+        "array_index": {
+          "name": "Array index",
+          "description": "Read one element of an array property (0 = number of elements)."
+        },
+        "object_type": {
+          "name": "Object type",
+          "description": "Only with Device: type of the object to use, by name (analog-value, trend-log) or number. Reaches objects that were not imported."
+        },
+        "instance": {
+          "name": "Object instance",
+          "description": "Only with Device: instance number of the object."
+        },
+        "device": {
+          "name": "Device",
+          "description": "Only for objects that aren't imported: the BACnet device. Then also give the object type and instance; the target entity is ignored."
+        }
+      }
+    },
+    "read_trend_log": {
+      "name": "Read trend log",
+      "description": "Read the records of a BACnet Trend Log object on a device and return them as response data. Only records with a time and a value are returned.",
+      "fields": {
+        "device": {
+          "name": "Device",
+          "description": "The BACnet device with the Trend Log."
+        },
+        "instance": {
+          "name": "Trend Log instance",
+          "description": "Instance number of the Trend Log object on the device."
+        },
+        "start": {
+          "name": "Start",
+          "description": "Return records from this time on (device local time). Without it, the most recent records are returned."
+        },
+        "count": {
+          "name": "Count",
+          "description": "Maximum number of records (1-1000)."
         }
       }
     }

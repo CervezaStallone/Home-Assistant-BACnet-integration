@@ -27,6 +27,7 @@ from .const import (
 )
 from .coordinator import BACnetCoordinator
 from .entity import BACnetEntity
+from .property_entity import property_entities
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -40,11 +41,12 @@ async def async_setup_entry(
     coordinator: BACnetCoordinator = entry.runtime_data.coordinator
     objects: list[dict[str, Any]] = coordinator.objects
 
-    entities: list[BACnetNumber] = []
+    entities: list[Any] = []
     for obj in objects:
         domain = coordinator.get_domain_for_object(obj)
         if domain == "number":
             entities.append(BACnetNumber(coordinator, entry, obj))
+    entities.extend(property_entities(coordinator, entry, "number"))
 
     if entities:
         async_add_entities(entities)
