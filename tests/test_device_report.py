@@ -108,3 +108,10 @@ def test_add_report_updates_json_and_readme(tmp_path):
     assert text.startswith("intro\n<!-- tested-devices:start -->\n| Manufacturer")
     assert "| Siemens | PXC200-E.D |" in text
     assert text.endswith("<!-- tested-devices:end -->\nend\n")
+
+
+def test_render_table_shows_dash_for_unknown_version():
+    row = device_report.render_table(
+        [{"vendor": "V", "model": "M", "version": "", "works": [], "issue": 1}]
+    ).splitlines()[-1]
+    assert row.startswith("| V | M | — | — | — | — |")

@@ -90,8 +90,11 @@ Devices that users have reported working with this integration. BACnet is a stan
 <!-- tested-devices:start -->
 | Manufacturer | Model | Firmware | Tested with | Connection | What works | Report |
 |---|---|---|---|---|---|---|
+| Control Solutions | Babel Buster BB2-7010-01 | 2.39.1 | 1.0.49.1 | — | Reading values, COV (live updates) | [#48](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/issues/48) |
+| Control Solutions | Babel Buster BB3-7101 | 3.15.18 | 1.0.49.1 | — | Reading values, COV (live updates) | [#48](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/issues/48) |
 | Kieback&Peter | DDC4000 | — | 1.0.50-beta.2 | — | Reading values, Schedules | [#52](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/issues/52) |
 | Kieback&Peter | DDC420 | — | 1.0.50-beta.2 | — | Reading values, Schedules | [#52](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/issues/52) |
+| Signify | Interact BACnet gateway | — | 1.0.49 | — | Reading values, COV (live updates), Writing values | [#50](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/issues/50) |
 | Tridium | Niagara JACE | — | 1.0.44 | — | Reading values, COV (live updates) | [#28](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/issues/28) |
 <!-- tested-devices:end -->
 

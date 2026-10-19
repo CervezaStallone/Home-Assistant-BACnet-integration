@@ -73,7 +73,7 @@ def render_table(devices: list[dict]) -> str:
         issue = int(d["issue"])
         rows.append(
             f"| {_clean(d['vendor'])} | {_clean(d['model'])} "
-            f"| {_clean(d.get('firmware', '')) or '—'} | {_clean(d['version'])} "
+            f"| {_clean(d.get('firmware', '')) or '—'} | {_clean(d['version']) or '—'} "
             f"| {_clean(d.get('connection', '')) or '—'} | {works or '—'} "
             f"| [#{issue}]({REPO_URL}/issues/{issue}) |"
         )
