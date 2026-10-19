@@ -234,3 +234,18 @@ def test_write_value_checks_control_permission(monkeypatch):
     with pytest.raises(Unauthorized):
         asyncio.run(services.async_handle_write_value(hass, call))
     client.write_property.assert_not_awaited()
+
+
+def test_write_other_property_needs_admin(monkeypatch):
+    """Control permission covers the value, not the object's configuration."""
+    from homeassistant.exceptions import Unauthorized
+
+    services, hass, client, _ = _setup(monkeypatch)
+    user = MagicMock(is_admin=False)
+    user.permissions.check_entity.return_value = True
+    hass.auth.async_get_user = AsyncMock(return_value=user)
+    call = _call({"value": 600, "property": "minimumOnTime"})
+    call.context.user_id = "u1"
+    with pytest.raises(Unauthorized):
+        asyncio.run(services.async_handle_write_value(hass, call))
+    client.write_property.assert_not_awaited()

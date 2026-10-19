@@ -292,7 +292,7 @@ data:
   value: 600
 ```
 
-Writes to other properties never carry a priority; only the present value has a Priority Array. Values are sent in the property's own BACnet type.
+Writes to other properties never carry a priority; only the present value has a Priority Array. Values are sent in the property's own BACnet type. Writing a property other than the present value changes the object's configuration, so it is only allowed for administrators.
 
 **Objects you didn't import:** target the BACnet *device* instead of an entity and add `object_type` (name such as `analog-value` or `trend-log`, or the number) and `instance`. This is only allowed for administrators, because it reaches every object on the device.
 

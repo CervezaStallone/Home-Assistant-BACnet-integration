@@ -191,7 +191,11 @@ def _device_targets(
 
 
 async def _check_permissions(
-    hass: HomeAssistant, call: ServiceCall, policies: tuple[str, ...]
+    hass: HomeAssistant,
+    call: ServiceCall,
+    policies: tuple[str, ...],
+    *,
+    admin_only: bool = False,
 ) -> None:
     """Check the calling user may use every targeted entity.
 
@@ -199,14 +203,15 @@ async def _check_permissions(
     Home Assistant, unlike a platform entity service. Checked before the
     targets are resolved, so the errors there reveal nothing about an
     entity the user may not access. Device targets reach any object on
-    the device, so they are for administrators only.
+    the device, so they are for administrators only, as is *admin_only*
+    (writing an object's configuration rather than its value).
     """
     if not call.context.user_id:
         return
     user = await hass.auth.async_get_user(call.context.user_id)
     if user is None:
         raise UnknownUser(context=call.context)
-    if ATTR_OBJECT_TYPE in call.data:
+    if admin_only or ATTR_OBJECT_TYPE in call.data:
         if not user.is_admin:
             raise Unauthorized(context=call.context)
         return
@@ -288,8 +293,10 @@ async def async_handle_relinquish(hass: HomeAssistant, call: ServiceCall) -> Non
 
 async def async_handle_write_value(hass: HomeAssistant, call: ServiceCall) -> None:
     """Handle bacnet.write_value."""
-    await _check_permissions(hass, call, (POLICY_CONTROL,))
     property_name = _property_name(call)
+    await _check_permissions(
+        hass, call, (POLICY_CONTROL,), admin_only=property_name != PRESENT_VALUE
+    )
     value = call.data[ATTR_VALUE]
     if property_name == PRESENT_VALUE and not isinstance(value, bool):
         value = float(value)
