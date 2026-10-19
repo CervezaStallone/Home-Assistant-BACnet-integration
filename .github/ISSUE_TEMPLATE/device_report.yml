@@ -1,0 +1,72 @@
+name: Device compatibility report
+description: Tell us a BACnet device works with this integration, so it can be added to the list of tested devices
+title: "Device report: "
+labels: ["device-report"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for sharing! Once the maintainer has checked the report, the device is added to the [tested devices list](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration#tested-devices) with a link back to this issue.
+
+        Something doesn't work? Please open a [bug report](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/issues/new?template=bug_report.yml) instead.
+
+  - type: input
+    id: vendor
+    attributes:
+      label: Manufacturer
+      placeholder: "Siemens"
+    validations:
+      required: true
+
+  - type: input
+    id: model
+    attributes:
+      label: Model
+      description: The controller, gateway or device model
+      placeholder: "PXC200-E.D"
+    validations:
+      required: true
+
+  - type: input
+    id: firmware
+    attributes:
+      label: Firmware version
+      description: Optional, but helpful
+      placeholder: "3.2.1"
+
+  - type: input
+    id: integration-version
+    attributes:
+      label: BACnet integration version
+      placeholder: "1.0.50-beta.6"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: connection
+    attributes:
+      label: Connection
+      options:
+        - Same subnet
+        - Other subnet via BBMD
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: works
+    attributes:
+      label: What works
+      description: Tick what you have actually used with this device
+      options:
+        - label: Reading values
+        - label: COV (live updates)
+        - label: Writing values
+        - label: Schedules
+        - label: Alarms
+        - label: Trend logs
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Anything others should know, e.g. settings that were needed or things that don't work

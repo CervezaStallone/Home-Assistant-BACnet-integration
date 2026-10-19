@@ -5,6 +5,9 @@ on:
       - main
       - master
   pull_request:
+  # Started by device-report.yml for its pull requests (GITHUB_TOKEN pushes
+  # don't trigger workflows).
+  workflow_dispatch:
 
 permissions:
   contents: read
