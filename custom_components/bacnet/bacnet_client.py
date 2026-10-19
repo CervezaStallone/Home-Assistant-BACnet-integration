@@ -2133,7 +2133,12 @@ class BACnetClient:
         elif property_name == "presentValue":
             bacnet_value = self._python_to_bacnet_value(value, object_type)
         else:
-            bacnet_value = self._value_for_property(type_str, property_name, value)
+            try:
+                bacnet_value = self._value_for_property(type_str, property_name, value)
+            except (TypeError, ValueError) as exc:
+                raise BACnetPropertyError(
+                    f"{value!r} is not a valid value for {property_name}"
+                ) from exc
 
         try:
             _LOGGER.debug(
@@ -3074,7 +3079,10 @@ class BACnetClient:
                 return datatype(bool(value))
             if issubclass(datatype, Enumerated) and isinstance(value, str):
                 return datatype(value)
-            return datatype(int(value))
+            number = float(value)
+            if not number.is_integer():
+                raise ValueError(f"{value!r} is not a whole number")
+            return datatype(int(number))
         if isinstance(datatype, type) and issubclass(datatype, CharacterString):
             return datatype(str(value))
         if isinstance(value, bool):

@@ -118,8 +118,9 @@ RELINQUISH_SCHEMA = cv.make_entity_service_schema(
 )
 WRITE_VALUE_SCHEMA = _object_service_schema(
     {
-        # bool first: vol.Coerce(float) would turn True into 1.0.
-        vol.Required(ATTR_VALUE): vol.Any(bool, vol.Coerce(float), cv.string),
+        # Kept as given: text stays text for text properties; the client
+        # converts to the property's own BACnet type.
+        vol.Required(ATTR_VALUE): vol.Any(bool, int, float, cv.string),
         vol.Optional(ATTR_PRIORITY): _PRIORITY,
         vol.Optional(ATTR_PROPERTY): vol.Any(vol.Coerce(int), cv.string),
         **_OBJECT_FIELDS,
@@ -412,7 +413,16 @@ async def async_handle_write_value(hass: HomeAssistant, call: ServiceCall) -> No
     )
     value = call.data[ATTR_VALUE]
     if property_name == PRESENT_VALUE and not isinstance(value, bool):
-        value = float(value)
+        try:
+            value = float(value)
+        except ValueError as err:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="invalid_value",
+                translation_placeholders={
+                    "error": f"{value!r} is not a number for presentValue"
+                },
+            ) from err
     for coordinator, obj, target in _resolve(hass, call):
         await async_write_object_value(
             coordinator,

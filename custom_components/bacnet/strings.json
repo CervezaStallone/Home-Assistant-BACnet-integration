@@ -211,6 +211,9 @@
     },
     "no_bacnet_device": {
       "message": "Pick a BACnet device of this integration in the Device field."
+    },
+    "invalid_value": {
+      "message": "Invalid value: {error}"
     }
   },
   "services": {

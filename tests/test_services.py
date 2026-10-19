@@ -324,3 +324,25 @@ def test_device_output_object_is_commandable(monkeypatch):
     kwargs = client.write_property.await_args.kwargs
     assert kwargs["commandable"] is True
     assert kwargs["priority"] == 8
+
+
+def test_write_value_bad_value_is_translated(monkeypatch):
+    from homeassistant.exceptions import HomeAssistantError
+
+    from custom_components.bacnet.bacnet_client import BACnetPropertyError
+
+    services, hass, client, _ = _setup(monkeypatch)
+    with pytest.raises(HomeAssistantError) as err:
+        asyncio.run(services.async_handle_write_value(hass, _call({"value": "abc"})))
+    assert err.value.translation_key == "invalid_value"
+
+    client.write_property = AsyncMock(
+        side_effect=BACnetPropertyError("1.5 is not a valid value for minimumOnTime")
+    )
+    with pytest.raises(HomeAssistantError) as err:
+        asyncio.run(
+            services.async_handle_write_value(
+                hass, _call({"value": 1.5, "property": "minimumOnTime"})
+            )
+        )
+    assert err.value.translation_key == "invalid_value"

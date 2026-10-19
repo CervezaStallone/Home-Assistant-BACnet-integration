@@ -18,6 +18,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .bacnet_client import BACnetPropertyError
 from .const import DOMAIN, OBJECT_TYPE_NAMES
 from .coordinator import BACnetCoordinator
 
@@ -72,12 +73,19 @@ async def async_write_object_value(
         "priority": priority or coordinator.write_priority,
         "commandable": obj.get("commandable", False),
     }
-    if value is None:
-        success = await client.relinquish(**target)
-    else:
-        success = await client.write_property(
-            property_name=property_name, value=value, **target
-        )
+    try:
+        if value is None:
+            success = await client.relinquish(**target)
+        else:
+            success = await client.write_property(
+                property_name=property_name, value=value, **target
+            )
+    except BACnetPropertyError as err:
+        raise HomeAssistantError(
+            translation_domain=DOMAIN,
+            translation_key="invalid_value",
+            translation_placeholders={"error": str(err)},
+        ) from err
     if not success:
         raise HomeAssistantError(
             translation_domain=DOMAIN,

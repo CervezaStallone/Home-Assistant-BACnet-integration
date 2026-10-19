@@ -1063,3 +1063,30 @@ def test_real_property_written_as_real():
     """highLimit on an analog object is a REAL, not Unsigned."""
     value = BACnetClient._value_for_property("analog-value", "highLimit", 30)
     assert type(value).__name__ == "Real"
+
+
+@pytest.mark.parametrize(
+    ("prop", "value"), [("minimumOnTime", 1.5), ("minimumOnTime", "abc")]
+)
+def test_invalid_value_for_property_is_refused(prop, value):
+    """1.5 seconds must not silently become 1; text is no Unsigned at all."""
+    from custom_components.bacnet.bacnet_client import BACnetPropertyError
+
+    client = BACnetClient(local_ip="127.0.0.1", local_port=47815)
+    client._app = _FakeApp()
+    with pytest.raises(BACnetPropertyError, match=prop):
+        asyncio.run(
+            client.write_property(
+                device_address="192.168.1.1",
+                object_type=4,
+                instance=1,
+                property_name=prop,
+                value=value,
+            )
+        )
+    assert client._app.calls == []
+
+
+def test_text_for_text_property_is_kept():
+    value = BACnetClient._value_for_property("binary-output", "inactiveText", "123")
+    assert str(value) == "123"

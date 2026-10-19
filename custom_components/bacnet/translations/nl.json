@@ -211,6 +211,9 @@
     },
     "no_bacnet_device": {
       "message": "Kies een BACnet-apparaat van deze integratie in het veld Apparaat."
+    },
+    "invalid_value": {
+      "message": "Ongeldige waarde: {error}"
     }
   },
   "services": {
