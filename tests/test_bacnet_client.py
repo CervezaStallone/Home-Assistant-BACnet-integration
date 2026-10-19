@@ -1090,3 +1090,8 @@ def test_invalid_value_for_property_is_refused(prop, value):
 def test_text_for_text_property_is_kept():
     value = BACnetClient._value_for_property("binary-output", "inactiveText", "123")
     assert str(value) == "123"
+
+
+def test_normalize_property_always_returns_plain_str():
+    for prop in ("9999", "minimumOnTime", 67):
+        assert type(BACnetClient.normalize_property(prop)) is str

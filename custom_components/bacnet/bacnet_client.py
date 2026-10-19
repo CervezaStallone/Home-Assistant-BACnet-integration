@@ -1659,7 +1659,12 @@ class BACnetClient:
         """
         text = str(prop).strip()
         identifier = PropertyIdentifier(int(text) if text.isdigit() else text)
-        return getattr(identifier, "attr", None) or str(int(identifier))
+        # Only standard properties have a camelCase name; for a proprietary
+        # number bacpypes3 has no documented name, so use its digits.
+        number = int(identifier)
+        if text.isdigit() and str(identifier) == str(number):
+            return str(number)
+        return str(getattr(identifier, "attr", None) or number)
 
     async def read_any_property(
         self,
