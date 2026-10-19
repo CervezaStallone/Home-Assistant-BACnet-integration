@@ -1,0 +1,71 @@
+name: Device report
+
+# A "Device compatibility report" issue (label: device-report) is added to
+# the tested devices list once the maintainer labels it "verified". Only
+# people with triage access can add labels, so that label is the human
+# check. The workflow never commits to master: it opens a pull request the
+# maintainer merges, and the issue closes with it.
+#
+# The issue text is untrusted. It reaches scripts/device_report.py only
+# through environment variables, never through ${{ }} in a run: line, and
+# the script strips markdown, HTML and links before it lands in README.md.
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: write  # dispatch the required checks on the new branch
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  add-device:
+    if: >-
+      github.event.label.name == 'verified' &&
+      contains(github.event.issue.labels.*.name, 'device-report')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Add the device to the list
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: python scripts/device_report.py
+
+      - name: Open a pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          branch="device-report/${ISSUE_NUMBER}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add README.md .github/tested_devices.json
+          git commit -m "docs: add tested device from #${ISSUE_NUMBER}"
+          git push --force origin "$branch"
+
+          if ! gh pr view "$branch" --json number > /dev/null 2>&1; then
+            gh pr create --base master --head "$branch" \
+              --title "docs: add tested device from #${ISSUE_NUMBER}" \
+              --body "Adds the device reported in #${ISSUE_NUMBER} to the tested devices list.
+
+          Closes #${ISSUE_NUMBER}"
+          fi
+
+          # Pushes made with GITHUB_TOKEN don't start other workflows, so
+          # start the required checks for this branch explicitly.
+          for workflow in pylint.yml tests.yml validate.yml; do
+            gh workflow run "$workflow" --ref "$branch"
+          done
+
+          gh issue comment "$ISSUE_NUMBER" --body "Thanks for the report! It's queued for the tested devices list and goes live with the next merge."

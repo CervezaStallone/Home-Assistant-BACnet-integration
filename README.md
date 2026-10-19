@@ -83,6 +83,20 @@ In plain terms: if your building has BACnet controllers, thermostats, sensors, o
 >
 > Any object type can be changed to another entity type per object (see [Customize objects](#customize-objects)). Multi-state objects can also become a **select** that shows their `stateText` labels (e.g. *Off / Heat / Cool*).
 
+## Tested devices
+
+Devices that users have reported working with this integration. BACnet is a standard, so devices that aren't listed usually work too — this is what has actually been tried.
+
+<!-- tested-devices:start -->
+| Manufacturer | Model | Firmware | Tested with | Connection | What works | Report |
+|---|---|---|---|---|---|---|
+| Kieback&Peter | DDC4000 | — | 1.0.50-beta.2 | — | Reading values, Schedules | [#52](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/issues/52) |
+| Kieback&Peter | DDC420 | — | 1.0.50-beta.2 | — | Reading values, Schedules | [#52](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/issues/52) |
+| Tridium | Niagara JACE | — | 1.0.44 | — | Reading values, COV (live updates) | [#28](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/issues/28) |
+<!-- tested-devices:end -->
+
+**Works on your device?** Please [send a device report](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/issues/new?template=device_report.yml): manufacturer, model and what you've used. It helps others decide, and it shows which devices get real-world testing. Once checked, it's added here with a link to your report.
+
 ---
 
 ## Installation
