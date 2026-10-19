@@ -70,6 +70,20 @@ def _make_coordinator(
     return coord
 
 
+def _run_metadata_sweep_inline(coord):
+    """A COV-found change starts a full sweep (issue #62); run it right away.
+
+    The device reports nothing new beyond what the single check found.
+    """
+    import asyncio
+    from unittest.mock import AsyncMock
+
+    coord.client.read_objects_metadata = AsyncMock(return_value={})
+    coord.hass.async_create_background_task = lambda coro, name=None: (
+        asyncio.get_running_loop().create_task(coro)
+    )
+
+
 # ---------------------------------------------------------------------------
 # _default_domain_for — commandable-aware domain selection
 # ---------------------------------------------------------------------------
@@ -738,6 +752,7 @@ class TestCovTriggeredMetadataCheck:
         coord.client.refresh_object_metadata = AsyncMock(
             return_value={"object_name": "Old", "units": "degrees-celsius"}
         )
+        _run_metadata_sweep_inline(coord)
 
         asyncio.run(coord._refresh_object_metadata_now("0:1"))
 
@@ -950,6 +965,7 @@ class TestMetadataChangeTriggersRealReload:
         coord.client.refresh_object_metadata = AsyncMock(
             return_value={"object_name": "Old", "units": "degrees-celsius"}
         )
+        _run_metadata_sweep_inline(coord)
 
         asyncio.run(coord._refresh_object_metadata_now("0:1"))
 
@@ -1273,3 +1289,35 @@ class TestRefreshSingleObject:
         asyncio.run(coord.async_refresh_object({"object_type": 0, "instance": 1}))
         coord.async_request_refresh.assert_awaited_once()
         assert coord.data["0:1"]["presentValue"] == 1.0
+
+
+def test_first_cov_metadata_change_fixes_every_object_in_one_reload():
+    """Issue #62: stored placeholders ("Object 117", commandable False) were
+    found one COV notification at a time, each costing a reload — a loop of
+    reloads on a controller with hundreds of objects. The first change now
+    runs one batched sweep over all objects and persists once."""
+    import asyncio
+    from unittest.mock import AsyncMock
+
+    a = {"object_type": 4, "instance": 117, "object_name": "Object 117"}
+    b = {"object_type": 5, "instance": 249, "object_name": "Object 249"}
+    coord = _make_coordinator(objects=[a, b])
+    coord.entry.data[CONF_SELECTED_OBJECTS] = coord.objects
+    tasks = []
+    coord.hass.async_create_background_task = lambda coro, name=None: tasks.append(coro)
+    coord.client.refresh_object_metadata = AsyncMock(
+        return_value={"object_name": "CmdOpn"}
+    )
+    coord.client.read_objects_metadata = AsyncMock(
+        return_value={
+            "4:117": {"object_name": "CmdOpn"},
+            "5:249": {"object_name": "BtnLgtOff"},
+        }
+    )
+
+    asyncio.run(coord._refresh_object_metadata_now("4:117"))
+    assert len(tasks) == 1
+    asyncio.run(tasks[0])
+
+    assert [o["object_name"] for o in coord.objects] == ["CmdOpn", "BtnLgtOff"]
+    coord.hass.config_entries.async_update_entry.assert_called_once()

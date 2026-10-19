@@ -189,6 +189,8 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._last_object_metadata_check: dict[str, datetime] = {}
         self._metadata_task: asyncio.Task | None = None
         self._persist_handle: asyncio.TimerHandle | None = None
+        # A COV-triggered check found a change the sweep must persist.
+        self._metadata_pending: bool = False
 
         # Device address for reads/writes (from config entry data)
         self.device_address: str = ""
@@ -538,6 +540,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self._persist_handle is not None:
             self._persist_handle.cancel()
             self._persist_handle = None
+        self._metadata_pending = False
         if self.entry is None:
             return
         _LOGGER.info("BACnet object metadata changed on device — reloading entry")
@@ -619,7 +622,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._replace_object(f"{obj['object_type']}:{obj['instance']}", updates)
                 changed = True
 
-        if changed:
+        if changed or self._metadata_pending:
             self._persist_metadata_change()
 
         return changed
@@ -677,7 +680,16 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 value,
             )
         self._replace_object(obj_key, updates)
-        self._schedule_metadata_persist()
+        # One changed object suggests others changed too (issue #62: entries
+        # with placeholder names from a failed discovery read). Check all of
+        # them in one batched sweep and reload once, instead of one reload
+        # per COV notification.
+        self._metadata_pending = True
+        if self._metadata_task is None or self._metadata_task.done():
+            self._last_metadata_refresh = datetime.now(UTC)
+            self._metadata_task = self.hass.async_create_background_task(
+                self.async_refresh_metadata(), name=f"{self.name} metadata sweep"
+            )
 
     # ------------------------------------------------------------------
     # COV subscription management

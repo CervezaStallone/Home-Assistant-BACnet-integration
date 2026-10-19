@@ -140,7 +140,12 @@ class FakeClient:
         return None
 
     async def poll_objects(
-        self, device_address, objects, property_names=None, device_id=None
+        self,
+        device_address,
+        objects,
+        property_names=None,
+        device_id=None,
+        extra_properties=False,
     ):
         if FakeClient.offline:
             return {
