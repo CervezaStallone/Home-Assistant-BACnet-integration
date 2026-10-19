@@ -214,6 +214,9 @@
     },
     "invalid_value": {
       "message": "Invalid value: {error}"
+    },
+    "not_a_trend_log": {
+      "message": "{entity_id} is not a BACnet Trend Log entity."
     }
   },
   "services": {
@@ -315,15 +318,15 @@
     },
     "read_trend_log": {
       "name": "Read trend log",
-      "description": "Read the records of a BACnet Trend Log object on a device and return them as response data. Only records with a time and a value are returned.",
+      "description": "Read the records of a BACnet Trend Log and return them as response data. Target a Trend Log entity, or pick the device and give the instance for a Trend Log that isn't imported. Only records with a time and a value are returned.",
       "fields": {
         "device": {
           "name": "Device",
-          "description": "The BACnet device with the Trend Log."
+          "description": "Only for a Trend Log that isn't imported: the BACnet device."
         },
         "instance": {
           "name": "Trend Log instance",
-          "description": "Instance number of the Trend Log object on the device."
+          "description": "Only with Device: instance number of the Trend Log object."
         },
         "start": {
           "name": "Start",

@@ -365,3 +365,23 @@ def test_read_property_on_extra_property_entity_defaults_to_it(monkeypatch):
     client.read_any_property = AsyncMock(return_value=300)
     result = asyncio.run(services.async_handle_read_property(hass, _call({})))
     assert result["switch.fan"]["property"] == "minimumOnTime"
+
+
+def test_read_trend_log_by_trend_log_entity(monkeypatch):
+    services, hass, client, coordinator = _setup(
+        monkeypatch, unique_id="bacnet_1001_20_4"
+    )
+    coordinator.objects = [{"object_type": 20, "instance": 4}]
+    client.read_trend_log = AsyncMock(return_value=[])
+    result = asyncio.run(services.async_handle_read_trend_log(hass, _call({})))
+    assert result == {"switch.fan": {"instance": 4, "records": []}}
+    assert client.read_trend_log.await_args.args[1] == 4
+
+
+def test_read_trend_log_on_other_entity_is_refused(monkeypatch):
+    from homeassistant.exceptions import HomeAssistantError
+
+    services, hass, _, _ = _setup(monkeypatch)
+    with pytest.raises(HomeAssistantError) as err:
+        asyncio.run(services.async_handle_read_trend_log(hass, _call({})))
+    assert err.value.translation_key == "not_a_trend_log"

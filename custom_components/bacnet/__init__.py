@@ -47,6 +47,7 @@ from .const import (
     DEFAULT_POLLING_INTERVAL,
     DEFAULT_USE_DESCRIPTION,
     DOMAIN,
+    OBJECT_TYPE_TREND_LOG,
 )
 from .helpers import (
     default_domain_for,
@@ -80,7 +81,12 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
 def _domain_for_object(obj: dict, domain_overrides: dict[str, str]) -> str:
-    """Return the HA domain for a BACnet object, applying user overrides."""
+    """Return the HA domain for a BACnet object, applying user overrides.
+
+    Trend Logs are always a sensor: they have no value to write.
+    """
+    if obj["object_type"] == OBJECT_TYPE_TREND_LOG:
+        return "sensor"
     return domain_overrides.get(object_key(obj)) or default_domain_for(obj)
 
 

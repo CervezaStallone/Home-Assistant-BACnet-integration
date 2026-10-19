@@ -77,6 +77,7 @@ In plain terms: if your building has BACnet controllers, thermostats, sensors, o
 | Multi-State Output | Number | Yes |
 | Multi-State Value | Sensor | Auto-detected |
 | Schedule *(1.0.50 beta)* | Sensor (current value) | Via `bacnet.write_schedule` |
+| Trend Log *(1.0.50 beta)* | Sensor (number of records) | No — records via `bacnet.read_trend_log` |
 
 > Value objects may or may not support writes — the integration auto-detects this by checking for a Priority Array during discovery.
 >
@@ -351,26 +352,26 @@ Properties you type under **other properties** become read-only sensors, unless 
 
 > **Beta:** available in the 1.0.50 pre-releases (enable *Show beta versions* in HACS).
 
-Controllers log values in Trend Log objects, so changes between two polls aren't lost. `bacnet.read_trend_log` reads those records with BACnet `ReadRange`. The Trend Log object doesn't need to be imported. Administrators only.
+Controllers log values in Trend Log objects, so changes between two polls aren't lost. Trend Logs show up in the object list of the setup wizard and the rescan; imported, each becomes a sensor with the number of records it holds (attribute `bacnet_log_enabled` tells whether it is logging). `bacnet.read_trend_log` reads the records with BACnet `ReadRange`.
 
 | Field | Meaning |
 |---|---|
-| `device` | The BACnet device with the Trend Log |
-| `instance` | Instance number of the Trend Log object |
+| target | A Trend Log sensor |
+| `device` + `instance` | Instead of a target: the BACnet device and the Trend Log's instance number, for a Trend Log you didn't import (administrators only) |
 | `start` | Optional. Records from this time on. Without it, the most recent records. |
 | `count` | Maximum number of records, 1–1000 (default 100) |
 
 ```yaml
 action: bacnet.read_trend_log
+target:
+  entity_id: sensor.ahu_1_supply_temperature_log
 data:
-  device: 0123456789abcdef0123456789abcdef
-  instance: 4
   start: "{{ now() - timedelta(hours=24) }}"
   count: 500
 response_variable: trend
 ```
 
-returns `{"<device id>": {"instance": 4, "records": [{"time": "2026-10-19T10:00:00", "value": 21.5}, …]}}`, oldest first. Only records with a time and a value are returned: log-status changes, time changes, failures and buffer-cleared markers are left out. Times are the controller's local time, without a time zone.
+returns `{"sensor.ahu_1_supply_temperature_log": {"instance": 4, "records": [{"time": "2026-10-19T10:00:00", "value": 21.5}, …]}}`, oldest first. Only records with a time and a value are returned: log-status changes, time changes, failures and buffer-cleared markers are left out. Times are the controller's local time, without a time zone.
 
 ### Schedules *(1.0.50 beta)*
 

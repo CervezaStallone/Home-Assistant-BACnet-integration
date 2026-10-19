@@ -74,6 +74,7 @@ from .const import (
     OBJECT_TYPE_MULTI_STATE_OUTPUT,
     OBJECT_TYPE_MULTI_STATE_VALUE,
     OBJECT_TYPE_SCHEDULE,
+    OBJECT_TYPE_TREND_LOG,
     RPM_MAX_OBJECTS,
 )
 from .helpers import mask_address as _mask_address
@@ -93,6 +94,7 @@ SUPPORTED_OBJECT_TYPES: set[int] = {
     OBJECT_TYPE_MULTI_STATE_OUTPUT,
     OBJECT_TYPE_MULTI_STATE_VALUE,
     OBJECT_TYPE_SCHEDULE,
+    OBJECT_TYPE_TREND_LOG,
 }
 
 # Object types that are inherently commandable (have a Priority Array)
@@ -3153,6 +3155,7 @@ class BACnetClient:
         "multiStateOutput": OBJECT_TYPE_MULTI_STATE_OUTPUT,
         "multiStateValue": OBJECT_TYPE_MULTI_STATE_VALUE,
         "schedule": OBJECT_TYPE_SCHEDULE,
+        "trendLog": OBJECT_TYPE_TREND_LOG,
         # hyphenated (ASHRAE 135 / BACpypes3 str() output)
         "analog-input": OBJECT_TYPE_ANALOG_INPUT,
         "analog-output": OBJECT_TYPE_ANALOG_OUTPUT,
@@ -3195,6 +3198,7 @@ class BACnetClient:
         OBJECT_TYPE_MULTI_STATE_OUTPUT: "multi-state-output",
         OBJECT_TYPE_MULTI_STATE_VALUE: "multi-state-value",
         OBJECT_TYPE_SCHEDULE: "schedule",
+        OBJECT_TYPE_TREND_LOG: "trend-log",
     }
 
     @classmethod

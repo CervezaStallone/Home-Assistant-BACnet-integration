@@ -33,6 +33,7 @@ from .const import (
     OBJECT_TYPE_ANALOG_OUTPUT,
     OBJECT_TYPE_ANALOG_VALUE,
     OBJECT_TYPE_SCHEDULE,
+    OBJECT_TYPE_TREND_LOG,
 )
 from .coordinator import BACnetCoordinator
 from .entity import BACnetEntity, bacnet_device_info
@@ -81,7 +82,9 @@ async def async_setup_entry(
     entities: list[Any] = []
     for obj in objects:
         domain = coordinator.get_domain_for_object(obj)
-        if domain == "sensor":
+        if obj["object_type"] == OBJECT_TYPE_TREND_LOG:
+            entities.append(BACnetTrendLogSensor(coordinator, entry, obj))
+        elif domain == "sensor":
             entities.append(BACnetSensor(coordinator, entry, obj))
     entities.extend(property_entities(coordinator, entry, "sensor"))
 
@@ -149,6 +152,29 @@ class BACnetSensor(BACnetEntity, SensorEntity):
             return int(value)
         except (ValueError, TypeError):
             return str(value)
+
+
+class BACnetTrendLogSensor(BACnetEntity, SensorEntity):
+    """A Trend Log object: the number of records it holds.
+
+    The records themselves are read with bacnet.read_trend_log, which can
+    target this entity.
+    """
+
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def native_value(self) -> int | None:
+        return self.coordinator.get_object_value(self._obj_key, "recordCount")
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {
+            **super().extra_state_attributes,
+            "bacnet_log_enabled": self.coordinator.get_object_value(
+                self._obj_key, "logEnable"
+            ),
+        }
 
 
 class BACnetDiagnosticSensor(CoordinatorEntity[BACnetCoordinator], SensorEntity):

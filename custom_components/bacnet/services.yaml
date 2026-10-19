@@ -79,15 +79,18 @@ read_property:
           mode: box
 
 read_trend_log:
+  target:
+    entity:
+      integration: bacnet
+      domain:
+        - sensor
   fields:
     device:
-      required: true
       selector:
         device:
           filter:
             integration: bacnet
     instance:
-      required: true
       selector:
         number:
           min: 0

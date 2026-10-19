@@ -58,7 +58,7 @@ from .bacnet_client import (
     BACnetPropertyError,
     ScheduleError,
 )
-from .const import DOMAIN, OBJECT_TYPE_SCHEDULE
+from .const import DOMAIN, OBJECT_TYPE_SCHEDULE, OBJECT_TYPE_TREND_LOG
 from .entity import async_write_object_value
 from .helpers import object_key
 
@@ -129,10 +129,10 @@ WRITE_VALUE_SCHEMA = _object_service_schema(
 )
 ATTR_START = "start"
 ATTR_COUNT = "count"
-READ_TREND_LOG_SCHEMA = vol.Schema(
+READ_TREND_LOG_SCHEMA = _object_service_schema(
     {
-        vol.Required(ATTR_DEVICE): _DEVICE,
-        vol.Required(ATTR_INSTANCE): vol.All(vol.Coerce(int), vol.Range(min=0)),
+        vol.Optional(ATTR_DEVICE): _DEVICE,
+        vol.Optional(ATTR_INSTANCE): vol.All(vol.Coerce(int), vol.Range(min=0)),
         vol.Optional(ATTR_START): cv.datetime,
         vol.Optional(ATTR_COUNT, default=100): vol.All(
             vol.Coerce(int), vol.Range(min=1, max=1000)
@@ -391,17 +391,39 @@ def _device_local(value: datetime | None) -> datetime | None:
 async def async_handle_read_trend_log(
     hass: HomeAssistant, call: ServiceCall
 ) -> dict[str, Any]:
-    """Handle bacnet.read_trend_log: {device_id: {instance, records}}."""
-    await _check_permissions(hass, call, (POLICY_READ,), admin_only=True)
-    instance = call.data[ATTR_INSTANCE]
+    """Handle bacnet.read_trend_log: {target: {instance, records}}.
+
+    Targets a Trend Log entity, or the device field plus instance for a
+    Trend Log that isn't imported (administrators only).
+    """
+    await _check_permissions(hass, call, (POLICY_READ,))
+    if ATTR_DEVICE in call.data:
+        if ATTR_INSTANCE not in call.data:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN, translation_key="invalid_object"
+            )
+        logs = [
+            (coordinator, call.data[ATTR_INSTANCE], device_id)
+            for coordinator, device_id in _device_coordinators(hass, call)
+        ]
+    else:
+        logs = []
+        for coordinator, obj, entity_id in _targets(hass, call):
+            if obj["object_type"] != OBJECT_TYPE_TREND_LOG:
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="not_a_trend_log",
+                    translation_placeholders={"entity_id": entity_id},
+                )
+            logs.append((coordinator, obj["instance"], entity_id))
     response: dict[str, Any] = {}
-    for coordinator, device_id in _device_coordinators(hass, call):
+    for coordinator, instance, target in logs:
         try:
             records = await coordinator.client.read_trend_log(
                 coordinator.device_address,
                 instance,
                 start=_device_local(call.data.get(ATTR_START)),
-                count=call.data[ATTR_COUNT],
+                count=call.data.get(ATTR_COUNT, 100),
             )
         except BACnetPropertyError as err:
             raise HomeAssistantError(
@@ -413,7 +435,7 @@ async def async_handle_read_trend_log(
                     "error": str(err),
                 },
             ) from err
-        response[device_id] = {"instance": instance, "records": records}
+        response[target] = {"instance": instance, "records": records}
     return response
 
 
