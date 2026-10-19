@@ -74,6 +74,7 @@ from .const import (
     OBJECT_TYPE_MULTI_STATE_OUTPUT,
     OBJECT_TYPE_MULTI_STATE_VALUE,
     OBJECT_TYPE_SCHEDULE,
+    OBJECT_TYPE_TREND_LOG,
     RPM_MAX_OBJECTS,
 )
 from .helpers import mask_address as _mask_address
@@ -93,6 +94,7 @@ SUPPORTED_OBJECT_TYPES: set[int] = {
     OBJECT_TYPE_MULTI_STATE_OUTPUT,
     OBJECT_TYPE_MULTI_STATE_VALUE,
     OBJECT_TYPE_SCHEDULE,
+    OBJECT_TYPE_TREND_LOG,
 }
 
 # Object types that are inherently commandable (have a Priority Array)
@@ -1659,7 +1661,12 @@ class BACnetClient:
         """
         text = str(prop).strip()
         identifier = PropertyIdentifier(int(text) if text.isdigit() else text)
-        return getattr(identifier, "attr", None) or str(int(identifier))
+        # Only standard properties have a camelCase name; for a proprietary
+        # number bacpypes3 has no documented name, so use its digits.
+        number = int(identifier)
+        if text.isdigit() and str(identifier) == str(number):
+            return str(number)
+        return str(getattr(identifier, "attr", None) or number)
 
     async def read_any_property(
         self,
@@ -2133,7 +2140,12 @@ class BACnetClient:
         elif property_name == "presentValue":
             bacnet_value = self._python_to_bacnet_value(value, object_type)
         else:
-            bacnet_value = self._value_for_property(type_str, property_name, value)
+            try:
+                bacnet_value = self._value_for_property(type_str, property_name, value)
+            except (TypeError, ValueError) as exc:
+                raise BACnetPropertyError(
+                    f"{value!r} is not a valid value for {property_name}"
+                ) from exc
 
         try:
             _LOGGER.debug(
@@ -3074,7 +3086,10 @@ class BACnetClient:
                 return datatype(bool(value))
             if issubclass(datatype, Enumerated) and isinstance(value, str):
                 return datatype(value)
-            return datatype(int(value))
+            number = float(value)
+            if not number.is_integer():
+                raise ValueError(f"{value!r} is not a whole number")
+            return datatype(int(number))
         if isinstance(datatype, type) and issubclass(datatype, CharacterString):
             return datatype(str(value))
         if isinstance(value, bool):
@@ -3140,6 +3155,7 @@ class BACnetClient:
         "multiStateOutput": OBJECT_TYPE_MULTI_STATE_OUTPUT,
         "multiStateValue": OBJECT_TYPE_MULTI_STATE_VALUE,
         "schedule": OBJECT_TYPE_SCHEDULE,
+        "trendLog": OBJECT_TYPE_TREND_LOG,
         # hyphenated (ASHRAE 135 / BACpypes3 str() output)
         "analog-input": OBJECT_TYPE_ANALOG_INPUT,
         "analog-output": OBJECT_TYPE_ANALOG_OUTPUT,
@@ -3182,6 +3198,7 @@ class BACnetClient:
         OBJECT_TYPE_MULTI_STATE_OUTPUT: "multi-state-output",
         OBJECT_TYPE_MULTI_STATE_VALUE: "multi-state-value",
         OBJECT_TYPE_SCHEDULE: "schedule",
+        OBJECT_TYPE_TREND_LOG: "trend-log",
     }
 
     @classmethod

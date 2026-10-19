@@ -324,3 +324,77 @@ def test_device_output_object_is_commandable(monkeypatch):
     kwargs = client.write_property.await_args.kwargs
     assert kwargs["commandable"] is True
     assert kwargs["priority"] == 8
+
+
+def test_write_value_bad_value_is_translated(monkeypatch):
+    from homeassistant.exceptions import HomeAssistantError
+
+    from custom_components.bacnet.bacnet_client import BACnetPropertyError
+
+    services, hass, client, _ = _setup(monkeypatch)
+    with pytest.raises(HomeAssistantError) as err:
+        asyncio.run(services.async_handle_write_value(hass, _call({"value": "abc"})))
+    assert err.value.translation_key == "invalid_value"
+
+    client.write_property = AsyncMock(
+        side_effect=BACnetPropertyError("1.5 is not a valid value for minimumOnTime")
+    )
+    with pytest.raises(HomeAssistantError) as err:
+        asyncio.run(
+            services.async_handle_write_value(
+                hass, _call({"value": 1.5, "property": "minimumOnTime"})
+            )
+        )
+    assert err.value.translation_key == "invalid_value"
+
+
+def test_write_value_on_extra_property_entity_writes_that_property(monkeypatch):
+    services, hass, client, _ = _setup(
+        monkeypatch, unique_id="bacnet_1001_4_2_minimumOnTime"
+    )
+    asyncio.run(services.async_handle_write_value(hass, _call({"value": 600})))
+    kwargs = client.write_property.await_args.kwargs
+    assert kwargs["property_name"] == "minimumOnTime"
+    assert kwargs["value"] == 600
+
+
+def test_read_property_on_extra_property_entity_defaults_to_it(monkeypatch):
+    services, hass, client, _ = _setup(
+        monkeypatch, unique_id="bacnet_1001_4_2_minimumOnTime"
+    )
+    client.read_any_property = AsyncMock(return_value=300)
+    result = asyncio.run(services.async_handle_read_property(hass, _call({})))
+    assert result["switch.fan"]["property"] == "minimumOnTime"
+
+
+def test_read_trend_log_by_trend_log_entity(monkeypatch):
+    services, hass, client, coordinator = _setup(
+        monkeypatch, unique_id="bacnet_1001_20_4"
+    )
+    coordinator.objects = [{"object_type": 20, "instance": 4}]
+    client.read_trend_log = AsyncMock(return_value=[])
+    result = asyncio.run(services.async_handle_read_trend_log(hass, _call({})))
+    assert result == {"switch.fan": {"instance": 4, "records": []}}
+    assert client.read_trend_log.await_args.args[1] == 4
+
+
+def test_read_trend_log_on_other_entity_is_refused(monkeypatch):
+    from homeassistant.exceptions import HomeAssistantError
+
+    services, hass, _, _ = _setup(monkeypatch)
+    with pytest.raises(HomeAssistantError) as err:
+        asyncio.run(services.async_handle_read_trend_log(hass, _call({})))
+    assert err.value.translation_key == "not_a_trend_log"
+
+
+def test_read_trend_log_by_device_needs_admin(monkeypatch):
+    from homeassistant.exceptions import Unauthorized
+
+    services, hass, client, coordinator = _setup(monkeypatch)
+    _with_device(monkeypatch, services, hass, coordinator, is_admin=False)
+    client.read_trend_log = AsyncMock(return_value=[])
+    call = _call({"device": "dev1", "instance": 4})
+    call.context.user_id = "u1"
+    with pytest.raises(Unauthorized):
+        asyncio.run(services.async_handle_read_trend_log(hass, call))
+    client.read_trend_log.assert_not_awaited()

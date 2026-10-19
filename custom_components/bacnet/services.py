@@ -24,6 +24,7 @@ so one service covers the switch, number and climate platforms alike.
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Any
 
@@ -57,7 +58,7 @@ from .bacnet_client import (
     BACnetPropertyError,
     ScheduleError,
 )
-from .const import DOMAIN, OBJECT_TYPE_SCHEDULE
+from .const import DOMAIN, OBJECT_TYPE_SCHEDULE, OBJECT_TYPE_TREND_LOG
 from .entity import async_write_object_value
 from .helpers import object_key
 
@@ -118,8 +119,9 @@ RELINQUISH_SCHEMA = cv.make_entity_service_schema(
 )
 WRITE_VALUE_SCHEMA = _object_service_schema(
     {
-        # bool first: vol.Coerce(float) would turn True into 1.0.
-        vol.Required(ATTR_VALUE): vol.Any(bool, vol.Coerce(float), cv.string),
+        # Kept as given: text stays text for text properties; the client
+        # converts to the property's own BACnet type.
+        vol.Required(ATTR_VALUE): vol.Any(bool, int, float, cv.string),
         vol.Optional(ATTR_PRIORITY): _PRIORITY,
         vol.Optional(ATTR_PROPERTY): vol.Any(vol.Coerce(int), cv.string),
         **_OBJECT_FIELDS,
@@ -127,10 +129,10 @@ WRITE_VALUE_SCHEMA = _object_service_schema(
 )
 ATTR_START = "start"
 ATTR_COUNT = "count"
-READ_TREND_LOG_SCHEMA = vol.Schema(
+READ_TREND_LOG_SCHEMA = _object_service_schema(
     {
-        vol.Required(ATTR_DEVICE): _DEVICE,
-        vol.Required(ATTR_INSTANCE): vol.All(vol.Coerce(int), vol.Range(min=0)),
+        vol.Optional(ATTR_DEVICE): _DEVICE,
+        vol.Optional(ATTR_INSTANCE): vol.All(vol.Coerce(int), vol.Range(min=0)),
         vol.Optional(ATTR_START): cv.datetime,
         vol.Optional(ATTR_COUNT, default=100): vol.All(
             vol.Coerce(int), vol.Range(min=1, max=1000)
@@ -139,7 +141,7 @@ READ_TREND_LOG_SCHEMA = vol.Schema(
 )
 READ_PROPERTY_SCHEMA = _object_service_schema(
     {
-        vol.Required(ATTR_PROPERTY): vol.Any(vol.Coerce(int), cv.string),
+        vol.Optional(ATTR_PROPERTY): vol.Any(vol.Coerce(int), cv.string),
         vol.Optional(ATTR_ARRAY_INDEX): vol.All(vol.Coerce(int), vol.Range(min=0)),
         **_OBJECT_FIELDS,
     }
@@ -164,15 +166,39 @@ _SCHEDULE_FIELDS = (
 )
 
 
-def _targets(hass: HomeAssistant, call: ServiceCall) -> list[tuple[Any, dict, str]]:
-    """Resolve the call's entities to (coordinator, object, entity_id)."""
+# Object entities: f"{DOMAIN}_{device_id}_{type}_{instance}", extra
+# property entities add f"_{property}".
+_UNIQUE_ID = re.compile(rf"^{DOMAIN}_[^_]+_(\d+)_(\d+)(?:_([A-Za-z0-9]+))?$")
+
+
+def _parse_unique_id(unique_id: str) -> tuple[str, str | None] | None:
+    """(object key, extra property or None) of an object entity's unique_id."""
+    match = _UNIQUE_ID.match(unique_id)
+    if match is None:
+        return None
+    return f"{match[1]}:{match[2]}", match[3]
+
+
+def _entity_property(hass: HomeAssistant, entity_id: str) -> str | None:
+    """The extra property an entity shows, or None for an object entity."""
+    reg_entry = er.async_get(hass).async_get(entity_id)
+    parsed = _parse_unique_id(reg_entry.unique_id) if reg_entry else None
+    return parsed[1] if parsed else None
+
+
+def _targets(
+    hass: HomeAssistant, call: ServiceCall, *, properties: bool = False
+) -> list[tuple[Any, dict, str]]:
+    """Resolve the call's entities to (coordinator, object, entity_id).
+
+    Extra-property entities are only accepted with *properties*.
+    """
     selected = _referenced(hass, call)
     registry = er.async_get(hass)
     targets = []
     for entity_id in sorted(selected.referenced | selected.indirectly_referenced):
         reg_entry = registry.async_get(entity_id)
-        # Object entities use f"{DOMAIN}_{device_id}_{type}_{instance}".
-        parts = reg_entry.unique_id.rsplit("_", 2) if reg_entry else []
+        parsed = _parse_unique_id(reg_entry.unique_id) if reg_entry else None
         config_entry = (
             hass.config_entries.async_get_entry(reg_entry.config_entry_id)
             if reg_entry and reg_entry.platform == DOMAIN
@@ -182,13 +208,10 @@ def _targets(hass: HomeAssistant, call: ServiceCall) -> list[tuple[Any, dict, st
             getattr(config_entry, "runtime_data", None), "coordinator", None
         )
         obj = None
-        if (
-            coordinator is not None
-            and len(parts) == 3
-            and all(p.isdigit() for p in parts[1:])
-        ):
-            key = f"{parts[1]}:{parts[2]}"
-            obj = next((o for o in coordinator.objects if object_key(o) == key), None)
+        if coordinator is not None and parsed and (properties or not parsed[1]):
+            obj = next(
+                (o for o in coordinator.objects if object_key(o) == parsed[0]), None
+            )
         if obj is None:
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
@@ -303,14 +326,16 @@ def _resolve(hass: HomeAssistant, call: ServiceCall) -> list[tuple[Any, dict, st
     """Device + object fields when given, otherwise the targeted entities."""
     if ATTR_DEVICE in call.data:
         return _device_targets(hass, call)
-    return _targets(hass, call)
+    return _targets(hass, call, properties=True)
 
 
-def _property_name(call: ServiceCall) -> str:
+def _property_name(
+    call: ServiceCall, hass: HomeAssistant | None = None, target: str | None = None
+) -> str:
+    """The property field; else the property an extra-property entity shows."""
+    default = (hass and target and _entity_property(hass, target)) or PRESENT_VALUE
     try:
-        return BACnetClient.normalize_property(
-            call.data.get(ATTR_PROPERTY, PRESENT_VALUE)
-        )
+        return BACnetClient.normalize_property(call.data.get(ATTR_PROPERTY, default))
     except ValueError as err:
         raise HomeAssistantError(
             translation_domain=DOMAIN,
@@ -324,9 +349,10 @@ async def async_handle_read_property(
 ) -> dict[str, Any]:
     """Handle bacnet.read_property: {target: {object, property, value}}."""
     await _check_permissions(hass, call, (POLICY_READ,))
-    property_name = _property_name(call)
+    _property_name(call)  # an unknown property fails before anything is read
     response: dict[str, Any] = {}
     for coordinator, obj, target in _resolve(hass, call):
+        property_name = _property_name(call, hass, target)
         try:
             value = await coordinator.client.read_any_property(
                 coordinator.device_address,
@@ -365,17 +391,41 @@ def _device_local(value: datetime | None) -> datetime | None:
 async def async_handle_read_trend_log(
     hass: HomeAssistant, call: ServiceCall
 ) -> dict[str, Any]:
-    """Handle bacnet.read_trend_log: {device_id: {instance, records}}."""
-    await _check_permissions(hass, call, (POLICY_READ,), admin_only=True)
-    instance = call.data[ATTR_INSTANCE]
+    """Handle bacnet.read_trend_log: {target: {instance, records}}.
+
+    Targets a Trend Log entity, or the device field plus instance for a
+    Trend Log that isn't imported (administrators only).
+    """
+    await _check_permissions(
+        hass, call, (POLICY_READ,), admin_only=ATTR_DEVICE in call.data
+    )
+    if ATTR_DEVICE in call.data:
+        if ATTR_INSTANCE not in call.data:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN, translation_key="invalid_object"
+            )
+        logs = [
+            (coordinator, call.data[ATTR_INSTANCE], device_id)
+            for coordinator, device_id in _device_coordinators(hass, call)
+        ]
+    else:
+        logs = []
+        for coordinator, obj, entity_id in _targets(hass, call):
+            if obj["object_type"] != OBJECT_TYPE_TREND_LOG:
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="not_a_trend_log",
+                    translation_placeholders={"entity_id": entity_id},
+                )
+            logs.append((coordinator, obj["instance"], entity_id))
     response: dict[str, Any] = {}
-    for coordinator, device_id in _device_coordinators(hass, call):
+    for coordinator, instance, target in logs:
         try:
             records = await coordinator.client.read_trend_log(
                 coordinator.device_address,
                 instance,
                 start=_device_local(call.data.get(ATTR_START)),
-                count=call.data[ATTR_COUNT],
+                count=call.data.get(ATTR_COUNT, 100),
             )
         except BACnetPropertyError as err:
             raise HomeAssistantError(
@@ -387,7 +437,7 @@ async def async_handle_read_trend_log(
                     "error": str(err),
                 },
             ) from err
-        response[device_id] = {"instance": instance, "records": records}
+        response[target] = {"instance": instance, "records": records}
     return response
 
 
@@ -406,22 +456,43 @@ async def async_handle_relinquish(hass: HomeAssistant, call: ServiceCall) -> Non
 
 async def async_handle_write_value(hass: HomeAssistant, call: ServiceCall) -> None:
     """Handle bacnet.write_value."""
-    property_name = _property_name(call)
+    selected = _referenced(hass, call)
+    implied = [
+        _entity_property(hass, e)
+        for e in selected.referenced | selected.indirectly_referenced
+    ]
     await _check_permissions(
-        hass, call, (POLICY_CONTROL,), admin_only=property_name != PRESENT_VALUE
+        hass,
+        call,
+        (POLICY_CONTROL,),
+        admin_only=_property_name(call) != PRESENT_VALUE or any(implied),
     )
-    value = call.data[ATTR_VALUE]
-    if property_name == PRESENT_VALUE and not isinstance(value, bool):
-        value = float(value)
     for coordinator, obj, target in _resolve(hass, call):
         await async_write_object_value(
             coordinator,
             obj,
-            value,
+            _write_value(call, _property_name(call, hass, target)),
             priority=call.data.get(ATTR_PRIORITY),
             label=target,
-            property_name=property_name,
+            property_name=_property_name(call, hass, target),
         )
+
+
+def _write_value(call: ServiceCall, property_name: str) -> Any:
+    """The value field, as a number for presentValue."""
+    value = call.data[ATTR_VALUE]
+    if property_name == PRESENT_VALUE and not isinstance(value, bool):
+        try:
+            value = float(value)
+        except ValueError as err:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="invalid_value",
+                translation_placeholders={
+                    "error": f"{value!r} is not a number for presentValue"
+                },
+            ) from err
+    return value
 
 
 async def async_handle_schedule(

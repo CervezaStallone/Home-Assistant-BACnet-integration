@@ -77,6 +77,7 @@ In plain terms: if your building has BACnet controllers, thermostats, sensors, o
 | Multi-State Output | Number | Yes |
 | Multi-State Value | Sensor | Auto-detected |
 | Schedule *(1.0.50 beta)* | Sensor (current value) | Via `bacnet.write_schedule` |
+| Trend Log *(1.0.50 beta)* | Sensor (number of records) | No — records via `bacnet.read_trend_log` |
 
 > Value objects may or may not support writes — the integration auto-detects this by checking for a Priority Array during discovery.
 >
@@ -229,7 +230,7 @@ They stay available while the device is offline, which is exactly when they're u
 Alarms the controller already tracks are shown in Home Assistant. Nothing is configured or acknowledged on the device.
 
 - **Alarm** (binary sensor, per device) — on while any imported object has its IN_ALARM status flag set, or the device reports an active alarm.
-- **Active alarms** (sensor, per device) — the number of active alarms the device reports through BACnet `GetEventInformation`, polled with every poll. The `alarms` attribute lists every entry the device reports, including objects that are back to `normal` but still wait for an acknowledgement at the BMS (those don't count as active): `object_type`, `instance`, `object_name`, `event_state` (`high-limit`, `low-limit`, `offnormal`, `fault`, …) and which transitions are `acknowledged`. Objects you didn't import are included too. *Unknown* means the device doesn't support `GetEventInformation`; the Alarm binary sensor still works from the status flags.
+- **Active alarms** (sensor, per device) — the number of active alarms the device reports through BACnet `GetEventInformation`, polled with every poll. The `alarms` attribute lists every entry the device reports, including objects that are back to `normal` but still wait for an acknowledgement at the BMS (those don't count as active; at most 50 entries are listed, active ones first, with `alarms_truncated: true` when there are more): `object_type`, `instance`, `object_name`, `event_state` (`high-limit`, `low-limit`, `offnormal`, `fault`, …) and which transitions are `acknowledged`. Objects you didn't import are included too. *Unknown* means the device doesn't support `GetEventInformation`; the Alarm binary sensor still works from the status flags.
 - **`bacnet_alarm` event** — fired when an alarm appears, changes state or clears (`event_state: normal`). Event data: `device_id` (BACnet device instance), `object_type`, `instance`, `object_name`, `event_state`, `previous_event_state`. Alarms that are already active when Home Assistant starts don't fire an event.
 
 `GetEventInformation` doesn't carry the alarm message text; that only exists in event notifications sent to the controller's notification recipients, which this integration doesn't receive.
@@ -343,32 +344,34 @@ For properties you want to see or change from the dashboard, no automation or te
 | Change Of State Count | sensor | binary, multi-state |
 | Elapsed Active Time | sensor (s) | binary |
 
+Targeting one of these entities with `bacnet.write_value` or `bacnet.read_property` uses its property, so `property` can be left out.
+
 Properties you type under **other properties** become read-only sensors, unless the table above lists them for that object type. Writable ones (number, switch) are under *Configuration* on the device page, read-only ones under *Diagnostic*. A property the object doesn't have shows as *unknown*.
 
 ### Trend logs *(1.0.50 beta)*
 
 > **Beta:** available in the 1.0.50 pre-releases (enable *Show beta versions* in HACS).
 
-Controllers log values in Trend Log objects, so changes between two polls aren't lost. `bacnet.read_trend_log` reads those records with BACnet `ReadRange`. The Trend Log object doesn't need to be imported. Administrators only.
+Controllers log values in Trend Log objects, so changes between two polls aren't lost. Trend Logs show up in the object list of the setup wizard and the rescan; imported, each becomes a sensor with the number of records it holds (attribute `bacnet_log_enabled` tells whether it is logging). `bacnet.read_trend_log` reads the records with BACnet `ReadRange`.
 
 | Field | Meaning |
 |---|---|
-| `device` | The BACnet device with the Trend Log |
-| `instance` | Instance number of the Trend Log object |
+| target | A Trend Log sensor |
+| `device` + `instance` | Instead of a target: the BACnet device and the Trend Log's instance number, for a Trend Log you didn't import (administrators only) |
 | `start` | Optional. Records from this time on. Without it, the most recent records. |
 | `count` | Maximum number of records, 1–1000 (default 100) |
 
 ```yaml
 action: bacnet.read_trend_log
+target:
+  entity_id: sensor.ahu_1_supply_temperature_log
 data:
-  device: 0123456789abcdef0123456789abcdef
-  instance: 4
   start: "{{ now() - timedelta(hours=24) }}"
   count: 500
 response_variable: trend
 ```
 
-returns `{"<device id>": {"instance": 4, "records": [{"time": "2026-10-19T10:00:00", "value": 21.5}, …]}}`, oldest first. Only records with a time and a value are returned: log-status changes, time changes, failures and buffer-cleared markers are left out. Times are the controller's local time, without a time zone.
+returns `{"sensor.ahu_1_supply_temperature_log": {"instance": 4, "records": [{"time": "2026-10-19T10:00:00", "value": 21.5}, …]}}`, oldest first. Only records with a time and a value are returned: log-status changes, time changes, failures and buffer-cleared markers are left out. Times are the controller's local time, without a time zone.
 
 ### Schedules *(1.0.50 beta)*
 
