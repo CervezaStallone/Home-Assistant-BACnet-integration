@@ -40,6 +40,9 @@ from .property_entity import property_entities
 
 _LOGGER = logging.getLogger(__name__)
 
+# Alarms listed in the Active alarms attribute (recorder limit: 16 KB).
+MAX_ALARMS_ATTRIBUTE = 50
+
 
 @dataclass(frozen=True)
 class _DiagnosticSensor:
@@ -208,4 +211,13 @@ class BACnetActiveAlarmsSensor(CoordinatorEntity[BACnetCoordinator], SensorEntit
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        return {"alarms": self.coordinator.active_alarms or []}
+        # Active alarms first; capped so the attributes stay under the
+        # recorder's 16 KB limit. The state still counts all of them.
+        alarms = sorted(
+            self.coordinator.active_alarms or [],
+            key=lambda a: a["event_state"] == "normal",
+        )
+        attrs: dict[str, Any] = {"alarms": alarms[:MAX_ALARMS_ATTRIBUTE]}
+        if len(alarms) > MAX_ALARMS_ATTRIBUTE:
+            attrs["alarms_truncated"] = True
+        return attrs
