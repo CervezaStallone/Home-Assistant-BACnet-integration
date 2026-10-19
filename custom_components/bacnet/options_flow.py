@@ -202,8 +202,17 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
 
         # Default selection: everything already imported, plus nothing new
         # (newly discovered objects are opt-in, matching the requested UX).
+        # New objects are listed first and marked, so they're easy to find
+        # on a controller with hundreds of objects (issue #61).
+        new_objects = [
+            o for o in self._rescanned_objects if _object_key(o) not in current_keys
+        ]
         object_options = {
-            _object_key(obj): _object_label(obj) for obj in self._rescanned_objects
+            _object_key(obj): _object_label(obj, new=True) for obj in new_objects
+        } | {
+            _object_key(obj): _object_label(obj)
+            for obj in self._rescanned_objects
+            if _object_key(obj) in current_keys
         }
         default_keys = [k for k in object_options if k in current_keys]
 

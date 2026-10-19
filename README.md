@@ -133,12 +133,12 @@ After setup, click **Configure** on the integration card to adjust:
 
 | Option | What it does | Default |
 |---|---|---|
-| **Enable COV** | Use Change of Value subscriptions for real-time updates | On |
+| **Enable COV** | Use Change of Value subscriptions for real-time updates. Present values use the standard `SubscribeCOV` service, which nearly all controllers support; `SubscribeCOVProperty` is only used for the optional live metadata properties below. | On |
 | **COV increment** | Minimum value change before a COV notification is sent (analog objects only). Set to `0` to use the device default. | `0.1` |
 | **Polling interval** | How often all objects are polled, in seconds (minimum 10). Polling always runs — COV only adds faster updates in between. | `30` |
 | **Use description** | Show BACnet `description` (property 28) instead of `objectName` as entity name | Off |
 | **Live metadata properties** | Opt-in per property (`object_name`, `description`, `units`) for a *live* push update via BACnet's SubscribeCOVProperty service, instead of periodic re-reads. Each one is a separate COV subscription on the device — leave off unless you need instant updates and know your device supports it. | None |
-| **Rescan device** | Re-read the device's object list to add or remove objects | — |
+| **Rescan device** | Re-read the device's object list to add or remove objects. Objects found for the first time are listed first and marked **NEW**; labels include the object's description when it differs from its name. | — |
 
 After this page comes [Customize objects](#customize-objects). Changes take effect immediately — the integration reloads automatically.
 
