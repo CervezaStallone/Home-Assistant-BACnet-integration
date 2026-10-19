@@ -73,6 +73,28 @@ read_property:
           min: 0
           mode: box
 
+read_trend_log:
+  target:
+    device:
+      integration: bacnet
+  fields:
+    instance:
+      required: true
+      selector:
+        number:
+          min: 0
+          mode: box
+    start:
+      selector:
+        datetime:
+    count:
+      default: 100
+      selector:
+        number:
+          min: 1
+          max: 1000
+          mode: box
+
 read_schedule:
   target:
     entity:

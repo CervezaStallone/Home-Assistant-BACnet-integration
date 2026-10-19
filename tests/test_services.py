@@ -250,3 +250,21 @@ def test_write_other_property_needs_admin(monkeypatch):
     with pytest.raises(Unauthorized):
         asyncio.run(services.async_handle_write_value(hass, call))
     client.write_property.assert_not_awaited()
+
+
+def test_read_trend_log_by_device(monkeypatch):
+    services, hass, client, coordinator = _setup(monkeypatch)
+    _with_device(monkeypatch, services, hass, coordinator)
+    client.read_trend_log = AsyncMock(
+        return_value=[{"time": "2026-10-19T10:00:00", "value": 21.5}]
+    )
+    result = asyncio.run(
+        services.async_handle_read_trend_log(hass, _call({"instance": 4, "count": 10}))
+    )
+    assert result == {
+        "dev1": {
+            "instance": 4,
+            "records": [{"time": "2026-10-19T10:00:00", "value": 21.5}],
+        }
+    }
+    assert client.read_trend_log.await_args.kwargs == {"start": None, "count": 10}

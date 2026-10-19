@@ -301,6 +301,24 @@
           "description": "Only when targeting a device: instance number of the object."
         }
       }
+    },
+    "read_trend_log": {
+      "name": "Read trend log",
+      "description": "Read the records of a BACnet Trend Log object on a device and return them as response data. Only records with a time and a value are returned.",
+      "fields": {
+        "instance": {
+          "name": "Trend Log instance",
+          "description": "Instance number of the Trend Log object on the device."
+        },
+        "start": {
+          "name": "Start",
+          "description": "Return records from this time on (device local time). Without it, the most recent records are returned."
+        },
+        "count": {
+          "name": "Count",
+          "description": "Maximum number of records (1-1000)."
+        }
+      }
     }
   }
 }

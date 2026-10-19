@@ -146,6 +146,41 @@ class BACnetPropertyError(Exception):
     """The device returned an error for a property read, or didn't answer."""
 
 
+_TREND_VALUE_CHOICES = (
+    "realValue",
+    "unsignedValue",
+    "signedValue",
+    "booleanValue",
+    "enumValue",
+)
+
+
+def _trend_record(record: Any) -> dict[str, Any] | None:
+    """{"time", "value"} for a Trend Log record holding a value, else None."""
+    datum = record.logDatum
+    choice = next(
+        (c for c in _TREND_VALUE_CHOICES if getattr(datum, c, None) is not None), None
+    )
+    if choice is None:
+        return None
+    year, month, day, _ = record.timestamp.date
+    hour, minute, second, _ = record.timestamp.time
+    if 255 in (year, month, day, hour, minute, second):
+        return None  # wildcard timestamp: not a point in time
+    value = getattr(datum, choice)
+    if choice == "realValue":
+        value = float(f"{float(value):.7g}")
+    elif choice == "booleanValue":
+        value = bool(value)
+    else:
+        value = int(value)
+    return {
+        "time": f"{year + 1900:04d}-{month:02d}-{day:02d}"
+        f"T{hour:02d}:{minute:02d}:{second:02d}",
+        "value": value,
+    }
+
+
 def _property_to_json(value: Any) -> Any:
     """Convert any BACpypes3 property value to plain JSON data.
 
@@ -1654,6 +1689,56 @@ class BACnetClient:
             raise BACnetPropertyError(str(result))
         return _property_to_json(result)
 
+    async def read_trend_log(
+        self,
+        device_address: str,
+        instance: int,
+        *,
+        start: datetime.datetime | None,
+        count: int,
+    ) -> list[dict[str, Any]]:
+        """Read Trend Log records with ReadRange, oldest first.
+
+        With *start*: up to *count* records from that time on. Without: the
+        last *count* records. Only records holding a time and a value are
+        returned — log-status, time-change, failure and null records aren't
+        data points. Times are the device's local time, without a time zone.
+        """
+        if self._app is None:
+            raise RuntimeError("Client not connected")
+        addr = Address(device_address)
+        oid = ObjectIdentifier(("trend-log", instance))
+        if start is not None:
+            range_params = (
+                "t",
+                None,
+                start.strftime("%Y-%m-%d"),
+                start.strftime("%H:%M:%S"),
+                count,
+            )
+        else:
+            total = await self.read_any_property(
+                device_address, 20, instance, "recordCount"
+            )
+            if not total:
+                return []
+            range_params = ("p", int(total), None, None, -count)
+        try:
+            result = await asyncio.wait_for(
+                self._app.read_range(addr, oid, "logBuffer", range_params=range_params),
+                30,
+            )
+        except TimeoutError as exc:
+            raise BACnetPropertyError("no answer from the device") from exc
+        except (ErrorRejectAbortNack, Exception) as exc:
+            raise BACnetPropertyError(str(exc)) from exc
+        if isinstance(result, ErrorRejectAbortNack):
+            raise BACnetPropertyError(str(result))
+        if not isinstance(result, list):
+            raise BACnetPropertyError(f"unexpected answer: {result!r}")
+        records = [r for r in map(_trend_record, result) if r is not None]
+        return sorted(records, key=lambda r: r["time"])
+
     async def get_event_information(
         self, device_address: str
     ) -> list[dict[str, Any]] | None:
@@ -1669,8 +1754,11 @@ class BACnetClient:
         if not self._event_info_supported.get(device_address, True):
             return None
         alarms: list[dict[str, Any]] = []
+        seen: set[tuple[int, int]] = set()
         last: ObjectIdentifier | None = None
-        while True:
+        # A device that keeps answering moreEvents without moving on must not
+        # hold up the poll: stop at a page with nothing new, or after 50 pages.
+        for _page in range(50):
             request = GetEventInformationRequest(destination=Address(device_address))
             if last is not None:
                 request.lastReceivedObjectIdentifier = last
@@ -1685,10 +1773,16 @@ class BACnetClient:
                     self._event_info_supported[device_address] = False
                     return None
                 raise BACnetPropertyError(str(response))
+            new_on_page = False
             for summary in response.listOfEventSummaries or []:
                 acked = list(summary.acknowledgedTransitions or [])
                 acked += [True] * (3 - len(acked))
                 last = summary.objectIdentifier
+                key = (int(last[0]), int(last[1]))
+                if key in seen:
+                    continue
+                seen.add(key)
+                new_on_page = True
                 alarms.append(
                     {
                         "object_type": int(last[0]),
@@ -1701,8 +1795,9 @@ class BACnetClient:
                         },
                     }
                 )
-            if not response.moreEvents or last is None:
+            if not response.moreEvents or not new_on_page:
                 return alarms
+        return alarms
 
     @staticmethod
     def _is_unsupported_service(response: ErrorRejectAbortNack) -> bool:

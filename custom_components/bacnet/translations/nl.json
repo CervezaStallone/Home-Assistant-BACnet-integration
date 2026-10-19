@@ -301,6 +301,24 @@
           "description": "Alleen bij een apparaat als doel: instantienummer van het object."
         }
       }
+    },
+    "read_trend_log": {
+      "name": "Trendlog lezen",
+      "description": "Leest de records van een BACnet Trend Log-object op een apparaat en geeft ze terug als antwoorddata. Alleen records met een tijd en een waarde worden teruggegeven.",
+      "fields": {
+        "instance": {
+          "name": "Trend Log-instantie",
+          "description": "Instantienummer van het Trend Log-object op het apparaat."
+        },
+        "start": {
+          "name": "Start",
+          "description": "Records vanaf dit tijdstip (lokale tijd van het apparaat). Zonder start komen de meest recente records."
+        },
+        "count": {
+          "name": "Aantal",
+          "description": "Maximaal aantal records (1-1000)."
+        }
+      }
     }
   }
 }

@@ -186,3 +186,15 @@ def test_device_alarm_binary_sensor():
     coord.data["0:1"]["statusFlags"] = [False] * 4
     coord.active_alarms = [_alarm(3, 7, "offnormal")]
     assert sensor.is_on is True
+
+
+def test_event_information_stops_when_device_repeats_itself():
+    """A device that keeps saying moreEvents with the same page must not loop."""
+    page = GetEventInformationACK(
+        listOfEventSummaries=[_summary("analog-input,1", "high-limit")],
+        moreEvents=True,
+    )
+    app = _App([page] * 100)
+    alarms = asyncio.run(_client(app).get_event_information(_ADDR))
+    assert len(app.requests) == 2
+    assert [a["instance"] for a in alarms] == [1]

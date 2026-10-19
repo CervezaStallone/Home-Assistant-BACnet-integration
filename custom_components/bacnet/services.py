@@ -10,6 +10,9 @@ bacnet.read_property — return any property of an object (by name or number).
                        Targets object entities, or a device plus
                        object_type/instance for objects not imported.
 
+bacnet.read_trend_log — return the records of a Trend Log object (device
+                        target), only those with a time and a value.
+
 bacnet.read_schedule  — return a Schedule object (weekly schedule, exceptions,
                         default, controlled objects) as response data.
 bacnet.write_schedule — change parts of a Schedule object; the device is read
@@ -21,6 +24,7 @@ so one service covers the switch, number and climate platforms alike.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 import homeassistant.helpers.config_validation as cv
@@ -55,6 +59,7 @@ from .helpers import object_key
 SERVICE_RELINQUISH = "relinquish"
 SERVICE_WRITE_VALUE = "write_value"
 SERVICE_READ_PROPERTY = "read_property"
+SERVICE_READ_TREND_LOG = "read_trend_log"
 SERVICE_READ_SCHEDULE = "read_schedule"
 SERVICE_WRITE_SCHEDULE = "write_schedule"
 ATTR_PRIORITY = "priority"
@@ -82,6 +87,17 @@ WRITE_VALUE_SCHEMA = cv.make_entity_service_schema(
         vol.Optional(ATTR_PRIORITY): _PRIORITY,
         vol.Optional(ATTR_PROPERTY): vol.Any(vol.Coerce(int), cv.string),
         **_OBJECT_FIELDS,
+    }
+)
+ATTR_START = "start"
+ATTR_COUNT = "count"
+READ_TREND_LOG_SCHEMA = cv.make_entity_service_schema(
+    {
+        vol.Required(ATTR_INSTANCE): vol.All(vol.Coerce(int), vol.Range(min=0)),
+        vol.Optional(ATTR_START): cv.datetime,
+        vol.Optional(ATTR_COUNT, default=100): vol.All(
+            vol.Coerce(int), vol.Range(min=1, max=1000)
+        ),
     }
 )
 READ_PROPERTY_SCHEMA = cv.make_entity_service_schema(
@@ -146,6 +162,30 @@ def _targets(hass: HomeAssistant, call: ServiceCall) -> list[tuple[Any, dict, st
     return targets
 
 
+def _device_coordinators(
+    hass: HomeAssistant, call: ServiceCall
+) -> list[tuple[Any, str]]:
+    """Resolve the call's BACnet device targets to (coordinator, device_id)."""
+    registry = dr.async_get(hass)
+    found = []
+    for device_id in sorted(_referenced(hass, call).referenced_devices):
+        device = registry.async_get(device_id)
+        if device is None or not any(i[0] == DOMAIN for i in device.identifiers):
+            continue
+        for entry_id in device.config_entries:
+            entry = hass.config_entries.async_get_entry(entry_id)
+            coordinator = getattr(
+                getattr(entry, "runtime_data", None), "coordinator", None
+            )
+            if coordinator is not None:
+                found.append((coordinator, device_id))
+    if not found:
+        raise HomeAssistantError(
+            translation_domain=DOMAIN, translation_key="no_bacnet_device"
+        )
+    return found
+
+
 def _device_targets(
     hass: HomeAssistant, call: ServiceCall
 ) -> list[tuple[Any, dict, str]]:
@@ -162,32 +202,17 @@ def _device_targets(
             translation_domain=DOMAIN, translation_key="invalid_object"
         )
     obj = {"object_type": object_type, "instance": call.data[ATTR_INSTANCE]}
-    registry = dr.async_get(hass)
-    targets = []
-    for device_id in sorted(_referenced(hass, call).referenced_devices):
-        device = registry.async_get(device_id)
-        if device is None or not any(i[0] == DOMAIN for i in device.identifiers):
-            continue
-        for entry_id in device.config_entries:
-            entry = hass.config_entries.async_get_entry(entry_id)
-            coordinator = getattr(
-                getattr(entry, "runtime_data", None), "coordinator", None
-            )
-            if coordinator is not None:
-                known = next(
-                    (
-                        o
-                        for o in coordinator.objects
-                        if object_key(o) == object_key(obj)
-                    ),
-                    obj,
-                )
-                targets.append((coordinator, known, device_id))
-    if not targets:
-        raise HomeAssistantError(
-            translation_domain=DOMAIN, translation_key="no_bacnet_device"
+    return [
+        (
+            coordinator,
+            next(
+                (o for o in coordinator.objects if object_key(o) == object_key(obj)),
+                obj,
+            ),
+            device_id,
         )
-    return targets
+        for coordinator, device_id in _device_coordinators(hass, call)
+    ]
 
 
 async def _check_permissions(
@@ -275,6 +300,44 @@ async def async_handle_read_property(
             "property": property_name,
             "value": value,
         }
+    return response
+
+
+def _device_local(value: datetime | None) -> datetime | None:
+    """Trend Logs use the device's local time; assume it matches Home Assistant's."""
+    if value is None or value.tzinfo is None:
+        return value
+    from homeassistant.util import dt as dt_util
+
+    return dt_util.as_local(value).replace(tzinfo=None)
+
+
+async def async_handle_read_trend_log(
+    hass: HomeAssistant, call: ServiceCall
+) -> dict[str, Any]:
+    """Handle bacnet.read_trend_log: {device_id: {instance, records}}."""
+    await _check_permissions(hass, call, (POLICY_READ,), admin_only=True)
+    instance = call.data[ATTR_INSTANCE]
+    response: dict[str, Any] = {}
+    for coordinator, device_id in _device_coordinators(hass, call):
+        try:
+            records = await coordinator.client.read_trend_log(
+                coordinator.device_address,
+                instance,
+                start=_device_local(call.data.get(ATTR_START)),
+                count=call.data[ATTR_COUNT],
+            )
+        except BACnetPropertyError as err:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="property_read_failed",
+                translation_placeholders={
+                    "property": "logBuffer",
+                    "object": f"20:{instance}",
+                    "error": str(err),
+                },
+            ) from err
+        response[device_id] = {"instance": instance, "records": records}
     return response
 
 
@@ -370,6 +433,9 @@ def async_setup_services(hass: HomeAssistant) -> None:
     async def _read_property(call: ServiceCall) -> dict[str, Any]:
         return await async_handle_read_property(hass, call)
 
+    async def _read_trend_log(call: ServiceCall) -> dict[str, Any]:
+        return await async_handle_read_trend_log(hass, call)
+
     async def _read_schedule(call: ServiceCall) -> dict[str, Any]:
         return await async_handle_schedule(hass, call, write=False)
 
@@ -395,6 +461,13 @@ def async_setup_services(hass: HomeAssistant) -> None:
         SERVICE_READ_PROPERTY,
         _read_property,
         schema=READ_PROPERTY_SCHEMA,
+        supports_response=SupportsResponse.ONLY,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_READ_TREND_LOG,
+        _read_trend_log,
+        schema=READ_TREND_LOG_SCHEMA,
         supports_response=SupportsResponse.ONLY,
     )
     hass.services.async_register(

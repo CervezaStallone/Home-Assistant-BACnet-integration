@@ -51,6 +51,7 @@ In plain terms: if your building has BACnet controllers, thermostats, sensors, o
 - **Relinquish & one-off writes** — `bacnet.relinquish` and `bacnet.write_value` services for full Priority Array control
 - **Alarms** *(1.0.50 beta)* — an Alarm binary sensor and an Active alarms sensor per device, plus a `bacnet_alarm` event for automations
 - **Any BACnet property** *(1.0.50 beta)* — read or write any property (e.g. `minimumOnTime`, property 67) with `bacnet.read_property` and `bacnet.write_value`, also on objects you didn't import
+- **Trend logs** *(1.0.50 beta)* — read the records a controller logged with `bacnet.read_trend_log`
 - **Schedules** *(1.0.50 beta)* — BACnet Schedule objects as a sensor, with `bacnet.read_schedule` and `bacnet.write_schedule` services for the weekly schedule, exceptions and default
 - **Device limits & state texts** — number limits from `minPresValue`/`maxPresValue`/`resolution`, multi-state objects as a select with their `stateText` labels
 - **Climate with a real room temperature** — pair a setpoint with a separate temperature object
@@ -271,6 +272,7 @@ Binary outputs use the `Enumerated` BACnet type (`0 = inactive`, `1 = active`), 
 | `bacnet.relinquish` | Release Home Assistant's command on an object (write Null) so lower priorities or the Relinquish Default take over. Optional `priority` (1–16), default: the device's Write Priority. |
 | `bacnet.write_value` | Write a value once at a chosen `priority`, without changing the device's Write Priority setting. Binary objects: `0` = inactive, `1` = active. *(1.0.50 beta)* With `property`, writes any other property instead (no priority). |
 | `bacnet.read_property` *(1.0.50 beta)* | Read any property of an object and return it as response data. |
+| `bacnet.read_trend_log` *(1.0.50 beta)* | Read the records of a Trend Log object on a device. See [Trend logs](#trend-logs-1050-beta). |
 
 `bacnet.relinquish` works on BACnet switch, number and climate entities:
 
@@ -343,6 +345,31 @@ For properties you want to see or change from the dashboard, no automation or te
 | Elapsed Active Time | sensor (s) | binary |
 
 Properties you type under **other properties** become read-only sensors. Writable ones (number, switch) are under *Configuration* on the device page, read-only ones under *Diagnostic*. A property the object doesn't have shows as *unknown*.
+
+### Trend logs *(1.0.50 beta)*
+
+> **Beta:** available in the 1.0.50 pre-releases (enable *Show beta versions* in HACS).
+
+Controllers log values in Trend Log objects, so changes between two polls aren't lost. `bacnet.read_trend_log` reads those records with BACnet `ReadRange`. Target the BACnet device and give the Trend Log's `instance`; the object doesn't need to be imported. Administrators only.
+
+| Field | Meaning |
+|---|---|
+| `instance` | Instance number of the Trend Log object |
+| `start` | Optional. Records from this time on. Without it, the most recent records. |
+| `count` | Maximum number of records, 1–1000 (default 100) |
+
+```yaml
+action: bacnet.read_trend_log
+target:
+  device_id: 0123456789abcdef0123456789abcdef
+data:
+  instance: 4
+  start: "{{ now() - timedelta(hours=24) }}"
+  count: 500
+response_variable: trend
+```
+
+returns `{"<device id>": {"instance": 4, "records": [{"time": "2026-10-19T10:00:00", "value": 21.5}, …]}}`, oldest first. Only records with a time and a value are returned: log-status changes, time changes, failures and buffer-cleared markers are left out. Times are the controller's local time, without a time zone.
 
 ### Schedules *(1.0.50 beta)*
 
