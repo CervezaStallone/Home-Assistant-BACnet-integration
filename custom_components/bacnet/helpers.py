@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 
@@ -23,14 +24,23 @@ def select_objects_by_key(
     return [obj for obj in objects if object_key(obj) in keys]
 
 
-def object_label(obj: dict[str, Any]) -> str:
-    """Build a human-readable label for an object selection checkbox."""
+def object_label(obj: dict[str, Any], *, new: bool = False) -> str:
+    """Build a human-readable label for an object selection checkbox.
+
+    The description is added when it says more than the name (issue #61:
+    Siemens PXC objects have technical names, the description says what
+    they are). *new* marks objects a rescan found for the first time.
+    """
     from .const import OBJECT_TYPE_NAMES  # local import avoids a cycle at module load
 
     type_name = OBJECT_TYPE_NAMES.get(obj["object_type"], f"Type {obj['object_type']}")
     name = obj.get("object_name", "unnamed")
     instance = obj["instance"]
-    return f"{type_name} ({instance}) — {name}"
+    label = f"{type_name} ({instance}) — {name}"
+    description = obj.get("description")
+    if description and description != name:
+        label += f" ({description})"
+    return f"NEW · {label}" if new else label
 
 
 def mask_address(addr: str | object) -> str:
@@ -100,3 +110,22 @@ def stale_domain_overrides(
         ):
             stale.append(key)
     return stale
+
+
+def extra_property_platform(prop: str, object_type: int) -> str:
+    """HA platform for extra property *prop* of an *object_type* object.
+
+    Its spec's platform when the spec covers that object type, otherwise a
+    read-only sensor (typed-in or proprietary properties).
+    """
+    from .const import EXTRA_PROPERTY_SPECS  # local import avoids a cycle
+
+    spec = EXTRA_PROPERTY_SPECS.get(prop)
+    return spec[0] if spec and object_type in spec[1] else "sensor"
+
+
+def property_label(prop: str) -> str:
+    """'minimumOnTime' -> 'Minimum On Time'; proprietary numbers stay as-is."""
+    return " ".join(
+        w.capitalize() for w in re.findall(r"[A-Z]?[a-z]+|\d+|[A-Z]+", prop)
+    )

@@ -123,7 +123,9 @@ class _SensorStateClass:
     MEASUREMENT = "measurement"
 
 
-class _BinarySensorEntity(_CoordinatorEntity):
+class _BinarySensorEntity:
+    # Like HA: a platform entity, not a CoordinatorEntity, so
+    # (CoordinatorEntity, BinarySensorEntity) has a valid MRO.
     pass
 
 
@@ -315,6 +317,7 @@ _ha_select_mod.SelectEntity = _SelectEntity
 
 _voluptuous = MagicMock()
 _voluptuous.Schema = dict  # vol.Schema({…}) → just a dict for stub purposes
+_voluptuous.Invalid = type("Invalid", (Exception,), {})
 
 _ha_flow = MagicMock()
 

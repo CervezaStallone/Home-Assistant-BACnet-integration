@@ -36,6 +36,7 @@ from .const import (
 )
 from .coordinator import BACnetCoordinator
 from .entity import BACnetEntity, bacnet_device_info
+from .property_entity import property_entities
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -74,16 +75,18 @@ async def async_setup_entry(
     coordinator: BACnetCoordinator = entry.runtime_data.coordinator
     objects: list[dict[str, Any]] = coordinator.objects
 
-    entities: list[BACnetSensor] = []
+    entities: list[Any] = []
     for obj in objects:
         domain = coordinator.get_domain_for_object(obj)
         if domain == "sensor":
             entities.append(BACnetSensor(coordinator, entry, obj))
+    entities.extend(property_entities(coordinator, entry, "sensor"))
 
     entities.extend(
         BACnetDiagnosticSensor(coordinator, entry, description)
         for description in DIAGNOSTIC_SENSORS
     )
+    entities.append(BACnetActiveAlarmsSensor(coordinator, entry))
     async_add_entities(entities)
     _LOGGER.debug("Added %d BACnet sensor entities", len(entities))
 
@@ -175,3 +178,34 @@ class BACnetDiagnosticSensor(CoordinatorEntity[BACnetCoordinator], SensorEntity)
     @property
     def native_value(self) -> Any:
         return self._description.value_fn(self.coordinator)
+
+
+class BACnetActiveAlarmsSensor(CoordinatorEntity[BACnetCoordinator], SensorEntity):
+    """Number of active alarms on the device (GetEventInformation).
+
+    The alarms themselves are in the "alarms" attribute; changes also fire
+    a bacnet_alarm event. Unknown for devices without the service.
+    """
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "active_alarms"
+
+    def __init__(self, coordinator: BACnetCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = (
+            f"{DOMAIN}_{entry.data.get('device_id', 'unknown')}_active_alarms"
+        )
+        self._attr_device_info = bacnet_device_info(entry)
+
+    @property
+    def native_value(self) -> int | None:
+        alarms = self.coordinator.active_alarms
+        if alarms is None:
+            return None
+        # Entries back to normal that only wait for an acknowledgement are
+        # listed by the device too; they stay in the attribute only.
+        return sum(a["event_state"] != "normal" for a in alarms)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {"alarms": self.coordinator.active_alarms or []}

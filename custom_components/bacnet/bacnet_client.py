@@ -24,12 +24,17 @@ import socket
 from collections.abc import Awaitable, Callable
 from typing import Any, ClassVar
 
-from bacpypes3.apdu import ErrorRejectAbortNack, SubscribeCOVPropertyRequest
+from bacpypes3.apdu import (
+    ErrorRejectAbortNack,
+    GetEventInformationRequest,
+    SubscribeCOVPropertyRequest,
+)
 from bacpypes3.basetypes import (
     CalendarEntry,
     DailySchedule,
     DateRange,
     ErrorType,
+    PropertyIdentifier,
     SpecialEvent,
     SpecialEventPeriod,
     TimeValue,
@@ -48,11 +53,13 @@ from bacpypes3.primitivedata import (
     Integer,
     Null,
     ObjectIdentifier,
+    ObjectType,
     Real,
     Time,
     Unsigned,
 )
 from bacpypes3.service.cov import SubscriptionContextManager
+from bacpypes3.vendor import get_vendor_info
 
 from .const import (
     DEFAULT_WRITE_PRIORITY,
@@ -133,6 +140,80 @@ _RPM_UNSUPPORTED_REASONS = {
 
 class ScheduleError(Exception):
     """A Schedule object could not be read, or a write to it failed."""
+
+
+class BACnetPropertyError(Exception):
+    """The device returned an error for a property read, or didn't answer."""
+
+
+_TREND_VALUE_CHOICES = (
+    "realValue",
+    "unsignedValue",
+    "signedValue",
+    "booleanValue",
+    "enumValue",
+)
+
+
+def _trend_record(record: Any) -> dict[str, Any] | None:
+    """{"time", "value"} for a Trend Log record holding a value, else None."""
+    datum = record.logDatum
+    choice = next(
+        (c for c in _TREND_VALUE_CHOICES if getattr(datum, c, None) is not None), None
+    )
+    if choice is None:
+        return None
+    year, month, day, _ = record.timestamp.date
+    hour, minute, second, _ = record.timestamp.time
+    if 255 in (year, month, day, hour, minute, second):
+        return None  # wildcard timestamp: not a point in time
+    value = getattr(datum, choice)
+    if choice == "realValue":
+        value = float(f"{float(value):.7g}")
+    elif choice == "booleanValue":
+        value = bool(value)
+    else:
+        value = int(value)
+    return {
+        "time": f"{year + 1900:04d}-{month:02d}-{day:02d}"
+        f"T{hour:02d}:{minute:02d}:{second:02d}",
+        "value": value,
+    }
+
+
+def _property_to_json(value: Any) -> Any:
+    """Convert any BACpypes3 property value to plain JSON data.
+
+    Enumerations become their name ("high-limit"), object identifiers
+    "analog-input,1", dates/times their text, sequences a dict of their
+    fields and lists/arrays a list.
+    """
+    if isinstance(value, AnyAtomic):
+        value = value.get_value()
+    if value is None or isinstance(value, Null):
+        return None
+    if isinstance(value, Boolean | bool):
+        return bool(value)
+    if isinstance(value, Enumerated):
+        return str(value)
+    if isinstance(value, ObjectIdentifier):
+        return str(value)
+    if isinstance(value, Real | Double | float):
+        return float(value)
+    if isinstance(value, int):
+        return int(value)
+    if isinstance(value, CharacterString | str | Date | Time):
+        return str(value)
+    if isinstance(value, list | tuple):
+        return [_property_to_json(item) for item in value]
+    order = getattr(value, "_order", None)
+    if order:
+        return {
+            key: _property_to_json(getattr(value, key))
+            for key in order
+            if getattr(value, key, None) is not None
+        }
+    return str(value)
 
 
 WEEKDAYS = (
@@ -504,6 +585,10 @@ class BACnetClient:
         self._cov_property_stop_events: dict[str, asyncio.Event] = {}
         # Per-device RPM support cache: True = supported (or untested), False = rejected
         self._rpm_supported: dict[str, bool] = {}
+        # Per-device GetEventInformation support, same convention, and the
+        # timeouts in a row (a device that silently drops it is given up).
+        self._event_info_supported: dict[str, bool] = {}
+        self._event_info_timeouts: dict[str, int] = {}
         # Per-device RPM chunk size (objects per request), shrunk on
         # size-related aborts.
         self._rpm_chunk_size: dict[str, int] = {}
@@ -1564,14 +1649,185 @@ class BACnetClient:
         oid = ObjectIdentifier((self._int_to_object_type_str(object_type), instance))
         return await self._safe_read(addr, oid, property_name)
 
+    @staticmethod
+    def normalize_property(prop: str | int) -> str:
+        """Return the camelCase name of a property given by name or number.
+
+        Accepts "minimumOnTime", "minimum-on-time", "67" or 67. A number
+        without a standard name (proprietary) is returned as its digits.
+        Raises ValueError for an unknown name.
+        """
+        text = str(prop).strip()
+        identifier = PropertyIdentifier(int(text) if text.isdigit() else text)
+        return getattr(identifier, "attr", None) or str(int(identifier))
+
+    async def read_any_property(
+        self,
+        device_address: str,
+        object_type: int,
+        instance: int,
+        property_name: str,
+        array_index: int | None = None,
+    ) -> Any:
+        """Read one property of any object and return it as JSON data.
+
+        Unlike _safe_read, a failure raises BACnetPropertyError carrying the
+        device's error, so the user sees why (e.g. unknown-property).
+        """
+        if self._app is None:
+            raise RuntimeError("Client not connected")
+        addr = Address(device_address)
+        oid = ObjectIdentifier((self._int_to_object_type_str(object_type), instance))
+        args = (addr, oid, property_name)
+        if array_index is not None:
+            args += (array_index,)
+        try:
+            result = await asyncio.wait_for(self._app.read_property(*args), 10)
+        except TimeoutError as exc:
+            raise BACnetPropertyError("no answer from the device") from exc
+        except (ErrorRejectAbortNack, Exception) as exc:
+            raise BACnetPropertyError(str(exc)) from exc
+        if isinstance(result, ErrorRejectAbortNack):
+            raise BACnetPropertyError(str(result))
+        return _property_to_json(result)
+
+    async def read_trend_log(
+        self,
+        device_address: str,
+        instance: int,
+        *,
+        start: datetime.datetime | None,
+        count: int,
+    ) -> list[dict[str, Any]]:
+        """Read Trend Log records with ReadRange, oldest first.
+
+        With *start*: up to *count* records from that time on. Without: the
+        last *count* records. Only records holding a time and a value are
+        returned — log-status, time-change, failure and null records aren't
+        data points. Times are the device's local time, without a time zone.
+        """
+        if self._app is None:
+            raise RuntimeError("Client not connected")
+        addr = Address(device_address)
+        oid = ObjectIdentifier(("trend-log", instance))
+        if start is not None:
+            range_params = (
+                "t",
+                None,
+                start.strftime("%Y-%m-%d"),
+                start.strftime("%H:%M:%S"),
+                count,
+            )
+        else:
+            total = await self.read_any_property(
+                device_address, 20, instance, "recordCount"
+            )
+            if not total:
+                return []
+            range_params = ("p", int(total), None, None, -count)
+        try:
+            result = await asyncio.wait_for(
+                self._app.read_range(addr, oid, "logBuffer", range_params=range_params),
+                30,
+            )
+        except TimeoutError as exc:
+            raise BACnetPropertyError("no answer from the device") from exc
+        except (ErrorRejectAbortNack, Exception) as exc:
+            raise BACnetPropertyError(str(exc)) from exc
+        if isinstance(result, ErrorRejectAbortNack):
+            raise BACnetPropertyError(str(result))
+        if not isinstance(result, list):
+            raise BACnetPropertyError(f"unexpected answer: {result!r}")
+        records = [r for r in map(_trend_record, result) if r is not None]
+        return sorted(records, key=lambda r: r["time"])
+
+    async def get_event_information(
+        self, device_address: str
+    ) -> list[dict[str, Any]] | None:
+        """Active alarms/events of a device (GetEventInformation).
+
+        Follows moreEvents until the device has sent everything. Returns
+        None when the device doesn't support the service; it's then not
+        asked again. Other failures raise BACnetPropertyError so the caller
+        keeps the last known list.
+        """
+        if self._app is None:
+            raise RuntimeError("Client not connected")
+        if not self._event_info_supported.get(device_address, True):
+            return None
+        alarms: list[dict[str, Any]] = []
+        seen: set[tuple[int, int]] = set()
+        last: ObjectIdentifier | None = None
+        # A device that keeps answering moreEvents without moving on must not
+        # hold up the poll: stop at a page with nothing new, or after 50 pages.
+        for _page in range(50):
+            request = GetEventInformationRequest(destination=Address(device_address))
+            if last is not None:
+                request.lastReceivedObjectIdentifier = last
+            try:
+                response = await asyncio.wait_for(self._app.request(request), 10)
+            except TimeoutError as exc:
+                timeouts = self._event_info_timeouts.get(device_address, 0) + 1
+                self._event_info_timeouts[device_address] = timeouts
+                if timeouts >= 3:
+                    self._event_info_supported[device_address] = False
+                raise BACnetPropertyError("no answer from the device") from exc
+            except ErrorRejectAbortNack as exc:
+                response = exc
+            self._event_info_timeouts[device_address] = 0
+            if isinstance(response, ErrorRejectAbortNack):
+                if self._is_unsupported_service(response):
+                    self._event_info_supported[device_address] = False
+                    return None
+                raise BACnetPropertyError(str(response))
+            new_on_page = False
+            for summary in response.listOfEventSummaries or []:
+                acked = list(summary.acknowledgedTransitions or [])
+                acked += [True] * (3 - len(acked))
+                last = summary.objectIdentifier
+                key = (int(last[0]), int(last[1]))
+                if key in seen:
+                    continue
+                seen.add(key)
+                new_on_page = True
+                alarms.append(
+                    {
+                        "object_type": int(last[0]),
+                        "instance": int(last[1]),
+                        "event_state": str(summary.eventState),
+                        "acknowledged": {
+                            "to_offnormal": bool(acked[0]),
+                            "to_fault": bool(acked[1]),
+                            "to_normal": bool(acked[2]),
+                        },
+                    }
+                )
+            if not response.moreEvents or not new_on_page:
+                return alarms
+        return alarms
+
+    @staticmethod
+    def _is_unsupported_service(response: ErrorRejectAbortNack) -> bool:
+        """Reject/error meaning "this device doesn't implement the service"."""
+        text = str(response).lower()
+        return any(
+            reason in text
+            for reason in ("unrecognized-service", "service-request-denied")
+        )
+
     async def poll_objects(
         self,
         device_address: str,
         objects: list[dict[str, Any]],
         property_names: list[str] | None = None,
         device_id: int | None = None,
+        extra_properties: bool = False,
     ) -> dict[str, dict[str, Any]]:
         """Read properties for a batch of objects with as few round-trips as possible.
+
+        *extra_properties*: a poll of optional properties an object may not
+        have. Its errors then never change the device's RPM chunk size or
+        support, which the main poll depends on.
 
         Uses ReadPropertyMultiple (RPM) in chunks of at most RPM_MAX_OBJECTS
         objects. A chunk that fails is read individually for this poll. The
@@ -1601,7 +1857,9 @@ class BACnetClient:
             objects,
             self._rpm_chunk_size,
             RPM_MAX_OBJECTS,
-            lambda chunk: self._try_rpm_poll(device_address, chunk, property_names),
+            lambda chunk: self._try_rpm_poll(
+                device_address, chunk, property_names, learn=not extra_properties
+            ),
         )
 
         if failed:
@@ -1658,8 +1916,13 @@ class BACnetClient:
         device_address: str,
         objects: list[dict[str, Any]],
         property_names: list[str],
+        *,
+        learn: bool = True,
     ) -> dict[str, dict[str, Any]] | None:
         """Attempt one ReadPropertyMultiple request for *objects* (one chunk).
+
+        *learn* = False leaves a device rejection without consequences for
+        the device's RPM state (extra-property polls).
 
         Returns the parsed result dict on success, or None if RPM failed so
         the caller can fall back to individual reads.
@@ -1697,12 +1960,12 @@ class BACnetClient:
                 if obj_type_int is None:
                     continue
                 obj_key = f"{obj_type_int}:{instance}"
-                prop_camel = self._HYPHEN_TO_CAMEL.get(str(prop_id), str(prop_id))
+                prop_camel = self._prop_camel(prop_id)
                 # Per-property errors arrive as ErrorType values in the tuple
                 coerced = (
                     None
                     if isinstance(value, (BaseException, ErrorType))
-                    else self._coerce_value(value)
+                    else self._poll_value(prop_camel, value)
                 )
                 data.setdefault(obj_key, {})[prop_camel] = coerced
 
@@ -1715,7 +1978,8 @@ class BACnetClient:
             _LOGGER.debug("RPM poll timed out for %s", _mask_address(device_address))
             return None
         except ErrorRejectAbortNack as exc:
-            self._handle_rpm_rejection(device_address, len(objects), exc)
+            if learn:
+                self._handle_rpm_rejection(device_address, len(objects), exc)
             return None
         except Exception as exc:  # noqa: BLE001
             _LOGGER.debug(
@@ -1788,15 +2052,18 @@ class BACnetClient:
                     value = await self.read_property(
                         device_address, obj["object_type"], obj["instance"], prop
                     )
-                    obj_data[prop] = self._coerce_value(value)
+                    obj_data[prop] = self._poll_value(prop, value)
             return f"{obj['object_type']}:{obj['instance']}", obj_data
 
         probe = objects[:MAX_CONCURRENT_REQUESTS]
         data = dict(await asyncio.gather(*(_read_object(o) for o in probe)))
 
         rest = objects[MAX_CONCURRENT_REQUESTS:]
+        # Only a presentValue read says anything about the device being
+        # offline; optional extra properties may simply not exist.
         if (
             rest
+            and "presentValue" in property_names
             and not any(d.get("presentValue") is not None for d in data.values())
             and not await self._device_answers(device_address, device_id)
         ):
@@ -1863,8 +2130,10 @@ class BACnetClient:
         # Convert None -> Null for relinquish
         if value is None:
             bacnet_value = Null(())  # Null() returns the class, not a value
-        else:
+        elif property_name == "presentValue":
             bacnet_value = self._python_to_bacnet_value(value, object_type)
+        else:
+            bacnet_value = self._value_for_property(type_str, property_name, value)
 
         try:
             _LOGGER.debug(
@@ -2726,6 +2995,24 @@ class BACnetClient:
     # Value conversion helpers
     # ------------------------------------------------------------------
 
+    @classmethod
+    def _prop_camel(cls, prop_id: Any) -> str:
+        """camelCase name of a property identifier from a response."""
+        name = cls._HYPHEN_TO_CAMEL.get(str(prop_id))
+        if name is not None:
+            return name
+        try:
+            return cls.normalize_property(str(prop_id))
+        except ValueError:
+            return str(prop_id)
+
+    @classmethod
+    def _poll_value(cls, prop: str, value: Any) -> Any:
+        """presentValue/statusFlags as before; extra properties as JSON data."""
+        if prop in ("presentValue", "statusFlags"):
+            return cls._coerce_value(value)
+        return _property_to_json(value)
+
     @staticmethod
     def _coerce_value(value: Any) -> Any:
         """Convert a BACpypes3 value to a plain Python type for JSON storage.
@@ -2764,6 +3051,39 @@ class BACnetClient:
             return str(value)
         # Generic fallback
         return str(value)
+
+    @staticmethod
+    def _value_for_property(type_str: str, property_name: str, value: Any) -> Any:
+        """Cast *value* to the standard datatype of *property_name*.
+
+        Proprietary or constructed properties have no simple datatype; the
+        value is then sent as the matching primitive and the device decides.
+        """
+        object_class = get_vendor_info(0).get_object_class(ObjectType(type_str))
+        datatype = (
+            object_class.get_property_type(property_name) if object_class else None
+        )
+        if isinstance(datatype, type) and issubclass(
+            datatype, Boolean | Enumerated | Real | Double | Unsigned | Integer
+        ):
+            if issubclass(datatype, Real | Double):
+                return datatype(float(value))
+            if issubclass(datatype, Boolean):
+                if isinstance(value, str):
+                    value = value.strip().lower() in ("true", "1", "on", "active")
+                return datatype(bool(value))
+            if issubclass(datatype, Enumerated) and isinstance(value, str):
+                return datatype(value)
+            return datatype(int(value))
+        if isinstance(datatype, type) and issubclass(datatype, CharacterString):
+            return datatype(str(value))
+        if isinstance(value, bool):
+            return Boolean(value)
+        if isinstance(value, int):
+            return Unsigned(value)
+        if isinstance(value, float):
+            return Real(value)
+        return CharacterString(str(value))
 
     @staticmethod
     def _python_to_bacnet_value(value: Any, object_type: int) -> Any:
@@ -2887,9 +3207,13 @@ class BACnetClient:
         for key, val in cls._TYPE_STR_TO_INT.items():
             if key.lower() == s_lower:
                 return val
-        return None
+        # Any other standard type (e.g. "trend-log") by its BACnet name.
+        try:
+            return int(ObjectType(s))
+        except (ValueError, TypeError):
+            return None
 
     @classmethod
     def _int_to_object_type_str(cls, type_int: int) -> str:
         """Convert integer object type to BACpypes3 type string."""
-        return cls._INT_TO_TYPE_STR.get(type_int, f"type-{type_int}")
+        return cls._INT_TO_TYPE_STR.get(type_int) or str(ObjectType(type_int))

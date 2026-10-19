@@ -79,3 +79,31 @@ def test_write_priority_options_are_valid_bacnet_priorities():
     from custom_components.bacnet.const import WRITE_PRIORITY_OPTIONS
 
     assert all(1 <= p <= 16 for p in WRITE_PRIORITY_OPTIONS)
+
+
+class TestObjectLabel:
+    """Issue #61: the label also shows the description, if it adds anything."""
+
+    def test_includes_description(self):
+        from custom_components.bacnet.helpers import object_label
+
+        obj = {
+            "object_type": 0,
+            "instance": 1,
+            "object_name": "AI1",
+            "description": "Room temp",
+        }
+        assert object_label(obj) == "Analog Input (1) — AI1 (Room temp)"
+
+    def test_no_parentheses_for_empty_or_duplicate_description(self):
+        from custom_components.bacnet.helpers import object_label
+
+        base = {"object_type": 0, "instance": 1, "object_name": "AI1"}
+        assert object_label({**base, "description": ""}) == "Analog Input (1) — AI1"
+        assert object_label({**base, "description": "AI1"}) == "Analog Input (1) — AI1"
+
+    def test_new_marker(self):
+        from custom_components.bacnet.helpers import object_label
+
+        obj = {"object_type": 0, "instance": 1, "object_name": "AI1"}
+        assert object_label(obj, new=True) == "NEW · Analog Input (1) — AI1"

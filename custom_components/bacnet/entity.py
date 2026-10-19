@@ -55,10 +55,12 @@ async def async_write_object_value(
     *,
     priority: int | None = None,
     label: str | None = None,
+    property_name: str = "presentValue",
 ) -> None:
     """Write an object's presentValue (None = relinquish), then re-read it.
 
-    *priority* defaults to the device's write priority. Raises
+    *property_name* writes another property instead (no priority is sent
+    for those). *priority* defaults to the device's write priority. Raises
     HomeAssistantError when the device rejects the write, so the UI shows
     an error instead of silently keeping the old state.
     """
@@ -74,7 +76,7 @@ async def async_write_object_value(
         success = await client.relinquish(**target)
     else:
         success = await client.write_property(
-            property_name="presentValue", value=value, **target
+            property_name=property_name, value=value, **target
         )
     if not success:
         raise HomeAssistantError(
@@ -84,7 +86,10 @@ async def async_write_object_value(
                 "object": label or f"{obj['object_type']}:{obj['instance']}"
             },
         )
-    await coordinator.async_refresh_object(obj)
+    if property_name == "presentValue":
+        await coordinator.async_refresh_object(obj)
+    else:
+        await coordinator.async_refresh_properties(obj, [property_name])
 
 
 class BACnetEntity(CoordinatorEntity[BACnetCoordinator]):
@@ -251,6 +256,8 @@ class BACnetEntity(CoordinatorEntity[BACnetCoordinator]):
         status_flags = self.get_status_flags()
         if status_flags is not None:
             attrs["bacnet_status_flags"] = status_flags
+            # statusFlags = [IN_ALARM, FAULT, OVERRIDDEN, OUT_OF_SERVICE]
+            attrs["bacnet_in_alarm"] = bool(status_flags and status_flags[0])
 
         # Update method & COV details
         attrs["bacnet_update_method"] = self.coordinator.get_update_method(

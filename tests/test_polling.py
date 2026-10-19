@@ -195,3 +195,83 @@ class TestOfflineProbeUsesDeviceObject:
         app = _FakeFirstObjectsEmptyApp(device_answers=False)
         result = self._poll(app)
         assert result[f"0:{MAX_CONCURRENT_REQUESTS}"]["presentValue"] is None
+
+
+class TestExtraProperties:
+    """Extra properties (options flow) are polled with the same batching.
+
+    Their values keep their meaning: an enumeration is its name, not an int.
+    """
+
+    def test_rpm_extra_property_uses_camel_name_and_enum_name(self):
+        from bacpypes3.basetypes import EventState
+
+        class _App:
+            async def read_property_multiple(self, addr, param_list):
+                return [
+                    (("analog-input", 1), "event-state", None, EventState("high-limit"))
+                ]
+
+        result = asyncio.run(
+            _client(_App()).poll_objects(
+                _ADDR, [{"object_type": 0, "instance": 1}], ["eventState"]
+            )
+        )
+        assert result == {"0:1": {"eventState": "high-limit"}}
+
+    def test_fallback_extra_property_enum_name(self):
+        from bacpypes3.basetypes import EventState
+
+        class _App:
+            async def read_property(self, addr, oid, prop_name, array_index=None):
+                return EventState("normal")
+
+        client = _client(_App())
+        client._rpm_supported[_ADDR] = False
+        result = asyncio.run(
+            client.poll_objects(
+                _ADDR, [{"object_type": 0, "instance": 1}], ["eventState"]
+            )
+        )
+        assert result == {"0:1": {"eventState": "normal"}}
+
+
+def test_extra_property_rpm_error_leaves_rpm_state_alone():
+    """Review: a device answering unknown-property for an extra property
+    must not shrink the chunk size or disable RPM for the main poll."""
+    from bacpypes3.apdu import RejectPDU
+
+    class _App:
+        async def read_property_multiple(self, addr, param_list):
+            raise RejectPDU(reason="unrecognized-service")
+
+        async def read_property(self, addr, oid, prop_name, array_index=None):
+            return None
+
+    client = _client(_App())
+    objects = [{"object_type": 0, "instance": i} for i in range(3)]
+    asyncio.run(
+        client.poll_objects(_ADDR, objects, ["highLimit"], extra_properties=True)
+    )
+    asyncio.run(
+        client.poll_objects(_ADDR, objects[:1], ["highLimit"], extra_properties=True)
+    )
+    assert client._rpm_supported == {}
+    assert client._rpm_chunk_size == {}
+
+
+def test_extra_properties_on_non_rpm_device_reach_every_object():
+    """Review: the offline probe looks at presentValue, which an extras
+    poll never reads — objects after the first batch got None forever."""
+
+    class _App:
+        async def read_property(self, addr, oid, prop_name, array_index=None):
+            return 30
+
+    client = _client(_App())
+    client._rpm_supported[_ADDR] = False
+    objects = [{"object_type": 4, "instance": i} for i in range(8)]
+    result = asyncio.run(
+        client.poll_objects(_ADDR, objects, ["minimumOnTime"], extra_properties=True)
+    )
+    assert [result[f"4:{i}"]["minimumOnTime"] for i in range(8)] == [30] * 8

@@ -204,3 +204,77 @@ class TestClimateTemperatureSource:
             monkeypatch,
         )
         assert result["data"][CONF_CLIMATE_TEMPERATURE_SOURCES] == {}
+
+
+def test_rescan_lists_new_objects_first_and_marked(monkeypatch):
+    """Issue #61: on rescan, new objects come first with a NEW marker."""
+    new_obj = {"object_type": 0, "instance": 9, "object_name": "New"}
+    flow = _flow([_AI])
+    flow._config_entry.data = {
+        CONF_SELECTED_OBJECTS: [_AI],
+        "device_address": "1.2.3.4",
+        "device_id": 1,
+    }
+
+    async def _read_object_list(**_):
+        return [_AI, new_obj]
+
+    flow._config_entry.runtime_data.coordinator.client.read_object_list = (
+        _read_object_list
+    )
+    import custom_components.bacnet.options_flow as of
+
+    monkeypatch.setattr(of.cv, "multi_select", lambda options: options)
+    shown = {}
+
+    def _show_form(step_id, data_schema, **_):
+        ((key, options),) = data_schema.items()
+        shown["options"], shown["default"] = options, key.default
+        return {"type": "form"}
+
+    flow.async_show_form = _show_form
+    _run(flow.async_step_rescan_objects(), monkeypatch)
+
+    assert list(shown["options"]) == ["0:9", "0:3"]
+    assert shown["options"]["0:9"] == object_label(new_obj, new=True)
+    assert shown["options"]["0:3"] == object_label(_AI)
+    assert shown["default"] == ["0:3"]
+
+
+def test_customize_stores_extra_properties(monkeypatch):
+    """Reddit feedback: extra properties are picked here, typed ones normalized."""
+    from custom_components.bacnet.const import CONF_EXTRA_PROPERTIES
+
+    flow = _flow([_BV_COMMANDABLE])
+    _run(flow.async_step_domain_mapping({CONF_CUSTOMIZE_OBJECTS: ["5:2"]}), monkeypatch)
+    result = _run(
+        flow.async_step_customize_objects(
+            {
+                _field(_BV_COMMANDABLE, "type"): "switch",
+                _field(_BV_COMMANDABLE, "COV"): True,
+                _field(_BV_COMMANDABLE, "extra properties"): ["minimumOnTime"],
+                _field(_BV_COMMANDABLE, "other properties"): "inactive-text, 9999",
+            }
+        ),
+        monkeypatch,
+    )
+    assert result["data"][CONF_EXTRA_PROPERTIES] == {
+        "5:2": ["minimumOnTime", "inactiveText", "9999"]
+    }
+
+
+def test_customize_unknown_property_shows_error(monkeypatch):
+    flow = _flow([_BV_COMMANDABLE])
+    errors = {}
+    _run(flow.async_step_domain_mapping({CONF_CUSTOMIZE_OBJECTS: ["5:2"]}), monkeypatch)
+    flow.async_show_form = lambda step_id, data_schema, **kw: (
+        errors.update(kw["errors"]) or {"type": "form"}
+    )
+    result = _run(
+        flow.async_step_customize_objects(
+            {_field(_BV_COMMANDABLE, "other properties"): "bogusProperty"}
+        ),
+        monkeypatch,
+    )
+    assert result["type"] == "form"
+    assert errors == {"base": "unknown_property"}

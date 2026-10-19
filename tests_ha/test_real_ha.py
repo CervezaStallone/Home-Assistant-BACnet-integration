@@ -25,6 +25,8 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.bacnet.bacnet_client import BACnetClient as _RealClient
+
 DOMAIN = "bacnet"
 
 OBJECTS = [
@@ -114,6 +116,10 @@ class FakeClient:
     offline = False
     write_ok = True
 
+    # Pure helpers the services and options flow call on the class itself.
+    normalize_property = staticmethod(_RealClient.normalize_property)
+    _object_type_str_to_int = staticmethod(_RealClient._object_type_str_to_int)
+
     def __init__(self, local_ip="", local_port=47808, device_instance=None):
         self.local_port = local_port
         self._app = object()
@@ -134,7 +140,12 @@ class FakeClient:
         return None
 
     async def poll_objects(
-        self, device_address, objects, property_names=None, device_id=None
+        self,
+        device_address,
+        objects,
+        property_names=None,
+        device_id=None,
+        extra_properties=False,
     ):
         if FakeClient.offline:
             return {
@@ -144,6 +155,14 @@ class FakeClient:
                 }
                 for o in objects
             }
+        if property_names not in (None, ["presentValue", "statusFlags"]):
+            # Extra properties: every one reads 300.
+            return {
+                f"{o['object_type']}:{o['instance']}": dict.fromkeys(
+                    property_names, 300
+                )
+                for o in objects
+            }
         return {
             f"{o['object_type']}:{o['instance']}": {
                 "presentValue": VALUES[f"{o['object_type']}:{o['instance']}"],
@@ -151,6 +170,25 @@ class FakeClient:
             }
             for o in objects
         }
+
+    async def read_any_property(
+        self, device_address, object_type, instance, property_name, array_index=None
+    ):
+        return 300
+
+    async def get_event_information(self, device_address):
+        return [
+            {
+                "object_type": 0,
+                "instance": 1,
+                "event_state": "high-limit",
+                "acknowledged": {
+                    "to_offnormal": False,
+                    "to_fault": True,
+                    "to_normal": True,
+                },
+            }
+        ]
 
     async def subscribe_cov(self, **kwargs):
         return None
@@ -521,3 +559,25 @@ async def test_offline_at_startup_retries_without_leak(hass: HomeAssistant) -> N
         assert entry.state is ConfigEntryState.SETUP_RETRY
         assert FakeClient.instances[-1].disconnected
         assert hass.data[DOMAIN]["_port_clients"] == {}
+
+
+async def test_extra_properties_alarms_and_read_property(hass: HomeAssistant) -> None:
+    """1.0.50: extra property entities, alarm entities, read_property."""
+    await _setup(hass, {**OPTIONS, "extra_properties": {"4:2": ["minimumOnTime"]}})
+    number = _entity_id(hass, ("number", "4_2_minimumOnTime"))
+    assert hass.states.get(number).state == "300"
+
+    assert hass.states.get(_entity_id(hass, ("sensor", "active_alarms"))).state == "1"
+    assert hass.states.get(_entity_id(hass, ("binary_sensor", "alarm"))).state == "on"
+
+    switch = _entity_id(hass, ("switch", "4_2"))
+    result = await hass.services.async_call(
+        DOMAIN,
+        "read_property",
+        {"entity_id": switch, "property": "67"},
+        blocking=True,
+        return_response=True,
+    )
+    assert result == {
+        switch: {"object": "4:2", "property": "minimumOnTime", "value": 300}
+    }

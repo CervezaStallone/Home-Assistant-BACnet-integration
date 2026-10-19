@@ -111,6 +111,14 @@
       },
       "consecutive_failed_polls": {
         "name": "Mislukte polls op rij"
+      },
+      "active_alarms": {
+        "name": "Actieve alarmen"
+      }
+    },
+    "binary_sensor": {
+      "alarm": {
+        "name": "Alarm"
       }
     }
   },
@@ -149,13 +157,14 @@
       },
       "customize_objects": {
         "title": "Objecten aanpassen",
-        "description": "Per object: het entiteittype in Home Assistant, of COV wordt gebruikt en — voor objecten die al een climate-entiteit zijn — welk object de ruimtetemperatuur levert. Heb je een object net naar climate omgezet? Sla op en open de opties opnieuw om de temperatuursensor te kiezen."
+        "description": "Per object: het entiteittype in Home Assistant, of COV wordt gebruikt en — voor objecten die al een climate-entiteit zijn — welk object de ruimtetemperatuur levert. Heb je een object net naar climate omgezet? Sla op en open de opties opnieuw om de temperatuursensor te kiezen. Extra properties: kies properties (bijvoorbeeld Minimum On Time of High Limit) om als eigen entiteit te tonen; typ andere properties op naam of nummer bij other properties."
       }
     },
     "error": {
       "invalid_polling_interval": "Het poll-interval moet minstens 10 seconden zijn.",
       "no_objects_found": "Er zijn op dit apparaat geen leesbare BACnet-objecten gevonden.",
-      "unknown": "Er is een onverwachte fout opgetreden."
+      "unknown": "Er is een onverwachte fout opgetreden.",
+      "unknown_property": "Onbekende BACnet-property. Gebruik namen zoals minimumOnTime of minimum-on-time, of nummers zoals 67, gescheiden door komma's."
     },
     "abort": {
       "cannot_connect": "Het BACnet-apparaat is niet bereikbaar om de objectlijst opnieuw te scannen. Controleer of het apparaat online is en probeer het opnieuw."
@@ -190,6 +199,18 @@
     },
     "schedule_failed": {
       "message": "Schema {entity_id}: {error}"
+    },
+    "unknown_property": {
+      "message": "Onbekende BACnet-property: {property}. Gebruik de naam (bijv. minimumOnTime) of het nummer (bijv. 67)."
+    },
+    "property_read_failed": {
+      "message": "Lezen van {property} van object {object} mislukt: {error}"
+    },
+    "invalid_object": {
+      "message": "Geef zowel een objecttype (naam of nummer) als een instantie op als een apparaat is opgegeven."
+    },
+    "no_bacnet_device": {
+      "message": "Kies een BACnet-apparaat van deze integratie in het veld Apparaat."
     }
   },
   "services": {
@@ -205,15 +226,31 @@
     },
     "write_value": {
       "name": "Waarde schrijven",
-      "description": "Schrijft eenmalig een waarde naar de present value van een BACnet-object, op een gekozen prioriteit, zonder de schrijfprioriteit van het apparaat te wijzigen.",
+      "description": "Schrijft eenmalig een waarde: de present value van een object op een gekozen prioriteit (zonder de schrijfprioriteit van het apparaat te wijzigen), of een andere property.",
       "fields": {
         "value": {
           "name": "Waarde",
-          "description": "Te schrijven waarde. Binaire objecten: 0 = inactief, 1 = actief."
+          "description": "Te schrijven waarde. Binaire objecten: 0 = inactief, 1 = actief. Andere properties: een getal, true/false of tekst."
         },
         "priority": {
           "name": "Prioriteit",
           "description": "Prioriteitsniveau waarop wordt geschreven (1-16). Standaard de schrijfprioriteit van het apparaat."
+        },
+        "property": {
+          "name": "Property",
+          "description": "BACnet-property om te schrijven, op naam (minimumOnTime) of nummer (67). Standaard de present value; de prioriteit geldt alleen voor de present value."
+        },
+        "object_type": {
+          "name": "Objecttype",
+          "description": "Alleen met Apparaat: type van het object, op naam (analog-value, trend-log) of nummer. Zo bereik je ook objecten die niet zijn geïmporteerd."
+        },
+        "instance": {
+          "name": "Objectinstantie",
+          "description": "Alleen met Apparaat: instantienummer van het object."
+        },
+        "device": {
+          "name": "Apparaat",
+          "description": "Alleen voor objecten die niet zijn geïmporteerd: het BACnet-apparaat. Geef dan ook objecttype en instantie op; de doel-entiteit wordt genegeerd."
         }
       }
     },
@@ -244,6 +281,54 @@
         "allow_removal": {
           "name": "Verwijderen toestaan",
           "description": "Sta toe dat het uitzonderingsschema wordt geschreven, ook als daardoor uitzonderingen verdwijnen die nu in het apparaat staan."
+        }
+      }
+    },
+    "read_property": {
+      "name": "Property lezen",
+      "description": "Leest een willekeurige property van een BACnet-object en geeft die terug als antwoorddata.",
+      "fields": {
+        "property": {
+          "name": "Property",
+          "description": "BACnet-property om te lezen, op naam (minimumOnTime, eventState) of nummer (67)."
+        },
+        "array_index": {
+          "name": "Array-index",
+          "description": "Lees één element van een array-property (0 = aantal elementen)."
+        },
+        "object_type": {
+          "name": "Objecttype",
+          "description": "Alleen met Apparaat: type van het object, op naam (analog-value, trend-log) of nummer. Zo bereik je ook objecten die niet zijn geïmporteerd."
+        },
+        "instance": {
+          "name": "Objectinstantie",
+          "description": "Alleen met Apparaat: instantienummer van het object."
+        },
+        "device": {
+          "name": "Apparaat",
+          "description": "Alleen voor objecten die niet zijn geïmporteerd: het BACnet-apparaat. Geef dan ook objecttype en instantie op; de doel-entiteit wordt genegeerd."
+        }
+      }
+    },
+    "read_trend_log": {
+      "name": "Trendlog lezen",
+      "description": "Leest de records van een BACnet Trend Log-object op een apparaat en geeft ze terug als antwoorddata. Alleen records met een tijd en een waarde worden teruggegeven.",
+      "fields": {
+        "device": {
+          "name": "Apparaat",
+          "description": "Het BACnet-apparaat met de Trend Log."
+        },
+        "instance": {
+          "name": "Trend Log-instantie",
+          "description": "Instantienummer van het Trend Log-object op het apparaat."
+        },
+        "start": {
+          "name": "Start",
+          "description": "Records vanaf dit tijdstip (lokale tijd van het apparaat). Zonder start komen de meest recente records."
+        },
+        "count": {
+          "name": "Aantal",
+          "description": "Maximaal aantal records (1-1000)."
         }
       }
     }

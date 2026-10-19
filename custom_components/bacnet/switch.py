@@ -21,6 +21,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .coordinator import BACnetCoordinator
 from .entity import BACnetEntity
+from .property_entity import property_entities
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -34,11 +35,12 @@ async def async_setup_entry(
     coordinator: BACnetCoordinator = entry.runtime_data.coordinator
     objects: list[dict[str, Any]] = coordinator.objects
 
-    entities: list[BACnetSwitch] = []
+    entities: list[Any] = []
     for obj in objects:
         domain = coordinator.get_domain_for_object(obj)
         if domain == "switch":
             entities.append(BACnetSwitch(coordinator, entry, obj))
+    entities.extend(property_entities(coordinator, entry, "switch"))
 
     if entities:
         async_add_entities(entities)
