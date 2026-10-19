@@ -663,14 +663,15 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return
 
         try:
+            # The whole object as known values: anything the device doesn't
+            # return this time keeps its value instead of becoming None,
+            # which would reload the entry and flip back on the next sweep
+            # (issue #62).
             fresh = await self.client.refresh_object_metadata(
                 device_address=self.device_address,
                 object_type=obj["object_type"],
                 instance=obj["instance"],
-                current_commandable=obj.get("commandable", False),
-                current_object_name=obj.get("object_name"),
-                current_description=obj.get("description"),
-                current_units=obj.get("units"),
+                known=obj,
             )
         except Exception as exc:  # noqa: BLE001
             _LOGGER.debug(
