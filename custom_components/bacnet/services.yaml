@@ -55,7 +55,6 @@ read_property:
       integration: bacnet
   fields:
     property:
-      required: true
       example: "minimumOnTime"
       selector:
         text:

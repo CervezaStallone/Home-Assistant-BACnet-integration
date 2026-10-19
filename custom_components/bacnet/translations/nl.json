@@ -241,7 +241,7 @@
         },
         "property": {
           "name": "Property",
-          "description": "BACnet-property om te schrijven, op naam (minimumOnTime) of nummer (67). Standaard de present value; de prioriteit geldt alleen voor de present value."
+          "description": "BACnet-property om te schrijven, op naam (minimumOnTime) of nummer (67). Zonder: de property die een extra-property-entiteit toont, anders de present value; de prioriteit geldt alleen voor de present value."
         },
         "object_type": {
           "name": "Objecttype",
@@ -293,7 +293,7 @@
       "fields": {
         "property": {
           "name": "Property",
-          "description": "BACnet-property om te lezen, op naam (minimumOnTime, eventState) of nummer (67)."
+          "description": "BACnet-property om te lezen, op naam (minimumOnTime, eventState) of nummer (67). Zonder: de property die een extra-property-entiteit toont, anders de present value."
         },
         "array_index": {
           "name": "Array-index",

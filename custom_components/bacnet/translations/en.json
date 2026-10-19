@@ -241,7 +241,7 @@
         },
         "property": {
           "name": "Property",
-          "description": "BACnet property to write, by name (minimumOnTime) or number (67). Defaults to the present value; the priority only applies to the present value."
+          "description": "BACnet property to write, by name (minimumOnTime) or number (67). Without it: the property an extra-property entity shows, otherwise the present value; the priority only applies to the present value."
         },
         "object_type": {
           "name": "Object type",
@@ -293,7 +293,7 @@
       "fields": {
         "property": {
           "name": "Property",
-          "description": "BACnet property to read, by name (minimumOnTime, eventState) or number (67)."
+          "description": "BACnet property to read, by name (minimumOnTime, eventState) or number (67). Without it: the property an extra-property entity shows, otherwise the present value."
         },
         "array_index": {
           "name": "Array index",

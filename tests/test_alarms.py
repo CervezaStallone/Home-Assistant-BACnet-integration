@@ -234,7 +234,6 @@ def test_normal_entries_waiting_for_acknowledgement_are_not_alarms():
 def test_device_alarm_sensor_follows_cov_of_every_object():
     """A COV statusFlags change only notifies that object's listeners."""
     from custom_components.bacnet.binary_sensor import BACnetDeviceAlarmSensor
-
     from tests.test_coordinator import _make_coordinator
 
     objects = [{"object_type": 0, "instance": 1}, {"object_type": 3, "instance": 2}]
@@ -257,10 +256,11 @@ def test_alarms_attribute_is_capped():
     from unittest.mock import MagicMock
 
     from custom_components.bacnet.sensor import BACnetActiveAlarmsSensor
-
     from tests.conftest import _make_entry
 
-    alarms = [{**_alarm(0, i, "high-limit"), "object_name": f"AI {i}"} for i in range(80)]
+    alarms = [
+        {**_alarm(0, i, "high-limit"), "object_name": f"AI {i}"} for i in range(80)
+    ]
     sensor = BACnetActiveAlarmsSensor(MagicMock(active_alarms=alarms), _make_entry())
     attrs = sensor.extra_state_attributes
     assert sensor.native_value == 80

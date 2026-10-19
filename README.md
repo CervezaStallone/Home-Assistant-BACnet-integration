@@ -343,6 +343,8 @@ For properties you want to see or change from the dashboard, no automation or te
 | Change Of State Count | sensor | binary, multi-state |
 | Elapsed Active Time | sensor (s) | binary |
 
+Targeting one of these entities with `bacnet.write_value` or `bacnet.read_property` uses its property, so `property` can be left out.
+
 Properties you type under **other properties** become read-only sensors, unless the table above lists them for that object type. Writable ones (number, switch) are under *Configuration* on the device page, read-only ones under *Diagnostic*. A property the object doesn't have shows as *unknown*.
 
 ### Trend logs *(1.0.50 beta)*

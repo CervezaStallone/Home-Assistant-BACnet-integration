@@ -346,3 +346,22 @@ def test_write_value_bad_value_is_translated(monkeypatch):
             )
         )
     assert err.value.translation_key == "invalid_value"
+
+
+def test_write_value_on_extra_property_entity_writes_that_property(monkeypatch):
+    services, hass, client, _ = _setup(
+        monkeypatch, unique_id="bacnet_1001_4_2_minimumOnTime"
+    )
+    asyncio.run(services.async_handle_write_value(hass, _call({"value": 600})))
+    kwargs = client.write_property.await_args.kwargs
+    assert kwargs["property_name"] == "minimumOnTime"
+    assert kwargs["value"] == 600
+
+
+def test_read_property_on_extra_property_entity_defaults_to_it(monkeypatch):
+    services, hass, client, _ = _setup(
+        monkeypatch, unique_id="bacnet_1001_4_2_minimumOnTime"
+    )
+    client.read_any_property = AsyncMock(return_value=300)
+    result = asyncio.run(services.async_handle_read_property(hass, _call({})))
+    assert result["switch.fan"]["property"] == "minimumOnTime"
