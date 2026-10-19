@@ -198,3 +198,34 @@ def test_event_information_stops_when_device_repeats_itself():
     alarms = asyncio.run(_client(app).get_event_information(_ADDR))
     assert len(app.requests) == 2
     assert [a["instance"] for a in alarms] == [1]
+
+
+def test_silent_device_is_given_up_after_three_timeouts():
+    """Review: a device that drops GetEventInformation must not cost ~10 s
+    on every poll forever."""
+    import pytest
+
+    from custom_components.bacnet.bacnet_client import BACnetPropertyError
+
+    app = _App([TimeoutError()] * 5)
+    client = _client(app)
+    for _ in range(3):
+        with pytest.raises(BACnetPropertyError):
+            asyncio.run(client.get_event_information(_ADDR))
+    assert asyncio.run(client.get_event_information(_ADDR)) is None
+    assert len(app.requests) == 3
+
+
+def test_normal_entries_waiting_for_acknowledgement_are_not_alarms():
+    """GetEventInformation also lists objects back to normal with an
+    unacknowledged transition (135 clause 13.12)."""
+    from custom_components.bacnet.binary_sensor import BACnetDeviceAlarmSensor
+    from custom_components.bacnet.sensor import BACnetActiveAlarmsSensor
+    from tests.conftest import _make_coordinator, _make_entry
+
+    coord = _make_coordinator({"0:1": {"statusFlags": [False] * 4}})
+    coord.active_alarms = [{**_alarm(0, 1, "normal"), "object_name": "Room"}]
+    assert BACnetDeviceAlarmSensor(coord, _make_entry()).is_on is False
+    sensor = BACnetActiveAlarmsSensor(coord, _make_entry())
+    assert sensor.native_value == 0
+    assert len(sensor.extra_state_attributes["alarms"]) == 1

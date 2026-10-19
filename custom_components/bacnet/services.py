@@ -51,7 +51,12 @@ except ImportError:  # older Home Assistant (minimum supported: 2024.4)
         return async_extract_referenced_entity_ids(hass, call)
 
 
-from .bacnet_client import BACnetClient, BACnetPropertyError, ScheduleError
+from .bacnet_client import (
+    COMMANDABLE_TYPES,
+    BACnetClient,
+    BACnetPropertyError,
+    ScheduleError,
+)
 from .const import DOMAIN, OBJECT_TYPE_SCHEDULE
 from .entity import async_write_object_value
 from .helpers import object_key
@@ -228,15 +233,25 @@ def _device_targets(
 
     Lets a user reach objects that were never imported as entities.
     """
-    type_value = call.data[ATTR_OBJECT_TYPE]
-    object_type = BACnetClient._object_type_str_to_int(
-        int(type_value) if str(type_value).isdigit() else type_value
+    type_value = call.data.get(ATTR_OBJECT_TYPE)
+    object_type = (
+        None
+        if type_value is None
+        else BACnetClient._object_type_str_to_int(
+            int(type_value) if str(type_value).isdigit() else type_value
+        )
     )
     if object_type is None or ATTR_INSTANCE not in call.data:
         raise HomeAssistantError(
             translation_domain=DOMAIN, translation_key="invalid_object"
         )
-    obj = {"object_type": object_type, "instance": call.data[ATTR_INSTANCE]}
+    # An object that isn't imported has no probed commandable flag; output
+    # objects always have a Priority Array.
+    obj = {
+        "object_type": object_type,
+        "instance": call.data[ATTR_INSTANCE],
+        "commandable": object_type in COMMANDABLE_TYPES,
+    }
     return [
         (
             coordinator,

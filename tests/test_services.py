@@ -287,3 +287,40 @@ def test_device_field_counts_as_target():
         services._target_or_device({"property": "highLimit"})
     entity_call = {"entity_id": ["switch.fan"], "property": "highLimit"}
     assert services._target_or_device(entity_call) is entity_call
+
+
+def test_device_without_object_type_is_invalid_object(monkeypatch):
+    from homeassistant.exceptions import HomeAssistantError
+
+    services, hass, _, coordinator = _setup(monkeypatch)
+    _with_device(monkeypatch, services, hass, coordinator)
+    with pytest.raises(HomeAssistantError) as err:
+        asyncio.run(
+            services.async_handle_read_property(
+                hass, _call({"device": "dev1", "property": "highLimit"})
+            )
+        )
+    assert err.value.translation_key == "invalid_object"
+
+
+def test_device_output_object_is_commandable(monkeypatch):
+    """Review: write_value via device to an output must keep its priority."""
+    services, hass, client, coordinator = _setup(monkeypatch)
+    _with_device(monkeypatch, services, hass, coordinator)
+    asyncio.run(
+        services.async_handle_write_value(
+            hass,
+            _call(
+                {
+                    "device": "dev1",
+                    "object_type": "analog-output",
+                    "instance": 7,
+                    "value": 50.0,
+                    "priority": 8,
+                }
+            ),
+        )
+    )
+    kwargs = client.write_property.await_args.kwargs
+    assert kwargs["commandable"] is True
+    assert kwargs["priority"] == 8

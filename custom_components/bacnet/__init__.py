@@ -98,7 +98,7 @@ def _get_platforms_in_use(
     for obj in objects:
         domains_needed.add(_domain_for_object(obj, domain_overrides))
         for prop in (extra_properties or {}).get(object_key(obj), []):
-            domains_needed.add(extra_property_platform(prop))
+            domains_needed.add(extra_property_platform(prop, obj["object_type"]))
     return [Platform(d) for d in domains_needed if d in {p.value for p in PLATFORMS}]
 
 

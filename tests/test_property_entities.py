@@ -33,7 +33,7 @@ class TestPolling:
     def test_extras_polled_per_property_list_and_merged(self):
         coord = _coordinator({"4:3": ["minimumOnTime"], "2:1": ["highLimit"]})
 
-        async def _poll(device_address, objects, property_names, device_id=None):
+        async def _poll(device_address, objects, property_names, device_id=None, **_):
             if property_names == ["presentValue", "statusFlags"]:
                 return {
                     "4:3": {"presentValue": 1, "statusFlags": [False] * 4},
@@ -122,7 +122,7 @@ def test_number_platform_adds_property_entities():
 def test_failing_extra_poll_keeps_main_data():
     coord = _coordinator({"4:3": ["minimumOnTime"]}, [_BO])
 
-    async def _poll(device_address, objects, property_names, device_id=None):
+    async def _poll(device_address, objects, property_names, device_id=None, **_):
         if property_names == ["presentValue", "statusFlags"]:
             return {"4:3": {"presentValue": 1, "statusFlags": [False] * 4}}
         raise TimeoutError
@@ -131,3 +131,42 @@ def test_failing_extra_poll_keeps_main_data():
     data = asyncio.run(coord._async_update_data())
     assert data["4:3"] == {"presentValue": 1, "statusFlags": [False] * 4}
     assert coord._consecutive_failures == 0
+
+
+def test_offline_device_skips_extra_poll():
+    """Review: an outage poll must not also wait out the extras' timeouts."""
+    coord = _coordinator({"4:3": ["minimumOnTime"]}, [_BO])
+    calls = []
+
+    async def _poll(device_address, objects, property_names, device_id=None, **kw):
+        calls.append(property_names)
+        return {"4:3": {"presentValue": None, "statusFlags": None}}
+
+    coord.client.poll_objects = AsyncMock(side_effect=_poll)
+    coord.client.reconnect = AsyncMock()
+    asyncio.run(coord._async_update_data())
+    assert calls == [["presentValue", "statusFlags"]]
+
+
+def test_extra_poll_does_not_teach_rpm_state():
+    coord = _coordinator({"4:3": ["minimumOnTime"]}, [_BO])
+    seen = []
+
+    async def _poll(device_address, objects, property_names, device_id=None, **kw):
+        seen.append((property_names, kw.get("extra_properties", False)))
+        return {"4:3": {"presentValue": 1, "statusFlags": [False] * 4}}
+
+    coord.client.poll_objects = AsyncMock(side_effect=_poll)
+    asyncio.run(coord._async_update_data())
+    assert seen == [
+        (["presentValue", "statusFlags"], False),
+        (["minimumOnTime"], True),
+    ]
+
+
+def test_known_property_on_other_object_type_is_a_sensor():
+    """Review: highLimit typed for a Binary Output isn't a writable number."""
+    assert _entities("number", {"4:3": ["highLimit"]}) == []
+    assert [e.property_name for e in _entities("sensor", {"4:3": ["highLimit"]})] == [
+        "highLimit"
+    ]

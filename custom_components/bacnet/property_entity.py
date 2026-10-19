@@ -37,7 +37,8 @@ class BACnetPropertyEntity(BACnetEntity):
         self.property_name = prop
         self._attr_unique_id = f"{self._attr_unique_id}_{prop}"
         self._attr_name = f"{coordinator.get_entity_name(obj)} {property_label(prop)}"
-        unit = (EXTRA_PROPERTY_SPECS.get(prop) or (None, None, None))[2]
+        spec = EXTRA_PROPERTY_SPECS.get(prop)
+        unit = spec[2] if spec and obj["object_type"] in spec[1] else None
         if unit == "object":
             unit = BACNET_UNITS.get(obj.get("units") or "", (None, None))[0]
         self._unit = unit
@@ -142,6 +143,6 @@ def property_entities(
     for obj in coordinator.objects:
         key = f"{obj['object_type']}:{obj['instance']}"
         for prop in coordinator.extra_properties.get(key, []):
-            if extra_property_platform(prop) == platform:
+            if extra_property_platform(prop, obj["object_type"]) == platform:
                 entities.append(_CLASSES[platform](coordinator, entry, obj, prop))
     return entities

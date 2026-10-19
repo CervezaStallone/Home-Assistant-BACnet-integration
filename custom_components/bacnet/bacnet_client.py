@@ -585,8 +585,10 @@ class BACnetClient:
         self._cov_property_stop_events: dict[str, asyncio.Event] = {}
         # Per-device RPM support cache: True = supported (or untested), False = rejected
         self._rpm_supported: dict[str, bool] = {}
-        # Per-device GetEventInformation support, same convention.
+        # Per-device GetEventInformation support, same convention, and the
+        # timeouts in a row (a device that silently drops it is given up).
         self._event_info_supported: dict[str, bool] = {}
+        self._event_info_timeouts: dict[str, int] = {}
         # Per-device RPM chunk size (objects per request), shrunk on
         # size-related aborts.
         self._rpm_chunk_size: dict[str, int] = {}
@@ -1765,9 +1767,14 @@ class BACnetClient:
             try:
                 response = await asyncio.wait_for(self._app.request(request), 10)
             except TimeoutError as exc:
+                timeouts = self._event_info_timeouts.get(device_address, 0) + 1
+                self._event_info_timeouts[device_address] = timeouts
+                if timeouts >= 3:
+                    self._event_info_supported[device_address] = False
                 raise BACnetPropertyError("no answer from the device") from exc
             except ErrorRejectAbortNack as exc:
                 response = exc
+            self._event_info_timeouts[device_address] = 0
             if isinstance(response, ErrorRejectAbortNack):
                 if self._is_unsupported_service(response):
                     self._event_info_supported[device_address] = False
@@ -1805,7 +1812,7 @@ class BACnetClient:
         text = str(response).lower()
         return any(
             reason in text
-            for reason in ("unrecognized-service", "service-request-denied", "services")
+            for reason in ("unrecognized-service", "service-request-denied")
         )
 
     async def poll_objects(
@@ -1814,8 +1821,13 @@ class BACnetClient:
         objects: list[dict[str, Any]],
         property_names: list[str] | None = None,
         device_id: int | None = None,
+        extra_properties: bool = False,
     ) -> dict[str, dict[str, Any]]:
         """Read properties for a batch of objects with as few round-trips as possible.
+
+        *extra_properties*: a poll of optional properties an object may not
+        have. Its errors then never change the device's RPM chunk size or
+        support, which the main poll depends on.
 
         Uses ReadPropertyMultiple (RPM) in chunks of at most RPM_MAX_OBJECTS
         objects. A chunk that fails is read individually for this poll. The
@@ -1845,7 +1857,9 @@ class BACnetClient:
             objects,
             self._rpm_chunk_size,
             RPM_MAX_OBJECTS,
-            lambda chunk: self._try_rpm_poll(device_address, chunk, property_names),
+            lambda chunk: self._try_rpm_poll(
+                device_address, chunk, property_names, learn=not extra_properties
+            ),
         )
 
         if failed:
@@ -1902,8 +1916,13 @@ class BACnetClient:
         device_address: str,
         objects: list[dict[str, Any]],
         property_names: list[str],
+        *,
+        learn: bool = True,
     ) -> dict[str, dict[str, Any]] | None:
         """Attempt one ReadPropertyMultiple request for *objects* (one chunk).
+
+        *learn* = False leaves a device rejection without consequences for
+        the device's RPM state (extra-property polls).
 
         Returns the parsed result dict on success, or None if RPM failed so
         the caller can fall back to individual reads.
@@ -1959,7 +1978,8 @@ class BACnetClient:
             _LOGGER.debug("RPM poll timed out for %s", _mask_address(device_address))
             return None
         except ErrorRejectAbortNack as exc:
-            self._handle_rpm_rejection(device_address, len(objects), exc)
+            if learn:
+                self._handle_rpm_rejection(device_address, len(objects), exc)
             return None
         except Exception as exc:  # noqa: BLE001
             _LOGGER.debug(
@@ -2039,8 +2059,11 @@ class BACnetClient:
         data = dict(await asyncio.gather(*(_read_object(o) for o in probe)))
 
         rest = objects[MAX_CONCURRENT_REQUESTS:]
+        # Only a presentValue read says anything about the device being
+        # offline; optional extra properties may simply not exist.
         if (
             rest
+            and "presentValue" in property_names
             and not any(d.get("presentValue") is not None for d in data.values())
             and not await self._device_answers(device_address, device_id)
         ):

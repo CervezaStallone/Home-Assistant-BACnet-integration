@@ -257,7 +257,6 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # Merge rather than replace, so extra properties survive.
             for obj_key, values in polled.items():
                 data[obj_key] = {**data.get(obj_key, {}), **values}
-            await self._poll_extra_properties(data)
         except Exception as exc:  # noqa: BLE001
             _LOGGER.warning("Batch poll failed: %s — keeping stale data", exc)
             polled = None
@@ -277,6 +276,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if self._outage_issue_raised:
                 ir.async_delete_issue(self.hass, DOMAIN, self._outage_issue_id)
                 self._outage_issue_raised = False
+            await self._poll_extra_properties(data)
             await self._refresh_alarms()
             # After a reconnect, rebuild COV subscriptions once the device is
             # confirmed reachable again.
@@ -380,6 +380,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     device_address=self.device_address,
                     objects=objects,
                     property_names=list(props),
+                    extra_properties=True,
                 )
             except Exception as exc:  # noqa: BLE001
                 _LOGGER.debug("Extra property poll failed: %s", exc)
@@ -888,6 +889,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 device_address=self.device_address,
                 objects=[obj],
                 property_names=properties,
+                extra_properties=True,
             )
         except Exception as exc:  # noqa: BLE001
             _LOGGER.debug("Post-write read failed for %s: %s", obj_key, exc)

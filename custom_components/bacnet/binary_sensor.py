@@ -67,7 +67,9 @@ class BACnetDeviceAlarmSensor(CoordinatorEntity[BACnetCoordinator], BinarySensor
 
     @property
     def is_on(self) -> bool:
-        if self.coordinator.active_alarms:
+        if any(
+            a["event_state"] != "normal" for a in self.coordinator.active_alarms or []
+        ):
             return True
         return any(
             bool(flags and flags[0])

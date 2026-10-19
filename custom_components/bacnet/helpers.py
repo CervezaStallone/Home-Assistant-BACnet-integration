@@ -112,12 +112,16 @@ def stale_domain_overrides(
     return stale
 
 
-def extra_property_platform(prop: str) -> str:
-    """HA platform for extra property *prop*: its spec's, else a read-only sensor."""
+def extra_property_platform(prop: str, object_type: int) -> str:
+    """HA platform for extra property *prop* of an *object_type* object.
+
+    Its spec's platform when the spec covers that object type, otherwise a
+    read-only sensor (typed-in or proprietary properties).
+    """
     from .const import EXTRA_PROPERTY_SPECS  # local import avoids a cycle
 
     spec = EXTRA_PROPERTY_SPECS.get(prop)
-    return spec[0] if spec else "sensor"
+    return spec[0] if spec and object_type in spec[1] else "sensor"
 
 
 def property_label(prop: str) -> str:

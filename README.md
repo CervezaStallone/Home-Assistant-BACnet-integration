@@ -153,7 +153,7 @@ The second options page lists your objects by name. Tick the ones you want to ch
 - **COV** — use COV for this object, overriding the device-wide **Enable COV** setting
 - **temperature sensor** (climate objects only) — the object that provides the room temperature. Without one, the climate entity shows its setpoint as the current temperature. Just changed an object to climate? Save, then open the options again to pick its sensor.
 - **extra properties** *(1.0.50 beta)* — other BACnet properties of the object to show as their own entity, picked from a list that fits the object type. See [Extra properties as entities](#extra-properties-as-entities-1050-beta).
-- **other properties** *(1.0.50 beta)* — any other property, typed by name (`inactiveText`) or number, separated by commas. These become read-only sensors.
+- **other properties** *(1.0.50 beta)* — any other property, typed by name (`inactiveText`) or number, separated by commas. These become read-only sensors (unless the extra properties table lists them for that object type).
 
 Unticked objects use the defaults. Settings of objects you remove with a rescan are remembered and come back if you add the object again.
 
@@ -229,7 +229,7 @@ They stay available while the device is offline, which is exactly when they're u
 Alarms the controller already tracks are shown in Home Assistant. Nothing is configured or acknowledged on the device.
 
 - **Alarm** (binary sensor, per device) — on while any imported object has its IN_ALARM status flag set, or the device reports an active alarm.
-- **Active alarms** (sensor, per device) — the number of active alarms the device reports through BACnet `GetEventInformation`, polled with every poll. The `alarms` attribute lists them: `object_type`, `instance`, `object_name`, `event_state` (`high-limit`, `low-limit`, `offnormal`, `fault`, …) and which transitions are `acknowledged`. Objects you didn't import are included too. *Unknown* means the device doesn't support `GetEventInformation`; the Alarm binary sensor still works from the status flags.
+- **Active alarms** (sensor, per device) — the number of active alarms the device reports through BACnet `GetEventInformation`, polled with every poll. The `alarms` attribute lists every entry the device reports, including objects that are back to `normal` but still wait for an acknowledgement at the BMS (those don't count as active): `object_type`, `instance`, `object_name`, `event_state` (`high-limit`, `low-limit`, `offnormal`, `fault`, …) and which transitions are `acknowledged`. Objects you didn't import are included too. *Unknown* means the device doesn't support `GetEventInformation`; the Alarm binary sensor still works from the status flags.
 - **`bacnet_alarm` event** — fired when an alarm appears, changes state or clears (`event_state: normal`). Event data: `device_id` (BACnet device instance), `object_type`, `instance`, `object_name`, `event_state`, `previous_event_state`. Alarms that are already active when Home Assistant starts don't fire an event.
 
 `GetEventInformation` doesn't carry the alarm message text; that only exists in event notifications sent to the controller's notification recipients, which this integration doesn't receive.
@@ -343,7 +343,7 @@ For properties you want to see or change from the dashboard, no automation or te
 | Change Of State Count | sensor | binary, multi-state |
 | Elapsed Active Time | sensor (s) | binary |
 
-Properties you type under **other properties** become read-only sensors. Writable ones (number, switch) are under *Configuration* on the device page, read-only ones under *Diagnostic*. A property the object doesn't have shows as *unknown*.
+Properties you type under **other properties** become read-only sensors, unless the table above lists them for that object type. Writable ones (number, switch) are under *Configuration* on the device page, read-only ones under *Diagnostic*. A property the object doesn't have shows as *unknown*.
 
 ### Trend logs *(1.0.50 beta)*
 

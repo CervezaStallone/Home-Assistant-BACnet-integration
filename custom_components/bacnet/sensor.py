@@ -200,7 +200,11 @@ class BACnetActiveAlarmsSensor(CoordinatorEntity[BACnetCoordinator], SensorEntit
     @property
     def native_value(self) -> int | None:
         alarms = self.coordinator.active_alarms
-        return None if alarms is None else len(alarms)
+        if alarms is None:
+            return None
+        # Entries back to normal that only wait for an acknowledgement are
+        # listed by the device too; they stay in the attribute only.
+        return sum(a["event_state"] != "normal" for a in alarms)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
