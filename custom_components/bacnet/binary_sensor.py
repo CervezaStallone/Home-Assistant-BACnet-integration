@@ -65,6 +65,17 @@ class BACnetDeviceAlarmSensor(CoordinatorEntity[BACnetCoordinator], BinarySensor
         )
         self._attr_device_info = bacnet_device_info(entry)
 
+    async def async_added_to_hass(self) -> None:
+        """Also follow COV pushes: they only notify the object's own listeners."""
+        await super().async_added_to_hass()
+        for obj in self.coordinator.objects:
+            self.async_on_remove(
+                self.coordinator.async_add_object_listener(
+                    f"{obj['object_type']}:{obj['instance']}",
+                    self.async_write_ha_state,
+                )
+            )
+
     @property
     def is_on(self) -> bool:
         if any(

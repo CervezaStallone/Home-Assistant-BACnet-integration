@@ -46,6 +46,7 @@ from .const import (
     OBJECT_TYPE_ANALOG_OUTPUT,
     OBJECT_TYPE_ANALOG_VALUE,
     OBJECT_TYPE_NAMES,
+    OBJECT_TYPE_TREND_LOG,
     RECONNECT_THRESHOLD,
 )
 from .helpers import default_domain_for, mask_address
@@ -73,6 +74,9 @@ def _same(old: Any, new: Any) -> bool:
         return old == new or (math.isnan(old) and math.isnan(new))
     return old == new
 
+
+# What a Trend Log entity shows: the number of records, and whether it logs.
+TREND_LOG_PROPERTIES = ("recordCount", "logEnable")
 
 # COV subscription lifetime.  BACpypes3's change_of_value() context manager
 # automatically renews the subscription before it expires.
@@ -252,7 +256,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         try:
             polled = await self.client.poll_objects(
                 device_address=self.device_address,
-                objects=self.objects,
+                objects=self._value_objects,
                 property_names=["presentValue", "statusFlags"],
                 device_id=self.entry.data.get("device_id") if self.entry else None,
             )
@@ -262,7 +266,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except Exception as exc:  # noqa: BLE001
             _LOGGER.warning("Batch poll failed: %s — keeping stale data", exc)
             polled = None
-            for obj in self.objects:
+            for obj in self._value_objects:
                 obj_key = f"{obj['object_type']}:{obj['instance']}"
                 if obj_key not in data:
                     data[obj_key] = {"presentValue": None, "statusFlags": None}
@@ -306,6 +310,12 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             await self._handle_poll_failure()
 
         return data
+
+    @property
+    def _value_objects(self) -> list[dict[str, Any]]:
+        """Objects with a presentValue (Trend Logs have none; they're read
+        with the extra properties)."""
+        return [o for o in self.objects if o["object_type"] != OBJECT_TYPE_TREND_LOG]
 
     async def _refresh_alarms(self) -> None:
         """Fetch the device's active alarms and fire bacnet_alarm on changes.
@@ -373,7 +383,11 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """
         groups: dict[tuple[str, ...], list[dict[str, Any]]] = {}
         for obj in self.objects:
-            props = self.extra_properties.get(f"{obj['object_type']}:{obj['instance']}")
+            props = self.extra_properties.get(
+                f"{obj['object_type']}:{obj['instance']}", []
+            )
+            if obj["object_type"] == OBJECT_TYPE_TREND_LOG:
+                props = [*TREND_LOG_PROPERTIES, *props]
             if props:
                 groups.setdefault(tuple(props), []).append(obj)
         for props, objects in groups.items():
@@ -718,7 +732,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 return await self._setup_object_subscription(obj)
 
         wants_cov = []
-        for obj in self.objects:
+        for obj in self._value_objects:
             obj_key = f"{obj['object_type']}:{obj['instance']}"
             if self.cov_overrides.get(obj_key, self.enable_cov):
                 wants_cov.append(obj)
@@ -1034,6 +1048,8 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         because the device will reject writes or behave incorrectly.
         """
         obj_key = f"{obj['object_type']}:{obj['instance']}"
+        if obj["object_type"] == OBJECT_TYPE_TREND_LOG:
+            return "sensor"  # nothing to write; see _value_objects
         if obj_key in self.domain_overrides:
             return self.domain_overrides[obj_key]
         return self._default_domain_for(obj)

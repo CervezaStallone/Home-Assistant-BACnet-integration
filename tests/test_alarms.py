@@ -229,3 +229,40 @@ def test_normal_entries_waiting_for_acknowledgement_are_not_alarms():
     sensor = BACnetActiveAlarmsSensor(coord, _make_entry())
     assert sensor.native_value == 0
     assert len(sensor.extra_state_attributes["alarms"]) == 1
+
+
+def test_device_alarm_sensor_follows_cov_of_every_object():
+    """A COV statusFlags change only notifies that object's listeners."""
+    from custom_components.bacnet.binary_sensor import BACnetDeviceAlarmSensor
+    from tests.test_coordinator import _make_coordinator
+
+    objects = [{"object_type": 0, "instance": 1}, {"object_type": 3, "instance": 2}]
+    coord = _make_coordinator(objects=objects)
+    sensor = BACnetDeviceAlarmSensor(coord, _make_entry_for_alarm())
+    sensor.async_on_remove = lambda remove: None
+    sensor.async_write_ha_state = lambda: None
+    asyncio.run(sensor.async_added_to_hass())
+    assert set(coord._object_listeners) == {"0:1", "3:2"}
+
+
+def _make_entry_for_alarm():
+    from tests.conftest import _make_entry
+
+    return _make_entry()
+
+
+def test_alarms_attribute_is_capped():
+    """The recorder refuses attributes over 16 KB; the count stays exact."""
+    from unittest.mock import MagicMock
+
+    from custom_components.bacnet.sensor import BACnetActiveAlarmsSensor
+    from tests.conftest import _make_entry
+
+    alarms = [
+        {**_alarm(0, i, "high-limit"), "object_name": f"AI {i}"} for i in range(80)
+    ]
+    sensor = BACnetActiveAlarmsSensor(MagicMock(active_alarms=alarms), _make_entry())
+    attrs = sensor.extra_state_attributes
+    assert sensor.native_value == 80
+    assert len(attrs["alarms"]) == 50
+    assert attrs["alarms_truncated"] is True

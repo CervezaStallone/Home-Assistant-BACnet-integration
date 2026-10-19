@@ -139,6 +139,7 @@ OBJECT_TYPE_MULTI_STATE_INPUT = 13
 OBJECT_TYPE_MULTI_STATE_OUTPUT = 14
 OBJECT_TYPE_MULTI_STATE_VALUE = 19
 OBJECT_TYPE_SCHEDULE = 17
+OBJECT_TYPE_TREND_LOG = 20
 
 # Human-readable labels for BACnet object types
 OBJECT_TYPE_NAMES: dict[int, str] = {
@@ -152,6 +153,7 @@ OBJECT_TYPE_NAMES: dict[int, str] = {
     OBJECT_TYPE_MULTI_STATE_OUTPUT: "Multi-State Output",
     OBJECT_TYPE_MULTI_STATE_VALUE: "Multi-State Value",
     OBJECT_TYPE_SCHEDULE: "Schedule",
+    OBJECT_TYPE_TREND_LOG: "Trend Log",
 }
 
 # ---------------------------------------------------------------------------
@@ -221,6 +223,9 @@ DEFAULT_DOMAIN_MAP: dict[int, str] = {
     # Read-only: shows the value the schedule currently commands. The
     # schedule itself goes through bacnet.read_schedule / write_schedule.
     OBJECT_TYPE_SCHEDULE: "sensor",
+    # Read-only: the number of records in the log. The records themselves
+    # go through bacnet.read_trend_log.
+    OBJECT_TYPE_TREND_LOG: "sensor",
 }
 
 # ---------------------------------------------------------------------------

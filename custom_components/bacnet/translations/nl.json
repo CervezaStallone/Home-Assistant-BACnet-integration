@@ -211,6 +211,12 @@
     },
     "no_bacnet_device": {
       "message": "Kies een BACnet-apparaat van deze integratie in het veld Apparaat."
+    },
+    "invalid_value": {
+      "message": "Ongeldige waarde: {error}"
+    },
+    "not_a_trend_log": {
+      "message": "{entity_id} is geen BACnet Trend Log-entiteit."
     }
   },
   "services": {
@@ -238,7 +244,7 @@
         },
         "property": {
           "name": "Property",
-          "description": "BACnet-property om te schrijven, op naam (minimumOnTime) of nummer (67). Standaard de present value; de prioriteit geldt alleen voor de present value."
+          "description": "BACnet-property om te schrijven, op naam (minimumOnTime) of nummer (67). Zonder: de property die een extra-property-entiteit toont, anders de present value; de prioriteit geldt alleen voor de present value."
         },
         "object_type": {
           "name": "Objecttype",
@@ -290,7 +296,7 @@
       "fields": {
         "property": {
           "name": "Property",
-          "description": "BACnet-property om te lezen, op naam (minimumOnTime, eventState) of nummer (67)."
+          "description": "BACnet-property om te lezen, op naam (minimumOnTime, eventState) of nummer (67). Zonder: de property die een extra-property-entiteit toont, anders de present value."
         },
         "array_index": {
           "name": "Array-index",
@@ -312,15 +318,15 @@
     },
     "read_trend_log": {
       "name": "Trendlog lezen",
-      "description": "Leest de records van een BACnet Trend Log-object op een apparaat en geeft ze terug als antwoorddata. Alleen records met een tijd en een waarde worden teruggegeven.",
+      "description": "Leest de records van een BACnet Trend Log en geeft ze terug als antwoorddata. Kies een Trend Log-entiteit, of kies het apparaat en geef de instantie op voor een Trend Log die niet is geïmporteerd. Alleen records met een tijd en een waarde worden teruggegeven.",
       "fields": {
         "device": {
           "name": "Apparaat",
-          "description": "Het BACnet-apparaat met de Trend Log."
+          "description": "Alleen voor een Trend Log die niet is geïmporteerd: het BACnet-apparaat."
         },
         "instance": {
           "name": "Trend Log-instantie",
-          "description": "Instantienummer van het Trend Log-object op het apparaat."
+          "description": "Alleen met Apparaat: instantienummer van het Trend Log-object."
         },
         "start": {
           "name": "Start",

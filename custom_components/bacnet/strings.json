@@ -211,6 +211,12 @@
     },
     "no_bacnet_device": {
       "message": "Pick a BACnet device of this integration in the Device field."
+    },
+    "invalid_value": {
+      "message": "Invalid value: {error}"
+    },
+    "not_a_trend_log": {
+      "message": "{entity_id} is not a BACnet Trend Log entity."
     }
   },
   "services": {
@@ -238,7 +244,7 @@
         },
         "property": {
           "name": "Property",
-          "description": "BACnet property to write, by name (minimumOnTime) or number (67). Defaults to the present value; the priority only applies to the present value."
+          "description": "BACnet property to write, by name (minimumOnTime) or number (67). Without it: the property an extra-property entity shows, otherwise the present value; the priority only applies to the present value."
         },
         "object_type": {
           "name": "Object type",
@@ -290,7 +296,7 @@
       "fields": {
         "property": {
           "name": "Property",
-          "description": "BACnet property to read, by name (minimumOnTime, eventState) or number (67)."
+          "description": "BACnet property to read, by name (minimumOnTime, eventState) or number (67). Without it: the property an extra-property entity shows, otherwise the present value."
         },
         "array_index": {
           "name": "Array index",
@@ -312,15 +318,15 @@
     },
     "read_trend_log": {
       "name": "Read trend log",
-      "description": "Read the records of a BACnet Trend Log object on a device and return them as response data. Only records with a time and a value are returned.",
+      "description": "Read the records of a BACnet Trend Log and return them as response data. Target a Trend Log entity, or pick the device and give the instance for a Trend Log that isn't imported. Only records with a time and a value are returned.",
       "fields": {
         "device": {
           "name": "Device",
-          "description": "The BACnet device with the Trend Log."
+          "description": "Only for a Trend Log that isn't imported: the BACnet device."
         },
         "instance": {
           "name": "Trend Log instance",
-          "description": "Instance number of the Trend Log object on the device."
+          "description": "Only with Device: instance number of the Trend Log object."
         },
         "start": {
           "name": "Start",

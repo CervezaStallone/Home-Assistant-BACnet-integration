@@ -33,12 +33,16 @@ from .const import (
     OBJECT_TYPE_ANALOG_OUTPUT,
     OBJECT_TYPE_ANALOG_VALUE,
     OBJECT_TYPE_SCHEDULE,
+    OBJECT_TYPE_TREND_LOG,
 )
 from .coordinator import BACnetCoordinator
 from .entity import BACnetEntity, bacnet_device_info
 from .property_entity import property_entities
 
 _LOGGER = logging.getLogger(__name__)
+
+# Alarms listed in the Active alarms attribute (recorder limit: 16 KB).
+MAX_ALARMS_ATTRIBUTE = 50
 
 
 @dataclass(frozen=True)
@@ -78,7 +82,9 @@ async def async_setup_entry(
     entities: list[Any] = []
     for obj in objects:
         domain = coordinator.get_domain_for_object(obj)
-        if domain == "sensor":
+        if obj["object_type"] == OBJECT_TYPE_TREND_LOG:
+            entities.append(BACnetTrendLogSensor(coordinator, entry, obj))
+        elif domain == "sensor":
             entities.append(BACnetSensor(coordinator, entry, obj))
     entities.extend(property_entities(coordinator, entry, "sensor"))
 
@@ -148,6 +154,29 @@ class BACnetSensor(BACnetEntity, SensorEntity):
             return str(value)
 
 
+class BACnetTrendLogSensor(BACnetEntity, SensorEntity):
+    """A Trend Log object: the number of records it holds.
+
+    The records themselves are read with bacnet.read_trend_log, which can
+    target this entity.
+    """
+
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def native_value(self) -> int | None:
+        return self.coordinator.get_object_value(self._obj_key, "recordCount")
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {
+            **super().extra_state_attributes,
+            "bacnet_log_enabled": self.coordinator.get_object_value(
+                self._obj_key, "logEnable"
+            ),
+        }
+
+
 class BACnetDiagnosticSensor(CoordinatorEntity[BACnetCoordinator], SensorEntity):
     """Device-level health figure (last poll, COV subscriptions, failures)."""
 
@@ -208,4 +237,13 @@ class BACnetActiveAlarmsSensor(CoordinatorEntity[BACnetCoordinator], SensorEntit
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        return {"alarms": self.coordinator.active_alarms or []}
+        # Active alarms first; capped so the attributes stay under the
+        # recorder's 16 KB limit. The state still counts all of them.
+        alarms = sorted(
+            self.coordinator.active_alarms or [],
+            key=lambda a: a["event_state"] == "normal",
+        )
+        attrs: dict[str, Any] = {"alarms": alarms[:MAX_ALARMS_ATTRIBUTE]}
+        if len(alarms) > MAX_ALARMS_ATTRIBUTE:
+            attrs["alarms_truncated"] = True
+        return attrs
