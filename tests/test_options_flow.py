@@ -239,3 +239,42 @@ def test_rescan_lists_new_objects_first_and_marked(monkeypatch):
     assert shown["options"]["0:9"] == object_label(new_obj, new=True)
     assert shown["options"]["0:3"] == object_label(_AI)
     assert shown["default"] == ["0:3"]
+
+
+def test_customize_stores_extra_properties(monkeypatch):
+    """Reddit feedback: extra properties are picked here, typed ones normalized."""
+    from custom_components.bacnet.const import CONF_EXTRA_PROPERTIES
+
+    flow = _flow([_BV_COMMANDABLE])
+    _run(flow.async_step_domain_mapping({CONF_CUSTOMIZE_OBJECTS: ["5:2"]}), monkeypatch)
+    result = _run(
+        flow.async_step_customize_objects(
+            {
+                _field(_BV_COMMANDABLE, "type"): "switch",
+                _field(_BV_COMMANDABLE, "COV"): True,
+                _field(_BV_COMMANDABLE, "extra properties"): ["minimumOnTime"],
+                _field(_BV_COMMANDABLE, "other properties"): "inactive-text, 9999",
+            }
+        ),
+        monkeypatch,
+    )
+    assert result["data"][CONF_EXTRA_PROPERTIES] == {
+        "5:2": ["minimumOnTime", "inactiveText", "9999"]
+    }
+
+
+def test_customize_unknown_property_shows_error(monkeypatch):
+    flow = _flow([_BV_COMMANDABLE])
+    errors = {}
+    _run(flow.async_step_domain_mapping({CONF_CUSTOMIZE_OBJECTS: ["5:2"]}), monkeypatch)
+    flow.async_show_form = lambda step_id, data_schema, **kw: (
+        errors.update(kw["errors"]) or {"type": "form"}
+    )
+    result = _run(
+        flow.async_step_customize_objects(
+            {_field(_BV_COMMANDABLE, "other properties"): "bogusProperty"}
+        ),
+        monkeypatch,
+    )
+    assert result["type"] == "form"
+    assert errors == {"base": "unknown_property"}

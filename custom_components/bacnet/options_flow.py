@@ -19,6 +19,7 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.data_entry_flow import FlowResult
 
+from .bacnet_client import BACnetClient
 from .const import (
     CONF_CLIMATE_TEMPERATURE_SOURCES,
     CONF_COV_INCREMENT,
@@ -28,6 +29,7 @@ from .const import (
     CONF_DEVICE_ID,
     CONF_DOMAIN_MAPPING,
     CONF_ENABLE_COV,
+    CONF_EXTRA_PROPERTIES,
     CONF_LIVE_METADATA_PROPERTIES,
     CONF_POLLING_INTERVAL,
     CONF_RESCAN_OBJECTS,
@@ -38,6 +40,7 @@ from .const import (
     DEFAULT_LIVE_METADATA_PROPERTIES,
     DEFAULT_POLLING_INTERVAL,
     DEFAULT_USE_DESCRIPTION,
+    EXTRA_PROPERTY_SPECS,
     LIVE_METADATA_PROPERTY_CHOICES,
     MIN_POLLING_INTERVAL,
     OBJECT_TYPE_ANALOG_INPUT,
@@ -45,7 +48,7 @@ from .const import (
     OBJECT_TYPE_ANALOG_VALUE,
     SUPPORTED_DOMAINS,
 )
-from .helpers import default_domain_for
+from .helpers import default_domain_for, property_label
 from .helpers import object_key as _object_key
 from .helpers import object_label as _object_label
 from .helpers import select_objects_by_key as _select_objects_by_key
@@ -268,6 +271,7 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
             set(self._current(CONF_DOMAIN_MAPPING))
             | set(self._current(CONF_COV_OVERRIDES))
             | set(self._current(CONF_CLIMATE_TEMPERATURE_SOURCES))
+            | set(self._current(CONF_EXTRA_PROPERTIES))
         )
         options = {_object_key(o): _object_label(o) for o in objects}
         schema = vol.Schema(
@@ -288,20 +292,37 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
         Field names are the objects' own labels (a translation can't name a
         per-device object), so the form reads e.g. "Analog Value (4) — SP — type".
         """
+        errors: dict[str, str] = {}
         if user_input is not None:
-            return self._save(
-                {
-                    _object_key(obj): {
-                        what: user_input.get(self._field(obj, what))
-                        for what in ("type", "COV", "temperature sensor")
-                    }
-                    for obj in self._customize
+            edits = {
+                _object_key(obj): {
+                    what: user_input.get(self._field(obj, what))
+                    for what in (
+                        "type",
+                        "COV",
+                        "temperature sensor",
+                        "extra properties",
+                        "other properties",
+                    )
                 }
-            )
+                for obj in self._customize
+            }
+            try:
+                for edit in edits.values():
+                    edit["other properties"] = [
+                        BACnetClient.normalize_property(p)
+                        for p in (edit["other properties"] or "").split(",")
+                        if p.strip()
+                    ]
+            except ValueError:
+                errors["base"] = "unknown_property"
+            else:
+                return self._save(edits)
 
         domains = self._current(CONF_DOMAIN_MAPPING)
         covs = self._current(CONF_COV_OVERRIDES)
         sources = self._current(CONF_CLIMATE_TEMPERATURE_SOURCES)
+        extras = self._current(CONF_EXTRA_PROPERTIES)
         temperature_choices = {"": "—"} | {
             _object_key(o): _object_label(o)
             for o in self._selected_objects
@@ -326,8 +347,27 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
                         default=sources.get(key, ""),
                     )
                 ] = vol.In({k: v for k, v in temperature_choices.items() if k != key})
+            offered = {
+                prop: f"{property_label(prop)} ({prop})"
+                for prop, (_, types, _) in EXTRA_PROPERTY_SPECS.items()
+                if obj["object_type"] in types
+            }
+            current = extras.get(key, [])
+            if offered:
+                fields[
+                    vol.Optional(
+                        self._field(obj, "extra properties"),
+                        default=[p for p in current if p in offered],
+                    )
+                ] = cv.multi_select(offered)
+            fields[
+                vol.Optional(
+                    self._field(obj, "other properties"),
+                    default=", ".join(p for p in current if p not in offered),
+                )
+            ] = str
         return self.async_show_form(
-            step_id="customize_objects", data_schema=vol.Schema(fields)
+            step_id="customize_objects", data_schema=vol.Schema(fields), errors=errors
         )
 
     @staticmethod
@@ -346,9 +386,10 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
         domains = dict(self._current(CONF_DOMAIN_MAPPING))
         covs = dict(self._current(CONF_COV_OVERRIDES))
         sources = dict(self._current(CONF_CLIMATE_TEMPERATURE_SOURCES))
+        extras = dict(self._current(CONF_EXTRA_PROPERTIES))
         for obj in self._selected_objects:
             key = _object_key(obj)
-            for store in (domains, covs, sources):
+            for store in (domains, covs, sources, extras):
                 store.pop(key, None)
             edit = edits.get(key)
             if edit is None:
@@ -359,6 +400,15 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
                 covs[key] = edit["COV"]
             if edit["temperature sensor"]:
                 sources[key] = edit["temperature sensor"]
+            # Picked first, then typed; a property picked twice counts once.
+            picked = list(
+                dict.fromkeys(
+                    (edit.get("extra properties") or [])
+                    + (edit.get("other properties") or [])
+                )
+            )
+            if picked:
+                extras[key] = picked
 
         return self.async_create_entry(
             title="",
@@ -367,5 +417,6 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
                 CONF_DOMAIN_MAPPING: domains,
                 CONF_COV_OVERRIDES: covs,
                 CONF_CLIMATE_TEMPERATURE_SOURCES: sources,
+                CONF_EXTRA_PROPERTIES: extras,
             },
         )

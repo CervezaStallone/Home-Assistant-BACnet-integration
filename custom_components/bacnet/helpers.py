@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 
@@ -109,3 +110,18 @@ def stale_domain_overrides(
         ):
             stale.append(key)
     return stale
+
+
+def extra_property_platform(prop: str) -> str:
+    """HA platform for extra property *prop*: its spec's, else a read-only sensor."""
+    from .const import EXTRA_PROPERTY_SPECS  # local import avoids a cycle
+
+    spec = EXTRA_PROPERTY_SPECS.get(prop)
+    return spec[0] if spec else "sensor"
+
+
+def property_label(prop: str) -> str:
+    """'minimumOnTime' -> 'Minimum On Time'; proprietary numbers stay as-is."""
+    return " ".join(
+        w.capitalize() for w in re.findall(r"[A-Z]?[a-z]+|\d+|[A-Z]+", prop)
+    )

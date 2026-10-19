@@ -36,6 +36,7 @@ from .const import (
 )
 from .coordinator import BACnetCoordinator
 from .entity import BACnetEntity, bacnet_device_info
+from .property_entity import property_entities
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -74,11 +75,12 @@ async def async_setup_entry(
     coordinator: BACnetCoordinator = entry.runtime_data.coordinator
     objects: list[dict[str, Any]] = coordinator.objects
 
-    entities: list[BACnetSensor] = []
+    entities: list[Any] = []
     for obj in objects:
         domain = coordinator.get_domain_for_object(obj)
         if domain == "sensor":
             entities.append(BACnetSensor(coordinator, entry, obj))
+    entities.extend(property_entities(coordinator, entry, "sensor"))
 
     entities.extend(
         BACnetDiagnosticSensor(coordinator, entry, description)

@@ -86,7 +86,10 @@ async def async_write_object_value(
                 "object": label or f"{obj['object_type']}:{obj['instance']}"
             },
         )
-    await coordinator.async_refresh_object(obj)
+    if property_name == "presentValue":
+        await coordinator.async_refresh_object(obj)
+    else:
+        await coordinator.async_refresh_properties(obj, [property_name])
 
 
 class BACnetEntity(CoordinatorEntity[BACnetCoordinator]):

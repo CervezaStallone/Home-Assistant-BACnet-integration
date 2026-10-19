@@ -33,6 +33,7 @@ from .const import (
     CONF_COV_OVERRIDES,
     CONF_DOMAIN_MAPPING,
     CONF_ENABLE_COV,
+    CONF_EXTRA_PROPERTIES,
     CONF_LIVE_METADATA_PROPERTIES,
     CONF_LOCAL_IP,
     CONF_LOCAL_PORT,
@@ -49,6 +50,7 @@ from .const import (
 )
 from .helpers import (
     default_domain_for,
+    extra_property_platform,
     object_key,
     object_label,
     stale_domain_overrides,
@@ -83,7 +85,9 @@ def _domain_for_object(obj: dict, domain_overrides: dict[str, str]) -> str:
 
 
 def _get_platforms_in_use(
-    objects: list[dict], domain_overrides: dict[str, str]
+    objects: list[dict],
+    domain_overrides: dict[str, str],
+    extra_properties: dict[str, list[str]] | None = None,
 ) -> list[Platform]:
     """Determine which HA platforms are actually needed based on selected objects.
 
@@ -93,6 +97,8 @@ def _get_platforms_in_use(
     domains_needed: set[str] = set()
     for obj in objects:
         domains_needed.add(_domain_for_object(obj, domain_overrides))
+        for prop in (extra_properties or {}).get(object_key(obj), []):
+            domains_needed.add(extra_property_platform(prop))
     return [Platform(d) for d in domains_needed if d in {p.value for p in PLATFORMS}]
 
 
@@ -276,6 +282,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     climate_temperature_sources: dict[str, str] = entry.options.get(
         CONF_CLIMATE_TEMPERATURE_SOURCES, {}
     )
+    extra_properties: dict[str, list[str]] = entry.options.get(
+        CONF_EXTRA_PROPERTIES, {}
+    )
 
     # ---- 2. Get or create a shared BACnet client for this port ----
     # A single UDP socket (one BACnetClient) can communicate with any number
@@ -329,6 +338,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         cov_increment=cov_increment,
         live_metadata_properties=live_metadata_properties,
         climate_temperature_sources=climate_temperature_sources,
+        extra_properties=extra_properties,
     )
 
     # Perform the first data refresh so entities have initial state. On
@@ -352,7 +362,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     _async_check_stale_overrides(hass, entry, selected_objects, domain_overrides)
 
     # ---- 7. Forward to platforms ----
-    needed_platforms = _get_platforms_in_use(selected_objects, domain_overrides)
+    needed_platforms = _get_platforms_in_use(
+        selected_objects, domain_overrides, extra_properties
+    )
     # SELECT (write priority), BUTTON (metadata refresh) and SENSOR
     # (diagnostics) are device-level, not object-dependent.
     for device_level_platform in (Platform.SELECT, Platform.BUTTON, Platform.SENSOR):

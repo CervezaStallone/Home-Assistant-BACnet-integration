@@ -114,6 +114,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         cov_increment: float = DEFAULT_COV_INCREMENT,
         live_metadata_properties: list[str] | None = None,
         climate_temperature_sources: dict[str, str] | None = None,
+        extra_properties: dict[str, list[str]] | None = None,
     ) -> None:
         """Initialise the coordinator.
 
@@ -136,6 +137,8 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             climate_temperature_sources: climate obj_key → obj_key of the
                 object whose presentValue is that climate's current
                 temperature (options flow).
+            extra_properties: obj_key → extra BACnet properties (camelCase)
+                polled with every poll and shown as their own entities.
         """
         self.client = client
         self.objects = objects
@@ -148,6 +151,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.cov_increment = cov_increment
         self.live_metadata_properties = live_metadata_properties or []
         self.climate_temperature_sources = climate_temperature_sources or {}
+        self.extra_properties = extra_properties or {}
         self.write_priority: int = DEFAULT_WRITE_PRIORITY
 
         # Track which objects have active COV and which need polling
@@ -246,7 +250,10 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 property_names=["presentValue", "statusFlags"],
                 device_id=self.entry.data.get("device_id") if self.entry else None,
             )
-            data.update(polled)
+            # Merge rather than replace, so extra properties survive.
+            for obj_key, values in polled.items():
+                data[obj_key] = {**data.get(obj_key, {}), **values}
+            await self._poll_extra_properties(data)
         except Exception as exc:  # noqa: BLE001
             _LOGGER.warning("Batch poll failed: %s — keeping stale data", exc)
             polled = None
@@ -292,6 +299,30 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             await self._handle_poll_failure()
 
         return data
+
+    async def _poll_extra_properties(self, data: dict[str, Any]) -> None:
+        """Poll the extra properties, one batched poll per distinct list.
+
+        A failure only leaves those values as they were; the regular poll
+        and its outage detection don't depend on them.
+        """
+        groups: dict[tuple[str, ...], list[dict[str, Any]]] = {}
+        for obj in self.objects:
+            props = self.extra_properties.get(f"{obj['object_type']}:{obj['instance']}")
+            if props:
+                groups.setdefault(tuple(props), []).append(obj)
+        for props, objects in groups.items():
+            try:
+                polled = await self.client.poll_objects(
+                    device_address=self.device_address,
+                    objects=objects,
+                    property_names=list(props),
+                )
+            except Exception as exc:  # noqa: BLE001
+                _LOGGER.debug("Extra property poll failed: %s", exc)
+                continue
+            for obj_key, values in polled.items():
+                data[obj_key] = {**data.get(obj_key, {}), **values}
 
     @property
     def _outage_issue_id(self) -> str:
@@ -783,6 +814,23 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             await self.async_request_refresh()
             return
         self._merge_object_data(obj_key, values)
+
+    async def async_refresh_properties(
+        self, obj: dict[str, Any], properties: list[str]
+    ) -> None:
+        """Re-read some properties of one object after writing one of them."""
+        obj_key = f"{obj['object_type']}:{obj['instance']}"
+        try:
+            polled = await self.client.poll_objects(
+                device_address=self.device_address,
+                objects=[obj],
+                property_names=properties,
+            )
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.debug("Post-write read failed for %s: %s", obj_key, exc)
+            return
+        if obj_key in polled:
+            self._merge_object_data(obj_key, polled[obj_key])
 
     @callback
     def async_add_object_listener(

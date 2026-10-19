@@ -195,3 +195,42 @@ class TestOfflineProbeUsesDeviceObject:
         app = _FakeFirstObjectsEmptyApp(device_answers=False)
         result = self._poll(app)
         assert result[f"0:{MAX_CONCURRENT_REQUESTS}"]["presentValue"] is None
+
+
+class TestExtraProperties:
+    """Extra properties (options flow) are polled with the same batching.
+
+    Their values keep their meaning: an enumeration is its name, not an int.
+    """
+
+    def test_rpm_extra_property_uses_camel_name_and_enum_name(self):
+        from bacpypes3.basetypes import EventState
+
+        class _App:
+            async def read_property_multiple(self, addr, param_list):
+                return [
+                    (("analog-input", 1), "event-state", None, EventState("high-limit"))
+                ]
+
+        result = asyncio.run(
+            _client(_App()).poll_objects(
+                _ADDR, [{"object_type": 0, "instance": 1}], ["eventState"]
+            )
+        )
+        assert result == {"0:1": {"eventState": "high-limit"}}
+
+    def test_fallback_extra_property_enum_name(self):
+        from bacpypes3.basetypes import EventState
+
+        class _App:
+            async def read_property(self, addr, oid, prop_name, array_index=None):
+                return EventState("normal")
+
+        client = _client(_App())
+        client._rpm_supported[_ADDR] = False
+        result = asyncio.run(
+            client.poll_objects(
+                _ADDR, [{"object_type": 0, "instance": 1}], ["eventState"]
+            )
+        )
+        assert result == {"0:1": {"eventState": "normal"}}

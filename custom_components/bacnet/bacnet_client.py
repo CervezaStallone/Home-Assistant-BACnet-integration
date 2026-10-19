@@ -1781,12 +1781,12 @@ class BACnetClient:
                 if obj_type_int is None:
                     continue
                 obj_key = f"{obj_type_int}:{instance}"
-                prop_camel = self._HYPHEN_TO_CAMEL.get(str(prop_id), str(prop_id))
+                prop_camel = self._prop_camel(prop_id)
                 # Per-property errors arrive as ErrorType values in the tuple
                 coerced = (
                     None
                     if isinstance(value, (BaseException, ErrorType))
-                    else self._coerce_value(value)
+                    else self._poll_value(prop_camel, value)
                 )
                 data.setdefault(obj_key, {})[prop_camel] = coerced
 
@@ -1872,7 +1872,7 @@ class BACnetClient:
                     value = await self.read_property(
                         device_address, obj["object_type"], obj["instance"], prop
                     )
-                    obj_data[prop] = self._coerce_value(value)
+                    obj_data[prop] = self._poll_value(prop, value)
             return f"{obj['object_type']}:{obj['instance']}", obj_data
 
         probe = objects[:MAX_CONCURRENT_REQUESTS]
@@ -2811,6 +2811,24 @@ class BACnetClient:
     # ------------------------------------------------------------------
     # Value conversion helpers
     # ------------------------------------------------------------------
+
+    @classmethod
+    def _prop_camel(cls, prop_id: Any) -> str:
+        """camelCase name of a property identifier from a response."""
+        name = cls._HYPHEN_TO_CAMEL.get(str(prop_id))
+        if name is not None:
+            return name
+        try:
+            return cls.normalize_property(str(prop_id))
+        except ValueError:
+            return str(prop_id)
+
+    @classmethod
+    def _poll_value(cls, prop: str, value: Any) -> Any:
+        """presentValue/statusFlags as before; extra properties as JSON data."""
+        if prop in ("presentValue", "statusFlags"):
+            return cls._coerce_value(value)
+        return _property_to_json(value)
 
     @staticmethod
     def _coerce_value(value: Any) -> Any:

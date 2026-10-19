@@ -22,6 +22,7 @@ def _setup(monkeypatch, unique_id="bacnet_1001_4_2", platform="bacnet", ok=True)
     coordinator.write_priority = 16
     coordinator.device_address = "192.168.1.9"
     coordinator.async_refresh_object = AsyncMock()
+    coordinator.async_refresh_properties = AsyncMock()
 
     entry = MagicMock()
     entry.runtime_data.coordinator = coordinator

@@ -149,13 +149,14 @@
       },
       "customize_objects": {
         "title": "Customize objects",
-        "description": "Per object: the Home Assistant entity type, whether COV is used, and — for objects that are already a climate entity — which object provides the room temperature. Changed an object to climate just now? Save, then open the options again to pick its temperature sensor."
+        "description": "Per object: the Home Assistant entity type, whether COV is used, and — for objects that are already a climate entity — which object provides the room temperature. Changed an object to climate just now? Save, then open the options again to pick its temperature sensor. Extra properties: pick properties (for example Minimum On Time or High Limit) to show as their own entity; type any other property by name or number under other properties."
       }
     },
     "error": {
       "invalid_polling_interval": "The polling interval must be at least 10 seconds.",
       "no_objects_found": "No readable BACnet objects were found on this device.",
-      "unknown": "An unexpected error occurred."
+      "unknown": "An unexpected error occurred.",
+      "unknown_property": "Unknown BACnet property. Use names such as minimumOnTime or minimum-on-time, or numbers such as 67, separated by commas."
     },
     "abort": {
       "cannot_connect": "Could not reach the BACnet device to rescan its object list. Make sure the device is online and try again."

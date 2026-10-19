@@ -149,13 +149,14 @@
       },
       "customize_objects": {
         "title": "Objecten aanpassen",
-        "description": "Per object: het entiteittype in Home Assistant, of COV wordt gebruikt en — voor objecten die al een climate-entiteit zijn — welk object de ruimtetemperatuur levert. Heb je een object net naar climate omgezet? Sla op en open de opties opnieuw om de temperatuursensor te kiezen."
+        "description": "Per object: het entiteittype in Home Assistant, of COV wordt gebruikt en — voor objecten die al een climate-entiteit zijn — welk object de ruimtetemperatuur levert. Heb je een object net naar climate omgezet? Sla op en open de opties opnieuw om de temperatuursensor te kiezen. Extra properties: kies properties (bijvoorbeeld Minimum On Time of High Limit) om als eigen entiteit te tonen; typ andere properties op naam of nummer bij other properties."
       }
     },
     "error": {
       "invalid_polling_interval": "Het poll-interval moet minstens 10 seconden zijn.",
       "no_objects_found": "Er zijn op dit apparaat geen leesbare BACnet-objecten gevonden.",
-      "unknown": "Er is een onverwachte fout opgetreden."
+      "unknown": "Er is een onverwachte fout opgetreden.",
+      "unknown_property": "Onbekende BACnet-property. Gebruik namen zoals minimumOnTime of minimum-on-time, of nummers zoals 67, gescheiden door komma's."
     },
     "abort": {
       "cannot_connect": "Het BACnet-apparaat is niet bereikbaar om de objectlijst opnieuw te scannen. Controleer of het apparaat online is en probeer het opnieuw."

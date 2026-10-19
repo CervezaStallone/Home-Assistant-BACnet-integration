@@ -150,6 +150,8 @@ The second options page lists your objects by name. Tick the ones you want to ch
 - **type** — the Home Assistant entity type (`sensor`, `binary_sensor`, `switch`, `number`, `climate`, or `select` for multi-state objects)
 - **COV** — use COV for this object, overriding the device-wide **Enable COV** setting
 - **temperature sensor** (climate objects only) — the object that provides the room temperature. Without one, the climate entity shows its setpoint as the current temperature. Just changed an object to climate? Save, then open the options again to pick its sensor.
+- **extra properties** *(1.0.50 beta)* — other BACnet properties of the object to show as their own entity, picked from a list that fits the object type. See [Extra properties as entities](#extra-properties-as-entities-1050-beta).
+- **other properties** *(1.0.50 beta)* — any other property, typed by name (`inactiveText`) or number, separated by commas. These become read-only sensors.
 
 Unticked objects use the defaults. Settings of objects you remove with a rescan are remembered and come back if you add the object again.
 
@@ -308,6 +310,25 @@ response_variable: result
 ```
 
 If the device refuses (for example `unknown-property`), the action fails with the device's error.
+
+### Extra properties as entities *(1.0.50 beta)*
+
+> **Beta:** available in the 1.0.50 pre-releases (enable *Show beta versions* in HACS).
+
+For properties you want to see or change from the dashboard, no automation or template is needed: in **Configure → Customize objects**, tick the object and pick its **extra properties**. Each becomes its own entity on the device, named after the object and the property (e.g. *Ventilation fan Minimum On Time*), and is read with every poll.
+
+| Property | Entity | Objects |
+|---|---|---|
+| Minimum On Time, Minimum Off Time | number (s) | Binary Output / Value |
+| Time Delay | number (s) | analog, binary, multi-state |
+| High Limit, Low Limit, Deadband, COV Increment | number (object's unit) | analog |
+| Relinquish Default | number (object's unit) | Analog Output / Value |
+| Out Of Service | switch | analog, binary, multi-state, Schedule |
+| Event State, Reliability | sensor | analog, binary, multi-state (Reliability also Schedule) |
+| Change Of State Count | sensor | binary, multi-state |
+| Elapsed Active Time | sensor (s) | binary |
+
+Properties you type under **other properties** become read-only sensors. Writable ones (number, switch) are under *Configuration* on the device page, read-only ones under *Diagnostic*. A property the object doesn't have shows as *unknown*.
 
 ### Schedules *(1.0.50 beta)*
 
