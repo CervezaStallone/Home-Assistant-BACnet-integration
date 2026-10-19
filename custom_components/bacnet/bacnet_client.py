@@ -24,7 +24,11 @@ import socket
 from collections.abc import Awaitable, Callable
 from typing import Any, ClassVar
 
-from bacpypes3.apdu import ErrorRejectAbortNack, SubscribeCOVPropertyRequest
+from bacpypes3.apdu import (
+    ErrorRejectAbortNack,
+    GetEventInformationRequest,
+    SubscribeCOVPropertyRequest,
+)
 from bacpypes3.basetypes import (
     CalendarEntry,
     DailySchedule,
@@ -546,6 +550,8 @@ class BACnetClient:
         self._cov_property_stop_events: dict[str, asyncio.Event] = {}
         # Per-device RPM support cache: True = supported (or untested), False = rejected
         self._rpm_supported: dict[str, bool] = {}
+        # Per-device GetEventInformation support, same convention.
+        self._event_info_supported: dict[str, bool] = {}
         # Per-device RPM chunk size (objects per request), shrunk on
         # size-related aborts.
         self._rpm_chunk_size: dict[str, int] = {}
@@ -1647,6 +1653,65 @@ class BACnetClient:
         if isinstance(result, ErrorRejectAbortNack):
             raise BACnetPropertyError(str(result))
         return _property_to_json(result)
+
+    async def get_event_information(
+        self, device_address: str
+    ) -> list[dict[str, Any]] | None:
+        """Active alarms/events of a device (GetEventInformation).
+
+        Follows moreEvents until the device has sent everything. Returns
+        None when the device doesn't support the service; it's then not
+        asked again. Other failures raise BACnetPropertyError so the caller
+        keeps the last known list.
+        """
+        if self._app is None:
+            raise RuntimeError("Client not connected")
+        if not self._event_info_supported.get(device_address, True):
+            return None
+        alarms: list[dict[str, Any]] = []
+        last: ObjectIdentifier | None = None
+        while True:
+            request = GetEventInformationRequest(destination=Address(device_address))
+            if last is not None:
+                request.lastReceivedObjectIdentifier = last
+            try:
+                response = await asyncio.wait_for(self._app.request(request), 10)
+            except TimeoutError as exc:
+                raise BACnetPropertyError("no answer from the device") from exc
+            except ErrorRejectAbortNack as exc:
+                response = exc
+            if isinstance(response, ErrorRejectAbortNack):
+                if self._is_unsupported_service(response):
+                    self._event_info_supported[device_address] = False
+                    return None
+                raise BACnetPropertyError(str(response))
+            for summary in response.listOfEventSummaries or []:
+                acked = list(summary.acknowledgedTransitions or [])
+                acked += [True] * (3 - len(acked))
+                last = summary.objectIdentifier
+                alarms.append(
+                    {
+                        "object_type": int(last[0]),
+                        "instance": int(last[1]),
+                        "event_state": str(summary.eventState),
+                        "acknowledged": {
+                            "to_offnormal": bool(acked[0]),
+                            "to_fault": bool(acked[1]),
+                            "to_normal": bool(acked[2]),
+                        },
+                    }
+                )
+            if not response.moreEvents or last is None:
+                return alarms
+
+    @staticmethod
+    def _is_unsupported_service(response: ErrorRejectAbortNack) -> bool:
+        """Reject/error meaning "this device doesn't implement the service"."""
+        text = str(response).lower()
+        return any(
+            reason in text
+            for reason in ("unrecognized-service", "service-request-denied", "services")
+        )
 
     async def poll_objects(
         self,

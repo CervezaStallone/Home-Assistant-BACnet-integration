@@ -49,6 +49,7 @@ In plain terms: if your building has BACnet controllers, thermostats, sensors, o
 - **Selective import** — only import the objects you actually need
 - **Configurable write priority** — per-device select entity to change the BACnet write priority (disabled by default)
 - **Relinquish & one-off writes** — `bacnet.relinquish` and `bacnet.write_value` services for full Priority Array control
+- **Alarms** *(1.0.50 beta)* — an Alarm binary sensor and an Active alarms sensor per device, plus a `bacnet_alarm` event for automations
 - **Any BACnet property** *(1.0.50 beta)* — read or write any property (e.g. `minimumOnTime`, property 67) with `bacnet.read_property` and `bacnet.write_value`, also on objects you didn't import
 - **Schedules** *(1.0.50 beta)* — BACnet Schedule objects as a sensor, with `bacnet.read_schedule` and `bacnet.write_schedule` services for the weekly schedule, exceptions and default
 - **Device limits & state texts** — number limits from `minPresValue`/`maxPresValue`/`resolution`, multi-state objects as a select with their `stateText` labels
@@ -197,11 +198,12 @@ Every entity exposes additional BACnet metadata as state attributes:
 | `bacnet_units` | Engineering units (e.g. "degrees-celsius") |
 | `bacnet_description` | BACnet description property |
 | `bacnet_status_flags` | BACnet status flags array |
+| `bacnet_in_alarm` *(1.0.50 beta)* | `true` while the object's IN_ALARM status flag is set |
 | `bacnet_update_method` | How this entity is updated: `COV` or `polling` |
 | `bacnet_cov_increment` | Configured COV sensitivity (analog objects with active COV only) |
 | `bacnet_state_text` | The `stateText` label of the current state (multi-state objects only) |
 
-Only `bacnet_status_flags` and `bacnet_state_text` are stored in the recorder history — the other attributes don't change and aren't stored again with every state change.
+Only `bacnet_status_flags`, `bacnet_in_alarm` and `bacnet_state_text` are stored in the recorder history — the other attributes don't change and aren't stored again with every state change.
 
 An entity is **unavailable** when the device doesn't respond. Status flags (in-alarm, FAULT, overridden, out-of-service) don't change availability — some gateways report FAULT on every object while their values are live. Check `bacnet_status_flags` to see them.
 
@@ -218,6 +220,18 @@ Every device also gets diagnostic sensors (under *Diagnostic* on the device page
 | Consecutive failed polls | No |
 
 They stay available while the device is offline, which is exactly when they're useful.
+
+### Alarms *(1.0.50 beta)*
+
+> **Beta:** available in the 1.0.50 pre-releases (enable *Show beta versions* in HACS).
+
+Alarms the controller already tracks are shown in Home Assistant. Nothing is configured or acknowledged on the device.
+
+- **Alarm** (binary sensor, per device) — on while any imported object has its IN_ALARM status flag set, or the device reports an active alarm.
+- **Active alarms** (sensor, per device) — the number of active alarms the device reports through BACnet `GetEventInformation`, polled with every poll. The `alarms` attribute lists them: `object_type`, `instance`, `object_name`, `event_state` (`high-limit`, `low-limit`, `offnormal`, `fault`, …) and which transitions are `acknowledged`. Objects you didn't import are included too. *Unknown* means the device doesn't support `GetEventInformation`; the Alarm binary sensor still works from the status flags.
+- **`bacnet_alarm` event** — fired when an alarm appears, changes state or clears (`event_state: normal`). Event data: `device_id` (BACnet device instance), `object_type`, `instance`, `object_name`, `event_state`, `previous_event_state`. Alarms that are already active when Home Assistant starts don't fire an event.
+
+`GetEventInformation` doesn't carry the alarm message text; that only exists in event notifications sent to the controller's notification recipients, which this integration doesn't receive.
 
 ---
 
@@ -455,6 +469,24 @@ actions:
   - action: notify.notify
     data:
       message: "AHU 1 is not responding to BACnet requests."
+```
+
+### Notify on BACnet alarms *(1.0.50 beta)*
+
+```yaml
+alias: BACnet alarm notification
+triggers:
+  - trigger: event
+    event_type: bacnet_alarm
+actions:
+  - action: notify.notify
+    data:
+      message: >-
+        {% if trigger.event.data.event_state == 'normal' %}
+          Alarm cleared: {{ trigger.event.data.object_name }}
+        {% else %}
+          Alarm: {{ trigger.event.data.object_name }} is {{ trigger.event.data.event_state }}
+        {% endif %}
 ```
 
 ### Calendar events as schedule exceptions *(1.0.50 beta)*

@@ -256,6 +256,8 @@ class BACnetEntity(CoordinatorEntity[BACnetCoordinator]):
         status_flags = self.get_status_flags()
         if status_flags is not None:
             attrs["bacnet_status_flags"] = status_flags
+            # statusFlags = [IN_ALARM, FAULT, OVERRIDDEN, OUT_OF_SERVICE]
+            attrs["bacnet_in_alarm"] = bool(status_flags and status_flags[0])
 
         # Update method & COV details
         attrs["bacnet_update_method"] = self.coordinator.get_update_method(

@@ -123,7 +123,9 @@ class _SensorStateClass:
     MEASUREMENT = "measurement"
 
 
-class _BinarySensorEntity(_CoordinatorEntity):
+class _BinarySensorEntity:
+    # Like HA: a platform entity, not a CoordinatorEntity, so
+    # (CoordinatorEntity, BinarySensorEntity) has a valid MRO.
     pass
 
 

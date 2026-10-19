@@ -45,6 +45,7 @@ from .const import (
     OBJECT_TYPE_ANALOG_INPUT,
     OBJECT_TYPE_ANALOG_OUTPUT,
     OBJECT_TYPE_ANALOG_VALUE,
+    OBJECT_TYPE_NAMES,
     RECONNECT_THRESHOLD,
 )
 from .helpers import default_domain_for, mask_address
@@ -152,6 +153,9 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.live_metadata_properties = live_metadata_properties or []
         self.climate_temperature_sources = climate_temperature_sources or {}
         self.extra_properties = extra_properties or {}
+        # Active alarms from GetEventInformation; None until the first fetch
+        # (and for devices without the service).
+        self.active_alarms: list[dict[str, Any]] | None = None
         self.write_priority: int = DEFAULT_WRITE_PRIORITY
 
         # Track which objects have active COV and which need polling
@@ -273,6 +277,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if self._outage_issue_raised:
                 ir.async_delete_issue(self.hass, DOMAIN, self._outage_issue_id)
                 self._outage_issue_raised = False
+            await self._refresh_alarms()
             # After a reconnect, rebuild COV subscriptions once the device is
             # confirmed reachable again.
             if self._needs_resubscribe:
@@ -299,6 +304,64 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             await self._handle_poll_failure()
 
         return data
+
+    async def _refresh_alarms(self) -> None:
+        """Fetch the device's active alarms and fire bacnet_alarm on changes.
+
+        The first fetch only sets the baseline, so a restart doesn't
+        announce alarms that were already active. A failed fetch keeps the
+        last list.
+        """
+        try:
+            fetched = await self.client.get_event_information(self.device_address)
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.debug("GetEventInformation failed: %s", exc)
+            return
+        if fetched is None:
+            return
+        names = {
+            f"{o['object_type']}:{o['instance']}": self.get_entity_name(o)
+            for o in self.objects
+        }
+        alarms = []
+        for alarm in fetched:
+            object_type, instance = alarm["object_type"], alarm["instance"]
+            type_name = OBJECT_TYPE_NAMES.get(object_type, f"Type {object_type}")
+            alarms.append(
+                {
+                    **alarm,
+                    "object_name": names.get(
+                        f"{object_type}:{instance}", f"{type_name} {instance}"
+                    ),
+                }
+            )
+        previous = self.active_alarms
+        self.active_alarms = alarms
+        if previous is None:
+            return
+
+        def _states(items: list[dict[str, Any]]) -> dict[tuple[int, int], dict]:
+            return {(a["object_type"], a["instance"]): a for a in items}
+
+        old, new = _states(previous), _states(alarms)
+        for key in sorted(old.keys() | new.keys()):
+            before = old[key]["event_state"] if key in old else "normal"
+            current = new.get(key) or {**old[key], "event_state": "normal"}
+            if current["event_state"] == before:
+                continue
+            self.hass.bus.async_fire(
+                f"{DOMAIN}_alarm",
+                {
+                    "device_id": self.entry.data.get("device_id")
+                    if self.entry
+                    else None,
+                    "object_type": key[0],
+                    "instance": key[1],
+                    "object_name": current["object_name"],
+                    "event_state": current["event_state"],
+                    "previous_event_state": before,
+                },
+            )
 
     async def _poll_extra_properties(self, data: dict[str, Any]) -> None:
         """Poll the extra properties, one batched poll per distinct list.

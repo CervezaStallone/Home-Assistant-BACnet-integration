@@ -111,6 +111,14 @@
       },
       "consecutive_failed_polls": {
         "name": "Consecutive failed polls"
+      },
+      "active_alarms": {
+        "name": "Active alarms"
+      }
+    },
+    "binary_sensor": {
+      "alarm": {
+        "name": "Alarm"
       }
     }
   },
