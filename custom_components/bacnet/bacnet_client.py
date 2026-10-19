@@ -30,6 +30,7 @@ from bacpypes3.basetypes import (
     DailySchedule,
     DateRange,
     ErrorType,
+    PropertyIdentifier,
     SpecialEvent,
     SpecialEventPeriod,
     TimeValue,
@@ -53,6 +54,7 @@ from bacpypes3.primitivedata import (
     Unsigned,
 )
 from bacpypes3.service.cov import SubscriptionContextManager
+from bacpypes3.vendor import get_vendor_info
 
 from .const import (
     DEFAULT_WRITE_PRIORITY,
@@ -133,6 +135,45 @@ _RPM_UNSUPPORTED_REASONS = {
 
 class ScheduleError(Exception):
     """A Schedule object could not be read, or a write to it failed."""
+
+
+class BACnetPropertyError(Exception):
+    """The device returned an error for a property read, or didn't answer."""
+
+
+def _property_to_json(value: Any) -> Any:
+    """Convert any BACpypes3 property value to plain JSON data.
+
+    Enumerations become their name ("high-limit"), object identifiers
+    "analog-input,1", dates/times their text, sequences a dict of their
+    fields and lists/arrays a list.
+    """
+    if isinstance(value, AnyAtomic):
+        value = value.get_value()
+    if value is None or isinstance(value, Null):
+        return None
+    if isinstance(value, Boolean | bool):
+        return bool(value)
+    if isinstance(value, Enumerated):
+        return str(value)
+    if isinstance(value, ObjectIdentifier):
+        return str(value)
+    if isinstance(value, Real | Double | float):
+        return float(value)
+    if isinstance(value, int):
+        return int(value)
+    if isinstance(value, CharacterString | str | Date | Time):
+        return str(value)
+    if isinstance(value, list | tuple):
+        return [_property_to_json(item) for item in value]
+    order = getattr(value, "_order", None)
+    if order:
+        return {
+            key: _property_to_json(getattr(value, key))
+            for key in order
+            if getattr(value, key, None) is not None
+        }
+    return str(value)
 
 
 WEEKDAYS = (
@@ -1564,6 +1605,48 @@ class BACnetClient:
         oid = ObjectIdentifier((self._int_to_object_type_str(object_type), instance))
         return await self._safe_read(addr, oid, property_name)
 
+    @staticmethod
+    def normalize_property(prop: str | int) -> str:
+        """Return the camelCase name of a property given by name or number.
+
+        Accepts "minimumOnTime", "minimum-on-time", "67" or 67. A number
+        without a standard name (proprietary) is returned as its digits.
+        Raises ValueError for an unknown name.
+        """
+        text = str(prop).strip()
+        identifier = PropertyIdentifier(int(text) if text.isdigit() else text)
+        return getattr(identifier, "attr", None) or str(int(identifier))
+
+    async def read_any_property(
+        self,
+        device_address: str,
+        object_type: int,
+        instance: int,
+        property_name: str,
+        array_index: int | None = None,
+    ) -> Any:
+        """Read one property of any object and return it as JSON data.
+
+        Unlike _safe_read, a failure raises BACnetPropertyError carrying the
+        device's error, so the user sees why (e.g. unknown-property).
+        """
+        if self._app is None:
+            raise RuntimeError("Client not connected")
+        addr = Address(device_address)
+        oid = ObjectIdentifier((self._int_to_object_type_str(object_type), instance))
+        args = (addr, oid, property_name)
+        if array_index is not None:
+            args += (array_index,)
+        try:
+            result = await asyncio.wait_for(self._app.read_property(*args), 10)
+        except TimeoutError as exc:
+            raise BACnetPropertyError("no answer from the device") from exc
+        except (ErrorRejectAbortNack, Exception) as exc:
+            raise BACnetPropertyError(str(exc)) from exc
+        if isinstance(result, ErrorRejectAbortNack):
+            raise BACnetPropertyError(str(result))
+        return _property_to_json(result)
+
     async def poll_objects(
         self,
         device_address: str,
@@ -1863,8 +1946,10 @@ class BACnetClient:
         # Convert None -> Null for relinquish
         if value is None:
             bacnet_value = Null(())  # Null() returns the class, not a value
-        else:
+        elif property_name == "presentValue":
             bacnet_value = self._python_to_bacnet_value(value, object_type)
+        else:
+            bacnet_value = self._value_for_property(type_str, property_name, value)
 
         try:
             _LOGGER.debug(
@@ -2764,6 +2849,37 @@ class BACnetClient:
             return str(value)
         # Generic fallback
         return str(value)
+
+    @staticmethod
+    def _value_for_property(type_str: str, property_name: str, value: Any) -> Any:
+        """Cast *value* to the standard datatype of *property_name*.
+
+        Proprietary or constructed properties have no simple datatype; the
+        value is then sent as the matching primitive and the device decides.
+        """
+        object_class = get_vendor_info(0).get_object_class(type_str)
+        datatype = (
+            object_class.get_property_type(property_name) if object_class else None
+        )
+        if isinstance(datatype, type) and issubclass(
+            datatype, Boolean | Enumerated | Real | Double | Unsigned | Integer
+        ):
+            if issubclass(datatype, Real | Double):
+                return datatype(float(value))
+            if issubclass(datatype, Boolean):
+                return datatype(bool(value))
+            if issubclass(datatype, Enumerated) and isinstance(value, str):
+                return datatype(value)
+            return datatype(int(value))
+        if isinstance(datatype, type) and issubclass(datatype, CharacterString):
+            return datatype(str(value))
+        if isinstance(value, bool):
+            return Boolean(value)
+        if isinstance(value, int):
+            return Unsigned(value)
+        if isinstance(value, float):
+            return Real(value)
+        return CharacterString(str(value))
 
     @staticmethod
     def _python_to_bacnet_value(value: Any, object_type: int) -> Any:

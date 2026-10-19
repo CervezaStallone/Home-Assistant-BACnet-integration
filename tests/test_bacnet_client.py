@@ -953,3 +953,91 @@ class TestReadDeviceInfoSlowMetadata:
         assert info["device_id"] == 10002
         assert info["device_name"] == "DDC4000"
         assert info["address"] == "10.0.0.5"
+
+
+# ---------------------------------------------------------------------------
+# Any property read/write (Reddit feedback: e.g. minimumOnTime, property 67)
+# ---------------------------------------------------------------------------
+
+
+class TestNormalizeProperty:
+    @pytest.mark.parametrize("prop", ["minimumOnTime", "minimum-on-time", "67", 67])
+    def test_name_or_number(self, prop):
+        assert BACnetClient.normalize_property(prop) == "minimumOnTime"
+
+    def test_proprietary_number_kept(self):
+        assert BACnetClient.normalize_property("9999") == "9999"
+
+    def test_unknown_name_raises(self):
+        with pytest.raises(ValueError):
+            BACnetClient.normalize_property("bogus")
+
+
+class TestReadAnyProperty:
+    def _client(self, values):
+        client = BACnetClient(local_ip="127.0.0.1", local_port=47812)
+        client._app = _FakeReadApp(values)
+        return client
+
+    def _read(self, client, prop):
+        return asyncio.run(client.read_any_property("192.168.1.1", 4, 1, prop))
+
+    def test_real_becomes_float(self):
+        from bacpypes3.primitivedata import Real
+
+        assert self._read(self._client({"highLimit": Real(30.5)}), "highLimit") == 30.5
+
+    def test_enumerated_becomes_its_name(self):
+        from bacpypes3.basetypes import EventState
+
+        client = self._client({"eventState": EventState("high-limit")})
+        assert self._read(client, "eventState") == "high-limit"
+
+    def test_sequence_becomes_dict(self):
+        from bacpypes3.basetypes import DeviceObjectPropertyReference
+        from bacpypes3.primitivedata import ObjectIdentifier
+
+        ref = DeviceObjectPropertyReference(
+            objectIdentifier=ObjectIdentifier("analog-input,1"),
+            propertyIdentifier="present-value",
+        )
+        client = self._client({"logDeviceObjectProperty": ref})
+        assert self._read(client, "logDeviceObjectProperty") == {
+            "objectIdentifier": "analog-input,1",
+            "propertyIdentifier": "present-value",
+        }
+
+    def test_device_error_raises(self):
+        from bacpypes3.apdu import RejectPDU
+
+        from custom_components.bacnet.bacnet_client import BACnetPropertyError
+
+        class _ErrApp:
+            async def read_property(self, *args, **kwargs):
+                return RejectPDU(reason="unrecognized-service")
+
+        client = BACnetClient(local_ip="127.0.0.1", local_port=47813)
+        client._app = _ErrApp()
+        with pytest.raises(BACnetPropertyError, match="unrecognized-service"):
+            self._read(client, "minimumOnTime")
+
+
+def test_write_other_property_uses_its_datatype_and_no_priority():
+    from bacpypes3.primitivedata import Unsigned
+
+    client = BACnetClient(local_ip="127.0.0.1", local_port=47814)
+    client._app = _FakeApp()
+    asyncio.run(
+        client.write_property(
+            device_address="192.168.1.1",
+            object_type=4,
+            instance=1,
+            property_name="minimumOnTime",
+            value=30,
+            priority=8,
+            commandable=True,
+        )
+    )
+    call = client._app.calls[0]
+    assert type(call["value"]) is Unsigned and call["value"] == 30
+    assert "priority" not in call
