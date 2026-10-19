@@ -1382,22 +1382,25 @@ class BACnetClient:
         current_object_name: str | None = None,
         current_description: str | None = None,
         current_units: str | None = None,
+        known: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
         """Re-read the metadata of one known object (issue #26).
 
-        The current_* values are the object's currently-known values, kept
-        when a read comes back empty (see _build_metadata). Returns the same
-        dict shape as read_object_list() entries, or None on failure.
+        *known* is the object's stored dict (or, older style, the current_*
+        values); every value in it is kept when a read comes back empty
+        (see _build_metadata). Returns the same dict shape as
+        read_object_list() entries, or None on failure.
         """
         if self._app is None:
             raise RuntimeError("Client not connected")
         known = {
-            "object_type": object_type,
-            "instance": instance,
             "commandable": current_commandable,
             "object_name": current_object_name,
             "description": current_description,
             "units": current_units,
+            **(known or {}),
+            "object_type": object_type,
+            "instance": instance,
         }
         result = await self.read_objects_metadata(device_address, [known])
         return result.get(f"{object_type}:{instance}")
