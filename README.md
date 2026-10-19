@@ -312,13 +312,12 @@ data:
 
 Writes to other properties never carry a priority; only the present value has a Priority Array. Values are sent in the property's own BACnet type. Writing a property other than the present value changes the object's configuration, so it is only allowed for administrators.
 
-**Objects you didn't import:** target the BACnet *device* instead of an entity and add `object_type` (name such as `analog-value` or `trend-log`, or the number) and `instance`. This is only allowed for administrators, because it reaches every object on the device.
+**Objects you didn't import:** pick the BACnet device in the `device` field (instead of a target entity) and add `object_type` (name such as `analog-value` or `trend-log`, or the number) and `instance`. This is only allowed for administrators, because it reaches every object on the device.
 
 ```yaml
 action: bacnet.read_property
-target:
-  device_id: 0123456789abcdef0123456789abcdef
 data:
+  device: 0123456789abcdef0123456789abcdef
   object_type: analog-value
   instance: 12
   property: highLimit
@@ -350,19 +349,19 @@ Properties you type under **other properties** become read-only sensors. Writabl
 
 > **Beta:** available in the 1.0.50 pre-releases (enable *Show beta versions* in HACS).
 
-Controllers log values in Trend Log objects, so changes between two polls aren't lost. `bacnet.read_trend_log` reads those records with BACnet `ReadRange`. Target the BACnet device and give the Trend Log's `instance`; the object doesn't need to be imported. Administrators only.
+Controllers log values in Trend Log objects, so changes between two polls aren't lost. `bacnet.read_trend_log` reads those records with BACnet `ReadRange`. The Trend Log object doesn't need to be imported. Administrators only.
 
 | Field | Meaning |
 |---|---|
+| `device` | The BACnet device with the Trend Log |
 | `instance` | Instance number of the Trend Log object |
 | `start` | Optional. Records from this time on. Without it, the most recent records. |
 | `count` | Maximum number of records, 1–1000 (default 100) |
 
 ```yaml
 action: bacnet.read_trend_log
-target:
-  device_id: 0123456789abcdef0123456789abcdef
 data:
+  device: 0123456789abcdef0123456789abcdef
   instance: 4
   start: "{{ now() - timedelta(hours=24) }}"
   count: 500

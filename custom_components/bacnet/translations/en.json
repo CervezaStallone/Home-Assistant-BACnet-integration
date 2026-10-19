@@ -207,10 +207,10 @@
       "message": "Reading {property} of object {object} failed: {error}"
     },
     "invalid_object": {
-      "message": "Give both an object type (name or number) and an instance when targeting a device."
+      "message": "Give both an object type (name or number) and an instance when a device is given."
     },
     "no_bacnet_device": {
-      "message": "Pick a BACnet device of this integration as the target."
+      "message": "Pick a BACnet device of this integration in the Device field."
     }
   },
   "services": {
@@ -242,11 +242,15 @@
         },
         "object_type": {
           "name": "Object type",
-          "description": "Only when targeting a device: type of the object to use, by name (analog-value, trend-log) or number. Reaches objects that were not imported."
+          "description": "Only with Device: type of the object to use, by name (analog-value, trend-log) or number. Reaches objects that were not imported."
         },
         "instance": {
           "name": "Object instance",
-          "description": "Only when targeting a device: instance number of the object."
+          "description": "Only with Device: instance number of the object."
+        },
+        "device": {
+          "name": "Device",
+          "description": "Only for objects that aren't imported: the BACnet device. Then also give the object type and instance; the target entity is ignored."
         }
       }
     },
@@ -294,11 +298,15 @@
         },
         "object_type": {
           "name": "Object type",
-          "description": "Only when targeting a device: type of the object to use, by name (analog-value, trend-log) or number. Reaches objects that were not imported."
+          "description": "Only with Device: type of the object to use, by name (analog-value, trend-log) or number. Reaches objects that were not imported."
         },
         "instance": {
           "name": "Object instance",
-          "description": "Only when targeting a device: instance number of the object."
+          "description": "Only with Device: instance number of the object."
+        },
+        "device": {
+          "name": "Device",
+          "description": "Only for objects that aren't imported: the BACnet device. Then also give the object type and instance; the target entity is ignored."
         }
       }
     },
@@ -306,6 +314,10 @@
       "name": "Read trend log",
       "description": "Read the records of a BACnet Trend Log object on a device and return them as response data. Only records with a time and a value are returned.",
       "fields": {
+        "device": {
+          "name": "Device",
+          "description": "The BACnet device with the Trend Log."
+        },
         "instance": {
           "name": "Trend Log instance",
           "description": "Instance number of the Trend Log object on the device."

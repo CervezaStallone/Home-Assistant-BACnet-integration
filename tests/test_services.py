@@ -116,20 +116,17 @@ def test_uses_non_deprecated_target_helper():
 
 
 def _with_device(monkeypatch, services, hass, coordinator, *, is_admin=True):
-    """Make the call target the HA device of *coordinator* only."""
+    """Register HA device "dev1" as the device of *coordinator*.
+
+    Calls pick it with the "device" field (a device selector: hassfest
+    doesn't allow device filters on a service target).
+    """
     device = MagicMock(config_entries={"e1"}, identifiers={("bacnet", "1001")})
     device_registry = MagicMock()
-    device_registry.async_get.return_value = device
-    monkeypatch.setattr(services.dr, "async_get", lambda hass: device_registry)
-    monkeypatch.setattr(
-        services,
-        "async_extract_referenced_entity_ids",
-        lambda hass, call: MagicMock(
-            referenced=set(),
-            indirectly_referenced={"sensor.diag"},
-            referenced_devices={"dev1"},
-        ),
+    device_registry.async_get.side_effect = lambda device_id: (
+        device if device_id == "dev1" else None
     )
+    monkeypatch.setattr(services.dr, "async_get", lambda hass: device_registry)
     user = MagicMock(is_admin=is_admin)
     hass.auth.async_get_user = AsyncMock(return_value=user)
 
@@ -161,6 +158,7 @@ class TestReadProperty:
                 hass,
                 _call(
                     {
+                        "device": "dev1",
                         "property": "eventState",
                         "object_type": "trend-log",
                         "instance": 5,
@@ -177,7 +175,14 @@ class TestReadProperty:
 
         services, hass, _, coordinator = _setup(monkeypatch)
         _with_device(monkeypatch, services, hass, coordinator, is_admin=False)
-        call = _call({"property": "eventState", "object_type": 0, "instance": 5})
+        call = _call(
+            {
+                "device": "dev1",
+                "property": "eventState",
+                "object_type": 0,
+                "instance": 5,
+            }
+        )
         call.context.user_id = "u1"
         with pytest.raises(Unauthorized):
             asyncio.run(services.async_handle_read_property(hass, call))
@@ -259,7 +264,9 @@ def test_read_trend_log_by_device(monkeypatch):
         return_value=[{"time": "2026-10-19T10:00:00", "value": 21.5}]
     )
     result = asyncio.run(
-        services.async_handle_read_trend_log(hass, _call({"instance": 4, "count": 10}))
+        services.async_handle_read_trend_log(
+            hass, _call({"device": "dev1", "instance": 4, "count": 10})
+        )
     )
     assert result == {
         "dev1": {
@@ -268,3 +275,15 @@ def test_read_trend_log_by_device(monkeypatch):
         }
     }
     assert client.read_trend_log.await_args.kwargs == {"start": None, "count": 10}
+
+
+def test_device_field_counts_as_target():
+    """Without it HA's entity schema rejects a call that only names a device."""
+    from custom_components.bacnet import services
+
+    data = {"device": ["dev1"], "property": "highLimit"}
+    assert services._target_or_device(data) is data
+    with pytest.raises(services.vol.Invalid):
+        services._target_or_device({"property": "highLimit"})
+    entity_call = {"entity_id": ["switch.fan"], "property": "highLimit"}
+    assert services._target_or_device(entity_call) is entity_call

@@ -7,11 +7,11 @@ bacnet.write_value  — write a presentValue once at a chosen priority,
                       or any other property (property field).
 
 bacnet.read_property — return any property of an object (by name or number).
-                       Targets object entities, or a device plus
+                       Targets object entities, or the device field plus
                        object_type/instance for objects not imported.
 
-bacnet.read_trend_log — return the records of a Trend Log object (device
-                        target), only those with a time and a value.
+bacnet.read_trend_log — return the records of a Trend Log object on a
+                        device, only those with a time and a value.
 
 bacnet.read_schedule  — return a Schedule object (weekly schedule, exceptions,
                         default, controlled objects) as response data.
@@ -68,19 +68,50 @@ ATTR_PROPERTY = "property"
 ATTR_ARRAY_INDEX = "array_index"
 ATTR_OBJECT_TYPE = "object_type"
 ATTR_INSTANCE = "instance"
+# A device selector field rather than a service target: hassfest doesn't
+# allow device filters on a target.
+ATTR_DEVICE = "device"
 PRESENT_VALUE = "presentValue"
 
 _PRIORITY = vol.All(vol.Coerce(int), vol.Range(min=1, max=16))
 # Only needed when targeting a device: the object to use on that device.
+_DEVICE = vol.All(cv.ensure_list, [cv.string])
 _OBJECT_FIELDS = {
+    vol.Optional(ATTR_DEVICE): _DEVICE,
     vol.Optional(ATTR_OBJECT_TYPE): vol.Any(vol.Coerce(int), cv.string),
     vol.Optional(ATTR_INSTANCE): vol.All(vol.Coerce(int), vol.Range(min=0)),
 }
 
+_TARGET_KEYS = ("entity_id", "device_id", "area_id", "floor_id", "label_id")
+
+
+def _target_or_device(data: dict[str, Any]) -> dict[str, Any]:
+    """Require a target, or the device field for objects not imported."""
+    if any(key in data for key in (*_TARGET_KEYS, ATTR_DEVICE)):
+        return data
+    raise vol.Invalid(
+        "must contain a target entity, or a device with object_type and instance"
+    )
+
+
+def _object_service_schema(fields: dict[Any, Any]) -> Any:
+    """Entity service schema in which the device field also counts as target.
+
+    cv.make_entity_service_schema insists on a target, which a call that
+    only picks a device (to reach an object that isn't imported) lacks.
+    """
+    return vol.All(
+        vol.Schema(
+            {vol.Remove("metadata"): dict, **fields, **cv.ENTITY_SERVICE_FIELDS}
+        ),
+        _target_or_device,
+    )
+
+
 RELINQUISH_SCHEMA = cv.make_entity_service_schema(
     {vol.Optional(ATTR_PRIORITY): _PRIORITY}
 )
-WRITE_VALUE_SCHEMA = cv.make_entity_service_schema(
+WRITE_VALUE_SCHEMA = _object_service_schema(
     {
         # bool first: vol.Coerce(float) would turn True into 1.0.
         vol.Required(ATTR_VALUE): vol.Any(bool, vol.Coerce(float), cv.string),
@@ -91,8 +122,9 @@ WRITE_VALUE_SCHEMA = cv.make_entity_service_schema(
 )
 ATTR_START = "start"
 ATTR_COUNT = "count"
-READ_TREND_LOG_SCHEMA = cv.make_entity_service_schema(
+READ_TREND_LOG_SCHEMA = vol.Schema(
     {
+        vol.Required(ATTR_DEVICE): _DEVICE,
         vol.Required(ATTR_INSTANCE): vol.All(vol.Coerce(int), vol.Range(min=0)),
         vol.Optional(ATTR_START): cv.datetime,
         vol.Optional(ATTR_COUNT, default=100): vol.All(
@@ -100,7 +132,7 @@ READ_TREND_LOG_SCHEMA = cv.make_entity_service_schema(
         ),
     }
 )
-READ_PROPERTY_SCHEMA = cv.make_entity_service_schema(
+READ_PROPERTY_SCHEMA = _object_service_schema(
     {
         vol.Required(ATTR_PROPERTY): vol.Any(vol.Coerce(int), cv.string),
         vol.Optional(ATTR_ARRAY_INDEX): vol.All(vol.Coerce(int), vol.Range(min=0)),
@@ -168,7 +200,10 @@ def _device_coordinators(
     """Resolve the call's BACnet device targets to (coordinator, device_id)."""
     registry = dr.async_get(hass)
     found = []
-    for device_id in sorted(_referenced(hass, call).referenced_devices):
+    device_ids = call.data[ATTR_DEVICE]
+    for device_id in sorted(
+        [device_ids] if isinstance(device_ids, str) else device_ids
+    ):
         device = registry.async_get(device_id)
         if device is None or not any(i[0] == DOMAIN for i in device.identifiers):
             continue
@@ -227,7 +262,7 @@ async def _check_permissions(
     A handler registered with async_register gets no permission check from
     Home Assistant, unlike a platform entity service. Checked before the
     targets are resolved, so the errors there reveal nothing about an
-    entity the user may not access. Device targets reach any object on
+    entity the user may not access. The device field reaches any object on
     the device, so they are for administrators only, as is *admin_only*
     (writing an object's configuration rather than its value).
     """
@@ -236,7 +271,7 @@ async def _check_permissions(
     user = await hass.auth.async_get_user(call.context.user_id)
     if user is None:
         raise UnknownUser(context=call.context)
-    if admin_only or ATTR_OBJECT_TYPE in call.data:
+    if admin_only or ATTR_DEVICE in call.data:
         if not user.is_admin:
             raise Unauthorized(context=call.context)
         return
@@ -251,7 +286,7 @@ async def _check_permissions(
 
 def _resolve(hass: HomeAssistant, call: ServiceCall) -> list[tuple[Any, dict, str]]:
     """Device + object fields when given, otherwise the targeted entities."""
-    if ATTR_OBJECT_TYPE in call.data:
+    if ATTR_DEVICE in call.data:
         return _device_targets(hass, call)
     return _targets(hass, call)
 

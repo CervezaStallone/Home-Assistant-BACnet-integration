@@ -18,8 +18,6 @@ write_value:
   target:
     entity:
       integration: bacnet
-    device:
-      integration: bacnet
   fields:
     value:
       required: true
@@ -36,6 +34,11 @@ write_value:
       example: "minimumOnTime"
       selector:
         text:
+    device:
+      selector:
+        device:
+          filter:
+            integration: bacnet
     object_type:
       example: "analog-value"
       selector:
@@ -50,8 +53,6 @@ read_property:
   target:
     entity:
       integration: bacnet
-    device:
-      integration: bacnet
   fields:
     property:
       required: true
@@ -63,6 +64,11 @@ read_property:
         number:
           min: 0
           mode: box
+    device:
+      selector:
+        device:
+          filter:
+            integration: bacnet
     object_type:
       example: "analog-value"
       selector:
@@ -74,10 +80,13 @@ read_property:
           mode: box
 
 read_trend_log:
-  target:
-    device:
-      integration: bacnet
   fields:
+    device:
+      required: true
+      selector:
+        device:
+          filter:
+            integration: bacnet
     instance:
       required: true
       selector:

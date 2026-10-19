@@ -207,10 +207,10 @@
       "message": "Lezen van {property} van object {object} mislukt: {error}"
     },
     "invalid_object": {
-      "message": "Geef zowel een objecttype (naam of nummer) als een instantie op bij een apparaat als doel."
+      "message": "Geef zowel een objecttype (naam of nummer) als een instantie op als een apparaat is opgegeven."
     },
     "no_bacnet_device": {
-      "message": "Kies een BACnet-apparaat van deze integratie als doel."
+      "message": "Kies een BACnet-apparaat van deze integratie in het veld Apparaat."
     }
   },
   "services": {
@@ -242,11 +242,15 @@
         },
         "object_type": {
           "name": "Objecttype",
-          "description": "Alleen bij een apparaat als doel: type van het object, op naam (analog-value, trend-log) of nummer. Zo bereik je ook objecten die niet zijn geïmporteerd."
+          "description": "Alleen met Apparaat: type van het object, op naam (analog-value, trend-log) of nummer. Zo bereik je ook objecten die niet zijn geïmporteerd."
         },
         "instance": {
           "name": "Objectinstantie",
-          "description": "Alleen bij een apparaat als doel: instantienummer van het object."
+          "description": "Alleen met Apparaat: instantienummer van het object."
+        },
+        "device": {
+          "name": "Apparaat",
+          "description": "Alleen voor objecten die niet zijn geïmporteerd: het BACnet-apparaat. Geef dan ook objecttype en instantie op; de doel-entiteit wordt genegeerd."
         }
       }
     },
@@ -294,11 +298,15 @@
         },
         "object_type": {
           "name": "Objecttype",
-          "description": "Alleen bij een apparaat als doel: type van het object, op naam (analog-value, trend-log) of nummer. Zo bereik je ook objecten die niet zijn geïmporteerd."
+          "description": "Alleen met Apparaat: type van het object, op naam (analog-value, trend-log) of nummer. Zo bereik je ook objecten die niet zijn geïmporteerd."
         },
         "instance": {
           "name": "Objectinstantie",
-          "description": "Alleen bij een apparaat als doel: instantienummer van het object."
+          "description": "Alleen met Apparaat: instantienummer van het object."
+        },
+        "device": {
+          "name": "Apparaat",
+          "description": "Alleen voor objecten die niet zijn geïmporteerd: het BACnet-apparaat. Geef dan ook objecttype en instantie op; de doel-entiteit wordt genegeerd."
         }
       }
     },
@@ -306,6 +314,10 @@
       "name": "Trendlog lezen",
       "description": "Leest de records van een BACnet Trend Log-object op een apparaat en geeft ze terug als antwoorddata. Alleen records met een tijd en een waarde worden teruggegeven.",
       "fields": {
+        "device": {
+          "name": "Apparaat",
+          "description": "Het BACnet-apparaat met de Trend Log."
+        },
         "instance": {
           "name": "Trend Log-instantie",
           "description": "Instantienummer van het Trend Log-object op het apparaat."

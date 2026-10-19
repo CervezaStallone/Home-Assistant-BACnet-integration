@@ -317,6 +317,7 @@ _ha_select_mod.SelectEntity = _SelectEntity
 
 _voluptuous = MagicMock()
 _voluptuous.Schema = dict  # vol.Schema({…}) → just a dict for stub purposes
+_voluptuous.Invalid = type("Invalid", (Exception,), {})
 
 _ha_flow = MagicMock()
 
