@@ -45,6 +45,7 @@ def _setup(monkeypatch, unique_id="bacnet_1001_4_2", platform="bacnet", ok=True)
 def _call(data):
     call = MagicMock()
     call.data = data
+    call.context.user_id = None  # system call: no permission check
     return call
 
 
@@ -106,3 +107,130 @@ def test_uses_non_deprecated_target_helper():
 
     source = inspect.getsource(services)
     assert "from homeassistant.helpers.target import (" in source
+
+
+# ---------------------------------------------------------------------------
+# bacnet.read_property / write_value property field (Reddit feedback)
+# ---------------------------------------------------------------------------
+
+
+def _with_device(monkeypatch, services, hass, coordinator, *, is_admin=True):
+    """Make the call target the HA device of *coordinator* only."""
+    device = MagicMock(config_entries={"e1"}, identifiers={("bacnet", "1001")})
+    device_registry = MagicMock()
+    device_registry.async_get.return_value = device
+    monkeypatch.setattr(services.dr, "async_get", lambda hass: device_registry)
+    monkeypatch.setattr(
+        services,
+        "async_extract_referenced_entity_ids",
+        lambda hass, call: MagicMock(
+            referenced=set(),
+            indirectly_referenced={"sensor.diag"},
+            referenced_devices={"dev1"},
+        ),
+    )
+    user = MagicMock(is_admin=is_admin)
+    hass.auth.async_get_user = AsyncMock(return_value=user)
+
+
+class TestReadProperty:
+    def test_read_by_entity(self, monkeypatch):
+        services, hass, client, _ = _setup(monkeypatch)
+        client.read_any_property = AsyncMock(return_value=30)
+        result = asyncio.run(
+            services.async_handle_read_property(hass, _call({"property": "67"}))
+        )
+        assert result == {
+            "switch.fan": {"object": "4:2", "property": "minimumOnTime", "value": 30}
+        }
+        assert client.read_any_property.await_args.args == (
+            "192.168.1.9",
+            4,
+            2,
+            "minimumOnTime",
+            None,
+        )
+
+    def test_read_by_device_and_object(self, monkeypatch):
+        services, hass, client, coordinator = _setup(monkeypatch)
+        _with_device(monkeypatch, services, hass, coordinator)
+        client.read_any_property = AsyncMock(return_value="normal")
+        result = asyncio.run(
+            services.async_handle_read_property(
+                hass,
+                _call(
+                    {
+                        "property": "eventState",
+                        "object_type": "trend-log",
+                        "instance": 5,
+                    }
+                ),
+            )
+        )
+        assert result == {
+            "dev1": {"object": "20:5", "property": "eventState", "value": "normal"}
+        }
+
+    def test_device_target_needs_admin(self, monkeypatch):
+        from homeassistant.exceptions import Unauthorized
+
+        services, hass, _, coordinator = _setup(monkeypatch)
+        _with_device(monkeypatch, services, hass, coordinator, is_admin=False)
+        call = _call({"property": "eventState", "object_type": 0, "instance": 5})
+        call.context.user_id = "u1"
+        with pytest.raises(Unauthorized):
+            asyncio.run(services.async_handle_read_property(hass, call))
+
+    def test_unknown_property(self, monkeypatch):
+        from homeassistant.exceptions import HomeAssistantError
+
+        services, hass, _, _ = _setup(monkeypatch)
+        with pytest.raises(HomeAssistantError) as err:
+            asyncio.run(
+                services.async_handle_read_property(hass, _call({"property": "bogus"}))
+            )
+        assert err.value.translation_key == "unknown_property"
+
+    def test_device_error(self, monkeypatch):
+        from homeassistant.exceptions import HomeAssistantError
+
+        from custom_components.bacnet.bacnet_client import BACnetPropertyError
+
+        services, hass, client, _ = _setup(monkeypatch)
+        client.read_any_property = AsyncMock(
+            side_effect=BACnetPropertyError("unknown-property")
+        )
+        with pytest.raises(HomeAssistantError) as err:
+            asyncio.run(
+                services.async_handle_read_property(
+                    hass, _call({"property": "minimumOnTime"})
+                )
+            )
+        assert err.value.translation_key == "property_read_failed"
+        assert err.value.translation_placeholders["error"] == "unknown-property"
+
+
+def test_write_value_other_property(monkeypatch):
+    services, hass, client, _ = _setup(monkeypatch)
+    asyncio.run(
+        services.async_handle_write_value(
+            hass, _call({"value": 30, "property": "minimum-on-time"})
+        )
+    )
+    kwargs = client.write_property.await_args.kwargs
+    assert kwargs["property_name"] == "minimumOnTime"
+    assert kwargs["value"] == 30
+
+
+def test_write_value_checks_control_permission(monkeypatch):
+    from homeassistant.exceptions import Unauthorized
+
+    services, hass, client, _ = _setup(monkeypatch)
+    user = MagicMock()
+    user.permissions.check_entity.return_value = False
+    hass.auth.async_get_user = AsyncMock(return_value=user)
+    call = _call({"value": 1.0})
+    call.context.user_id = "u1"
+    with pytest.raises(Unauthorized):
+        asyncio.run(services.async_handle_write_value(hass, call))
+    client.write_property.assert_not_awaited()

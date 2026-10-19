@@ -190,6 +190,18 @@
     },
     "schedule_failed": {
       "message": "Schedule {entity_id}: {error}"
+    },
+    "unknown_property": {
+      "message": "Unknown BACnet property: {property}. Use the property name (e.g. minimumOnTime) or its number (e.g. 67)."
+    },
+    "property_read_failed": {
+      "message": "Reading {property} of object {object} failed: {error}"
+    },
+    "invalid_object": {
+      "message": "Give both an object type (name or number) and an instance when targeting a device."
+    },
+    "no_bacnet_device": {
+      "message": "Pick a BACnet device of this integration as the target."
     }
   },
   "services": {
@@ -205,15 +217,27 @@
     },
     "write_value": {
       "name": "Write value",
-      "description": "Write a value to a BACnet object's present value once, at a chosen priority, without changing the device's Write Priority setting.",
+      "description": "Write a value once: an object's present value at a chosen priority (without changing the device's Write Priority setting), or any other property.",
       "fields": {
         "value": {
           "name": "Value",
-          "description": "Value to write. Binary objects: 0 = inactive, 1 = active."
+          "description": "Value to write. Binary objects: 0 = inactive, 1 = active. Other properties take a number, true/false or text."
         },
         "priority": {
           "name": "Priority",
           "description": "Priority level to write at (1-16). Defaults to the device's Write Priority."
+        },
+        "property": {
+          "name": "Property",
+          "description": "BACnet property to write, by name (minimumOnTime) or number (67). Defaults to the present value; the priority only applies to the present value."
+        },
+        "object_type": {
+          "name": "Object type",
+          "description": "Only when targeting a device: type of the object to use, by name (analog-value, trend-log) or number. Reaches objects that were not imported."
+        },
+        "instance": {
+          "name": "Object instance",
+          "description": "Only when targeting a device: instance number of the object."
         }
       }
     },
@@ -244,6 +268,28 @@
         "allow_removal": {
           "name": "Allow removal",
           "description": "Allow the exception schedule to be written even if that removes exceptions the device currently has."
+        }
+      }
+    },
+    "read_property": {
+      "name": "Read property",
+      "description": "Read any property of a BACnet object and return it as response data.",
+      "fields": {
+        "property": {
+          "name": "Property",
+          "description": "BACnet property to read, by name (minimumOnTime, eventState) or number (67)."
+        },
+        "array_index": {
+          "name": "Array index",
+          "description": "Read one element of an array property (0 = number of elements)."
+        },
+        "object_type": {
+          "name": "Object type",
+          "description": "Only when targeting a device: type of the object to use, by name (analog-value, trend-log) or number. Reaches objects that were not imported."
+        },
+        "instance": {
+          "name": "Object instance",
+          "description": "Only when targeting a device: instance number of the object."
         }
       }
     }

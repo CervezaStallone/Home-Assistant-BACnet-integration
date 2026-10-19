@@ -49,6 +49,7 @@ from bacpypes3.primitivedata import (
     Integer,
     Null,
     ObjectIdentifier,
+    ObjectType,
     Real,
     Time,
     Unsigned,
@@ -2857,7 +2858,7 @@ class BACnetClient:
         Proprietary or constructed properties have no simple datatype; the
         value is then sent as the matching primitive and the device decides.
         """
-        object_class = get_vendor_info(0).get_object_class(type_str)
+        object_class = get_vendor_info(0).get_object_class(ObjectType(type_str))
         datatype = (
             object_class.get_property_type(property_name) if object_class else None
         )
@@ -2867,6 +2868,8 @@ class BACnetClient:
             if issubclass(datatype, Real | Double):
                 return datatype(float(value))
             if issubclass(datatype, Boolean):
+                if isinstance(value, str):
+                    value = value.strip().lower() in ("true", "1", "on", "active")
                 return datatype(bool(value))
             if issubclass(datatype, Enumerated) and isinstance(value, str):
                 return datatype(value)
@@ -3003,9 +3006,13 @@ class BACnetClient:
         for key, val in cls._TYPE_STR_TO_INT.items():
             if key.lower() == s_lower:
                 return val
-        return None
+        # Any other standard type (e.g. "trend-log") by its BACnet name.
+        try:
+            return int(ObjectType(s))
+        except (ValueError, TypeError):
+            return None
 
     @classmethod
     def _int_to_object_type_str(cls, type_int: int) -> str:
         """Convert integer object type to BACpypes3 type string."""
-        return cls._INT_TO_TYPE_STR.get(type_int, f"type-{type_int}")
+        return cls._INT_TO_TYPE_STR.get(type_int) or str(ObjectType(type_int))

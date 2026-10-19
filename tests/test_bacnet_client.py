@@ -1041,3 +1041,25 @@ def test_write_other_property_uses_its_datatype_and_no_priority():
     call = client._app.calls[0]
     assert type(call["value"]) is Unsigned and call["value"] == 30
     assert "priority" not in call
+
+
+def test_int_to_object_type_str_knows_every_standard_type():
+    """read_property on a non-imported object (e.g. a Trend Log) needs its name."""
+    assert BACnetClient._int_to_object_type_str(20) == "trend-log"
+    assert BACnetClient._int_to_object_type_str(600) == "600"
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"), [("false", False), ("On", True), ("0", False)]
+)
+def test_boolean_property_from_text(text, expected):
+    """The action's value field is text; "false" must not become True."""
+    value = BACnetClient._value_for_property("binary-output", "outOfService", text)
+    assert type(value).__name__ == "Boolean"
+    assert bool(value) is expected
+
+
+def test_real_property_written_as_real():
+    """highLimit on an analog object is a REAL, not Unsigned."""
+    value = BACnetClient._value_for_property("analog-value", "highLimit", 30)
+    assert type(value).__name__ == "Real"

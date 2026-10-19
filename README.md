@@ -49,6 +49,7 @@ In plain terms: if your building has BACnet controllers, thermostats, sensors, o
 - **Selective import** — only import the objects you actually need
 - **Configurable write priority** — per-device select entity to change the BACnet write priority (disabled by default)
 - **Relinquish & one-off writes** — `bacnet.relinquish` and `bacnet.write_value` services for full Priority Array control
+- **Any BACnet property** *(1.0.50 beta)* — read or write any property (e.g. `minimumOnTime`, property 67) with `bacnet.read_property` and `bacnet.write_value`, also on objects you didn't import
 - **Schedules** *(1.0.50 beta)* — BACnet Schedule objects as a sensor, with `bacnet.read_schedule` and `bacnet.write_schedule` services for the weekly schedule, exceptions and default
 - **Device limits & state texts** — number limits from `minPresValue`/`maxPresValue`/`resolution`, multi-state objects as a select with their `stateText` labels
 - **Climate with a real room temperature** — pair a setpoint with a separate temperature object
@@ -252,9 +253,10 @@ Binary outputs use the `Enumerated` BACnet type (`0 = inactive`, `1 = active`), 
 | Service | What it does |
 |---|---|
 | `bacnet.relinquish` | Release Home Assistant's command on an object (write Null) so lower priorities or the Relinquish Default take over. Optional `priority` (1–16), default: the device's Write Priority. |
-| `bacnet.write_value` | Write a value once at a chosen `priority`, without changing the device's Write Priority setting. Binary objects: `0` = inactive, `1` = active. |
+| `bacnet.write_value` | Write a value once at a chosen `priority`, without changing the device's Write Priority setting. Binary objects: `0` = inactive, `1` = active. *(1.0.50 beta)* With `property`, writes any other property instead (no priority). |
+| `bacnet.read_property` *(1.0.50 beta)* | Read any property of an object and return it as response data. |
 
-Both work on BACnet switch, number and climate entities:
+`bacnet.relinquish` works on BACnet switch, number and climate entities:
 
 ```yaml
 action: bacnet.relinquish
@@ -263,6 +265,49 @@ target:
 data:
   priority: 8
 ```
+
+### Other properties *(1.0.50 beta)*
+
+> **Beta:** available in the 1.0.50 pre-releases (enable *Show beta versions* in HACS).
+
+Entities show an object's present value. To read or change any other property — a fan's minimum run time (`minimumOnTime`, property 67), an alarm limit (`highLimit`), `outOfService` — use `bacnet.read_property` and the `property` field of `bacnet.write_value`. The property can be given by name (`minimumOnTime` or `minimum-on-time`) or by number (`67`).
+
+```yaml
+action: bacnet.read_property
+target:
+  entity_id: switch.ahu_1_ventilation_fan
+data:
+  property: minimumOnTime
+response_variable: result
+```
+
+returns `{"switch.ahu_1_ventilation_fan": {"object": "4:3", "property": "minimumOnTime", "value": 300}}`.
+
+```yaml
+action: bacnet.write_value
+target:
+  entity_id: switch.ahu_1_ventilation_fan
+data:
+  property: minimumOnTime
+  value: 600
+```
+
+Writes to other properties never carry a priority; only the present value has a Priority Array. Values are sent in the property's own BACnet type.
+
+**Objects you didn't import:** target the BACnet *device* instead of an entity and add `object_type` (name such as `analog-value` or `trend-log`, or the number) and `instance`. This is only allowed for administrators, because it reaches every object on the device.
+
+```yaml
+action: bacnet.read_property
+target:
+  device_id: 0123456789abcdef0123456789abcdef
+data:
+  object_type: analog-value
+  instance: 12
+  property: highLimit
+response_variable: result
+```
+
+If the device refuses (for example `unknown-property`), the action fails with the device's error.
 
 ### Schedules *(1.0.50 beta)*
 

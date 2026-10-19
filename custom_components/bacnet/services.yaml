@@ -18,22 +18,59 @@ write_value:
   target:
     entity:
       integration: bacnet
-      domain:
-        - switch
-        - number
-        - climate
+    device:
+      integration: bacnet
   fields:
     value:
       required: true
+      example: "21.5"
       selector:
-        number:
-          mode: box
-          step: any
+        text:
     priority:
       selector:
         number:
           min: 1
           max: 16
+          mode: box
+    property:
+      example: "minimumOnTime"
+      selector:
+        text:
+    object_type:
+      example: "analog-value"
+      selector:
+        text:
+    instance:
+      selector:
+        number:
+          min: 0
+          mode: box
+
+read_property:
+  target:
+    entity:
+      integration: bacnet
+    device:
+      integration: bacnet
+  fields:
+    property:
+      required: true
+      example: "minimumOnTime"
+      selector:
+        text:
+    array_index:
+      selector:
+        number:
+          min: 0
+          mode: box
+    object_type:
+      example: "analog-value"
+      selector:
+        text:
+    instance:
+      selector:
+        number:
+          min: 0
           mode: box
 
 read_schedule:
