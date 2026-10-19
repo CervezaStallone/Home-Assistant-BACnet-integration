@@ -19,6 +19,7 @@ import errno
 import hashlib
 import json
 import logging
+import math
 import socket
 from collections.abc import Awaitable, Callable
 from typing import Any, ClassVar
@@ -1478,9 +1479,16 @@ class BACnetClient:
             "commandable": bool(commandable),
         }
         if obj_type in ANALOG_TYPES:
-            metadata["min_value"] = _pick("minPresValue", "min_value", float)
-            metadata["max_value"] = _pick("maxPresValue", "max_value", float)
-            metadata["resolution"] = _pick("resolution", "resolution", float)
+            # NaN/inf ("no limit") would never compare equal to itself and
+            # isn't valid JSON, so every metadata check reloaded the entry
+            # in a loop (issue #62).
+            def _finite(value):
+                number = float(value)
+                return number if math.isfinite(number) else None
+
+            metadata["min_value"] = _pick("minPresValue", "min_value", _finite)
+            metadata["max_value"] = _pick("maxPresValue", "max_value", _finite)
+            metadata["resolution"] = _pick("resolution", "resolution", _finite)
         if obj_type in MULTI_STATE_TYPES:
             metadata["number_of_states"] = _pick(
                 "numberOfStates", "number_of_states", int

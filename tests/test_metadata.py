@@ -151,3 +151,35 @@ class TestBatchedMetadata:
             del _DEVICE[("binary-input", 4)]
         assert "state_text" not in result["3:4"]
         assert "min_value" not in result["3:4"]
+
+
+# ---------------------------------------------------------------------------
+# Issue #62: a NaN metadata value is never equal to itself, so every check
+# reported a change and reloaded the entry in a loop.
+# ---------------------------------------------------------------------------
+
+
+def test_build_metadata_stores_non_finite_limits_as_none():
+    raw = {
+        "minPresValue": float("nan"),
+        "maxPresValue": float("inf"),
+        "resolution": float("nan"),
+    }
+    meta = BACnetClient(local_ip="127.0.0.1", local_port=47830)._build_metadata(
+        {"object_type": 0, "instance": 1}, raw
+    )
+    assert meta["min_value"] is None
+    assert meta["max_value"] is None
+    assert meta["resolution"] is None
+
+
+def test_diff_metadata_treats_stored_nan_as_unchanged():
+    from custom_components.bacnet.coordinator import BACnetCoordinator
+
+    nan = float("nan")
+    assert (
+        BACnetCoordinator._diff_metadata({"min_value": nan}, {"min_value": nan}) == {}
+    )
+    assert BACnetCoordinator._diff_metadata(
+        {"min_value": nan}, {"min_value": None}
+    ) == {"min_value": None}
