@@ -21,9 +21,9 @@
 </p>
 
 <p align="center">
-  <a href="https://www.brdc.nl/en/home-assistant-bacnet-integration/">Project page</a> ·
-  <a href="https://www.brdc.nl/nl/home-assistant-bacnet-integration/">Nederlands</a> ·
-  <a href="https://www.brdc.nl/de/home-assistant-bacnet-integration/">Deutsch</a>
+  <a href="https://brdc.nl/en/home-assistant-bacnet-integration/">Project page</a> ·
+  <a href="https://brdc.nl/nl/home-assistant-bacnet-integration/">Nederlands</a> ·
+  <a href="https://brdc.nl/de/home-assistant-bacnet-integration/">Deutsch</a>
 </p>
 
 ---
