@@ -139,8 +139,10 @@ Devices that users have reported working with this integration. BACnet is a stan
 |---|---|---|
 | Control Solutions | Babel Buster BB2-7010-01 | 2.39.1 |
 | Control Solutions | Babel Buster BB3-7101 | 3.15.18 |
+| Global Control 5 | iSMA-B-MIX18-IP | 6.5.3 |
 | Kieback&Peter | DDC4000 | — |
 | Kieback&Peter | DDC420 | — |
+| Microtrol | Black Pear 2 | 0.8.6 |
 | Signify | Interact BACnet gateway | — |
 | Tridium | Niagara JACE | — |
 <!-- tested-devices:end -->
