@@ -38,6 +38,8 @@
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=CervezaStallone&repository=Home-Assistant-BACnet-integration&category=integration)
 </p>
 
+**Contents:** [What it does](#what-does-this-integration-do) · [Features](#features-at-a-glance) · [Screenshots](#screenshots) · [Object types](#supported-object-types) · [Tested devices](#tested-devices) · [Installation](#installation) · [Getting started](#getting-started) · [Configuration](#configuration-options) · [Entity attributes](#entity-attributes) · [Device information](#device-information) · [How writes work](#how-writes-work) · [Examples](#examples) · [Troubleshooting](#troubleshooting) · [Requirements](#requirements) · [Contributing](#contributing) · [License](#license)
+
 ## What does this integration do?
 
 This custom integration lets Home Assistant talk to **BACnet/IP** devices — the protocol used in professional building automation for HVAC, lighting, access control, and energy management.
