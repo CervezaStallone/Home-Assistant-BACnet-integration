@@ -38,7 +38,7 @@
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=CervezaStallone&repository=Home-Assistant-BACnet-integration&category=integration)
 </p>
 
-**Contents:** [What it does](#what-does-this-integration-do) · [Features](#features-at-a-glance) · [Screenshots](#screenshots) · [Object types](#supported-object-types) · [Tested devices](#tested-devices) · [Installation](#installation) · [Getting started](#getting-started) · [Configuration](#configuration-options) · [Entity attributes](#entity-attributes) · [Device information](#device-information) · [How writes work](#how-writes-work) · [Examples](#examples) · [Troubleshooting](#troubleshooting) · [Requirements](#requirements) · [Contributing](#contributing) · [License](#license)
+**Contents:** [What it does](#what-does-this-integration-do) · [Features](#features-at-a-glance) · [Safety](#safety-on-a-live-site) · [Screenshots](#screenshots) · [Object types](#supported-object-types) · [Tested devices](#tested-devices) · [Installation](#installation) · [Getting started](#getting-started) · [Configuration](#configuration-options) · [Entity attributes](#entity-attributes) · [Device information](#device-information) · [How writes work](#how-writes-work) · [Examples](#examples) · [Troubleshooting](#troubleshooting) · [Requirements](#requirements) · [Contributing](#contributing) · [License](#license)
 
 ## What does this integration do?
 
@@ -76,6 +76,20 @@ In plain terms: if your building has BACnet controllers, thermostats, sensors, o
 - **Diagnostics** — a diagnostics download and health sensors for troubleshooting
 - **Efficient on the network** — batched ReadPropertyMultiple reads that adapt to what the device can handle
 - **English and Dutch** user interface
+
+---
+
+## Safety on a live site
+
+What this integration writes to your devices, so you know before trying it on a running building:
+
+- **Writes only on your action** — Home Assistant writes a value only when you (or an automation) switch, set, or call a service. Discovery, polling and COV subscriptions don't change any values.
+- **One exception: COV increment** — with COV enabled, the [COV increment](#configuration-options) option is written to the `covIncrement` property of each imported analog object, if the device holds a different value. Set it to `0` to leave the device's own value alone.
+- **Priority 16 by default** — entities write at the lowest priority, so anything at 1–15, including a Manual Operator command at 8, still wins. The [Write Priority](#write-priority-entity) select offers 8, 9 and 12–16.
+- **Services can go higher** — `bacnet.write_value` and `bacnet.relinquish` accept any priority from 1 to 16. A write at 1–7 outranks a Manual Operator command; use those levels only on purpose.
+- **Turning off is a command** — switching off writes `inactive` at the same priority; it does not release the output. Use `bacnet.relinquish` to hand control back.
+- **Schedules have no priority** *(1.0.50 beta)* — `bacnet.write_schedule` changes the Schedule object's configuration itself. It refuses to remove existing exceptions unless you set `allow_removal`, and reads the result back. See [Schedules](#schedules-1050-beta).
+- **No read-only mode yet** — to keep an object read-only, import it as a `sensor` or `binary_sensor` (see [Customize objects](#customize-objects)), or leave it out. Services can still write to any object on the device.
 
 ---
 
