@@ -12,6 +12,12 @@
   <strong>HACS Compatible</strong> · GUI-only setup · Real-time COV updates · ASHRAE 135 compliant
 </p>
 
+<p align="center">
+  <a href="https://www.brdc.nl/en/home-assistant-bacnet-integration/">Project page</a> ·
+  <a href="https://www.brdc.nl/nl/home-assistant-bacnet-integration/">Nederlands</a> ·
+  <a href="https://www.brdc.nl/de/home-assistant-bacnet-integration/">Deutsch</a>
+</p>
+
 ---
 
 <a href="https://buymeacoffee.com/Cervezastalone" target="_blank" title="buymeacoffee">
