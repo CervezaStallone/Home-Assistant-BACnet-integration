@@ -1321,3 +1321,40 @@ def test_first_cov_metadata_change_fixes_every_object_in_one_reload():
 
     assert [o["object_name"] for o in coord.objects] == ["CmdOpn", "BtnLgtOff"]
     coord.hass.config_entries.async_update_entry.assert_called_once()
+
+
+def test_cov_metadata_check_keeps_values_the_device_did_not_return():
+    """Issue #62 (second log): a COV-triggered check only passed name,
+    description, units and commandable as known values. When stateText or
+    minPresValue didn't come back, they became None — a "change" that
+    reloaded the entry — and the next sweep restored them: another reload,
+    forever."""
+    import asyncio
+
+    from custom_components.bacnet.bacnet_client import BACnetClient
+
+    msv = {
+        "object_type": 19,
+        "instance": 22,
+        "object_name": "Mode",
+        "description": "",
+        "commandable": False,
+        "state_text": ["Comfort", "Standby", "Economy", "Protection"],
+        "number_of_states": 4,
+    }
+    coord = _make_coordinator(objects=[msv])
+    coord.entry.data[CONF_SELECTED_OBJECTS] = coord.objects
+
+    class _App:  # answers the name only, like a device that is busy
+        async def read_property(self, addr, oid, prop, array_index=None):
+            return "Mode" if prop == "objectName" else None
+
+    client = BACnetClient(local_ip="127.0.0.1", local_port=47860)
+    client._app = _App()
+    coord.client = client
+
+    asyncio.run(coord._refresh_object_metadata_now("19:22"))
+
+    assert coord.objects[0]["state_text"] == msv["state_text"]
+    assert coord.objects[0]["number_of_states"] == 4
+    coord.hass.config_entries.async_update_entry.assert_not_called()
