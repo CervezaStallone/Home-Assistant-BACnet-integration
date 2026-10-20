@@ -4,6 +4,14 @@
 <h1 align="center">BACnet IP Integration for Home Assistant</h1>
 
 <p align="center">
+  <a href="https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/releases/latest"><img src="https://img.shields.io/github/v/release/CervezaStallone/Home-Assistant-BACnet-integration?label=Version&color=gold" alt="Version"></a>
+  <img src="https://img.shields.io/badge/Home%20Assistant-2024.4.0%2B-41BDF5" alt="Home Assistant 2024.4.0+">
+  <a href="https://hacs.xyz"><img src="https://img.shields.io/badge/HACS-Custom-orange" alt="HACS Custom"></a>
+  <a href="https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/actions/workflows/tests.yml"><img src="https://img.shields.io/github/actions/workflow/status/CervezaStallone/Home-Assistant-BACnet-integration/tests.yml?branch=master&label=Tests" alt="Tests"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/CervezaStallone/Home-Assistant-BACnet-integration?label=License" alt="License"></a>
+</p>
+
+<p align="center">
   Connect your building automation system to Home Assistant — no YAML, no hassle.<br>
   Monitor sensors, control outputs, and automate your BACnet/IP devices through a simple GUI.
 </p>
