@@ -268,3 +268,47 @@ class TestConcurrentSetupSharesClient:
 
         assert factory.call_count == 1
         assert hass.data["bacnet"]["_port_clients"][47808]["ref_count"] == 2
+
+
+def test_entities_left_on_an_old_platform_are_removed(monkeypatch):
+    """Changing an object's type (number -> climate) left the old entity
+    behind as unavailable, also after a reload (found while making the
+    README screenshots)."""
+    from unittest.mock import MagicMock
+
+    import custom_components.bacnet.__init__ as integration
+
+    def _entry(entity_id, unique_id):
+        return MagicMock(
+            entity_id=entity_id,
+            domain=entity_id.split(".")[0],
+            unique_id=unique_id,
+        )
+
+    entries = [
+        _entry("number.ahu_setpoint", "bacnet_1001_2_1"),  # now climate
+        _entry("climate.ahu_setpoint", "bacnet_1001_2_1"),
+        _entry("sensor.ahu_mode", "bacnet_1001_19_1"),  # now select
+        _entry("number.fan_min_on", "bacnet_1001_4_1_minimumOnTime"),
+        _entry("sensor.ahu_last_poll", "bacnet_1001_last_successful_poll"),
+        _entry("sensor.removed_object", "bacnet_1001_0_9"),  # not selected
+    ]
+    registry = MagicMock()
+    monkeypatch.setattr(integration.er, "async_get", lambda hass: registry)
+    monkeypatch.setattr(
+        integration.er, "async_entries_for_config_entry", lambda reg, eid: entries
+    )
+    objects = [
+        {"object_type": 2, "instance": 1, "commandable": True},
+        {"object_type": 19, "instance": 1, "commandable": True},
+        {"object_type": 4, "instance": 1},
+    ]
+    integration._remove_entities_on_old_platforms(
+        MagicMock(),
+        MagicMock(entry_id="e1"),
+        objects,
+        {"2:1": "climate", "19:1": "select"},
+        {"4:1": ["minimumOnTime"]},
+    )
+    removed = sorted(c.args[0] for c in registry.async_remove.call_args_list)
+    assert removed == ["number.ahu_setpoint", "sensor.ahu_mode"]

@@ -26,6 +26,19 @@
     "issue": 48
   },
   {
+    "vendor": "Global Control 5",
+    "model": "iSMA-B-MIX18-IP",
+    "firmware": "6.5.3",
+    "version": "1.0.50-beta.2",
+    "connection": "",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "COV on AI, AO, BI, BO and BV; AV and MSV fall back to polling.",
+    "issue": 52
+  },
+  {
     "vendor": "Kieback&Peter",
     "model": "DDC4000",
     "firmware": "",
@@ -49,6 +62,20 @@
       "Schedules"
     ],
     "notes": "Weekly schedules read and written, including single-day writes.",
+    "issue": 52
+  },
+  {
+    "vendor": "Microtrol",
+    "model": "Black Pear 2",
+    "firmware": "0.8.6",
+    "version": "1.0.50-beta.2",
+    "connection": "",
+    "works": [
+      "Reading values",
+      "COV (live updates)",
+      "Writing values"
+    ],
+    "notes": "1092 objects; no segmentation (max APDU 480), indexed object list reads. COV on about a quarter of the objects. Only the group master unit accepts writes.",
     "issue": 52
   },
   {

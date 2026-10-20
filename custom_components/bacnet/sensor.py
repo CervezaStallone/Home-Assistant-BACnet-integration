@@ -62,11 +62,7 @@ DIAGNOSTIC_SENSORS: tuple[_DiagnosticSensor, ...] = (
     _DiagnosticSensor(
         "cov_subscriptions", lambda c: len(c._cov_subscriptions), enabled_default=False
     ),
-    _DiagnosticSensor(
-        "consecutive_failed_polls",
-        lambda c: c._consecutive_failures,
-        enabled_default=False,
-    ),
+    _DiagnosticSensor("consecutive_failed_polls", lambda c: c._consecutive_failures),
 )
 
 

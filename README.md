@@ -12,6 +12,12 @@
   <strong>HACS Compatible</strong> · GUI-only setup · Real-time COV updates · ASHRAE 135 compliant
 </p>
 
+<p align="center">
+  <a href="https://www.brdc.nl/en/home-assistant-bacnet-integration/">Project page</a> ·
+  <a href="https://www.brdc.nl/nl/home-assistant-bacnet-integration/">Nederlands</a> ·
+  <a href="https://www.brdc.nl/de/home-assistant-bacnet-integration/">Deutsch</a>
+</p>
+
 ---
 
 <a href="https://buymeacoffee.com/Cervezastalone" target="_blank" title="buymeacoffee">
@@ -133,8 +139,10 @@ Devices that users have reported working with this integration. BACnet is a stan
 |---|---|---|
 | Control Solutions | Babel Buster BB2-7010-01 | 2.39.1 |
 | Control Solutions | Babel Buster BB3-7101 | 3.15.18 |
+| Global Control 5 | iSMA-B-MIX18-IP | 6.5.3 |
 | Kieback&Peter | DDC4000 | — |
 | Kieback&Peter | DDC420 | — |
+| Microtrol | Black Pear 2 | 0.8.6 |
 | Signify | Interact BACnet gateway | — |
 | Tridium | Niagara JACE | — |
 <!-- tested-devices:end -->
@@ -277,7 +285,7 @@ Every device also gets diagnostic sensors (under *Diagnostic* on the device page
 |---|---|
 | Last successful poll | Yes |
 | COV subscriptions | No |
-| Consecutive failed polls | No |
+| Consecutive failed polls | Yes |
 
 They stay available while the device is offline, which is exactly when they're useful.
 
