@@ -447,10 +447,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     - Polling tasks
     - BACnet network connection
     """
-    # TEMP(#62): remove once #62 is resolved — shows what triggers the unload.
-    _LOGGER.warning(
-        "TEMP(#62) unloading BACnet entry %s", entry.entry_id, stack_info=True
-    )
     runtime_data = getattr(entry, "runtime_data", None)
     if runtime_data is None:
         return True
