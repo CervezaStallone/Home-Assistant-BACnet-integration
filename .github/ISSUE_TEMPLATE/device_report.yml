@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for sharing! Once the maintainer has checked the report, the device is added to the [tested devices list](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration#tested-devices) with a link back to this issue.
+        Thanks for sharing! Once the maintainer has checked the report, the device is added to the [tested devices list](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration#tested-devices).
 
         Something doesn't work? Please open a [bug report](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/issues/new?template=bug_report.yml) instead.
 

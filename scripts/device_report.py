@@ -43,19 +43,7 @@ def entry_from_issue(body: str, issue: int) -> dict:
     return entry
 
 
-REPO_URL = "https://github.com/CervezaStallone/Home-Assistant-BACnet-integration"
-WORKS = (
-    "Reading values",
-    "COV (live updates)",
-    "Writing values",
-    "Schedules",
-    "Alarms",
-    "Trend logs",
-)
-_HEADER = (
-    "| Manufacturer | Model | Firmware | Tested with | Connection | What works | Report |\n"
-    "|---|---|---|---|---|---|---|"
-)
+_HEADER = "| Manufacturer | Model | Firmware |\n|---|---|---|"
 
 
 def _clean(text: str, limit: int = 60) -> str:
@@ -66,16 +54,15 @@ def _clean(text: str, limit: int = 60) -> str:
 
 
 def render_table(devices: list[dict]) -> str:
-    """Markdown table of the tested devices, sorted by manufacturer and model."""
+    """Markdown table of the tested devices, sorted by manufacturer and model.
+
+    Only what it works on; the report details stay in tested_devices.json.
+    """
     rows = [_HEADER]
     for d in sorted(devices, key=lambda d: (d["vendor"].lower(), d["model"].lower())):
-        works = ", ".join(w for w in WORKS if w in d.get("works", []))
-        issue = int(d["issue"])
         rows.append(
             f"| {_clean(d['vendor'])} | {_clean(d['model'])} "
-            f"| {_clean(d.get('firmware', '')) or '—'} | {_clean(d['version'])} "
-            f"| {_clean(d.get('connection', '')) or '—'} | {works or '—'} "
-            f"| [#{issue}]({REPO_URL}/issues/{issue}) |"
+            f"| {_clean(d.get('firmware', '')) or '—'} |"
         )
     return "\n".join(rows)
 

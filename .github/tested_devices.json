@@ -1,5 +1,31 @@
 [
   {
+    "vendor": "Control Solutions",
+    "model": "Babel Buster BB2-7010-01",
+    "firmware": "2.39.1",
+    "version": "1.0.49.1",
+    "connection": "",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": 48
+  },
+  {
+    "vendor": "Control Solutions",
+    "model": "Babel Buster BB3-7101",
+    "firmware": "3.15.18",
+    "version": "1.0.49.1",
+    "connection": "",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": 48
+  },
+  {
     "vendor": "Kieback&Peter",
     "model": "DDC4000",
     "firmware": "",
@@ -24,6 +50,20 @@
     ],
     "notes": "Weekly schedules read and written, including single-day writes.",
     "issue": 52
+  },
+  {
+    "vendor": "Signify",
+    "model": "Interact BACnet gateway",
+    "firmware": "",
+    "version": "1.0.49",
+    "connection": "",
+    "works": [
+      "Reading values",
+      "COV (live updates)",
+      "Writing values"
+    ],
+    "notes": "Occupancy sensors and light level control, two gateways.",
+    "issue": 50
   },
   {
     "vendor": "Tridium",
