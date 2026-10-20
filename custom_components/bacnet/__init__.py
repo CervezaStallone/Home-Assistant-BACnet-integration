@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from typing import Any
 
 import homeassistant.helpers.config_validation as cv
@@ -111,6 +112,44 @@ def _get_platforms_in_use(
 # ---------------------------------------------------------------------------
 # Entity registry migration
 # ---------------------------------------------------------------------------
+
+
+def _remove_entities_on_old_platforms(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    objects: list[dict],
+    domain_overrides: dict[str, str],
+    extra_properties: dict[str, list[str]],
+) -> None:
+    """Remove an object's entity left on a platform it no longer uses.
+
+    The unique_id stays the same when an object's type changes (e.g.
+    number -> climate), so the old entity would otherwise stay behind as
+    unavailable. Entities of objects that are no longer selected are left
+    alone: their settings come back when the object is re-added (#30).
+    """
+    expected: dict[str, str] = {}
+    for obj in objects:
+        key = f"{obj['object_type']}_{obj['instance']}"
+        expected[key] = _domain_for_object(obj, domain_overrides)
+        for prop in extra_properties.get(object_key(obj), []):
+            expected[f"{key}_{prop}"] = extra_property_platform(
+                prop, obj["object_type"]
+            )
+    ent_reg = er.async_get(hass)
+    for entity_entry in er.async_entries_for_config_entry(ent_reg, entry.entry_id):
+        match = re.match(
+            r"^bacnet_[^_]+_(\d+_\d+(?:_[A-Za-z0-9]+)?)$", entity_entry.unique_id
+        )
+        if match is None or match[1] not in expected:
+            continue
+        if entity_entry.domain != expected[match[1]]:
+            _LOGGER.debug(
+                "Removing %s: its object is now on the %s platform",
+                entity_entry.entity_id,
+                expected[match[1]],
+            )
+            ent_reg.async_remove(entity_entry.entity_id)
 
 
 def _migrate_unique_ids(
@@ -364,6 +403,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # ---- 6. Migrate legacy unique_ids (1.0.17 → 1.0.18+ format) ----
     # Must run before platforms load so entities find the migrated registry entries.
     _migrate_unique_ids(hass, entry, entry.data.get("device_id"))
+    _remove_entities_on_old_platforms(
+        hass, entry, selected_objects, domain_overrides, extra_properties
+    )
 
     _async_check_stale_overrides(hass, entry, selected_objects, domain_overrides)
 
