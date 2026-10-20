@@ -84,7 +84,7 @@ In plain terms: if your building has BACnet controllers, thermostats, sensors, o
 What this integration writes to your devices, so you know before trying it on a running building:
 
 - **Writes only on your action** — Home Assistant writes a value only when you (or an automation) switch, set, or call a service. Discovery, polling and COV subscriptions don't change any values.
-- **One exception: COV increment** — with COV enabled, the [COV increment](#configuration-options) option is written to the `covIncrement` property of each imported analog object, if the device holds a different value. Set it to `0` to leave the device's own value alone.
+- **One exception: COV increment** — if you set the [COV increment](#configuration-options) option above `0`, it is written to the `covIncrement` property of each imported analog object (with COV) whose device value differs. The default `0` leaves the device's own value alone.
 - **Priority 16 by default** — entities write at the lowest priority, so anything at 1–15, including a Manual Operator command at 8, still wins. The [Write Priority](#write-priority-entity) select offers 8, 9 and 12–16.
 - **Services can go higher** — `bacnet.write_value` and `bacnet.relinquish` accept any priority from 1 to 16. A write at 1–7 outranks a Manual Operator command; use those levels only on purpose.
 - **Turning off is a command** — switching off writes `inactive` at the same priority; it does not release the output. Use `bacnet.relinquish` to hand control back.
@@ -229,7 +229,7 @@ After setup, click **Configure** on the integration card to adjust:
 | Option | What it does | Default |
 |---|---|---|
 | **Enable COV** | Use Change of Value subscriptions for real-time updates. Present values use the standard `SubscribeCOV` service, which nearly all controllers support; `SubscribeCOVProperty` is only used for the optional live metadata properties below. | On |
-| **COV increment** | Minimum value change before a COV notification is sent (analog objects only). Set to `0` to use the device default. | `0.1` |
+| **COV increment** | Minimum value change before a COV notification is sent (analog objects only). Set to `0` to use the device default. | `0` (device default) |
 | **Polling interval** | How often all objects are polled, in seconds (minimum 10). Polling always runs — COV only adds faster updates in between. | `30` |
 | **Use description** | Show BACnet `description` (property 28) instead of `objectName` as entity name | Off |
 | **Live metadata properties** | Opt-in per property (`object_name`, `description`, `units`) for a *live* push update via BACnet's SubscribeCOVProperty service, instead of periodic re-reads. Each one is a separate COV subscription on the device — leave off unless you need instant updates and know your device supports it. | None |

@@ -69,7 +69,7 @@ DEFAULT_POLLING_INTERVAL = 30  # seconds
 MIN_POLLING_INTERVAL = 10  # seconds
 DEFAULT_ENABLE_COV = True
 DEFAULT_USE_DESCRIPTION = False
-DEFAULT_COV_INCREMENT = 0.1  # default COV increment for analog objects
+DEFAULT_COV_INCREMENT = 0.0  # 0 = keep the device's own covIncrement
 
 # Resilience thresholds for outage recovery (issue #18).
 # After MAX_SILENT_FAILURES consecutive failed polls, raise UpdateFailed so HA

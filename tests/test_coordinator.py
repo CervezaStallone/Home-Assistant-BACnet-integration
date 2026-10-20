@@ -1017,6 +1017,19 @@ class TestCovIncrementWriteSkipping:
     def test_unreadable_value_is_written(self):
         self._run(None).assert_awaited_once()
 
+    def test_default_leaves_device_value_alone(self):
+        # Writing covIncrement by default changed the installer's setting on
+        # a live site without the user asking for it.
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
+        coord.client.read_property = AsyncMock(return_value=0.5)
+        coord.client.write_property = AsyncMock(return_value=True)
+        coord.client.subscribe_cov = AsyncMock(return_value="sub")
+        asyncio.run(coord._setup_subscriptions())
+        coord.client.write_property.assert_not_awaited()
+
 
 # ---------------------------------------------------------------------------
 # COV setup runs in parallel and stops probing a device that rejects COV
