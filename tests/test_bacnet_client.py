@@ -662,19 +662,6 @@ class TestSubscribeCovProperty:
                 )
             )
 
-    def test_next_cov_process_id_avoids_collision(self):
-        client = self._client()
-        client._app = _FakeCovApp()
-        from bacpypes3.pdu import Address
-
-        addr = Address("192.168.1.50")
-        client._app._cov_contexts[(addr, 1)] = object()
-
-        pid = client._next_cov_process_id(addr)
-
-        assert pid != 1
-        assert (addr, pid) not in client._app._cov_contexts
-
     def test_unsubscribe_unknown_key_is_noop(self):
         client = self._client()
         asyncio.run(client.unsubscribe_cov_property("does-not-exist"))  # must not raise
@@ -1095,3 +1082,74 @@ def test_text_for_text_property_is_kept():
 def test_normalize_property_always_returns_plain_str():
     for prop in ("9999", "minimumOnTime", 67):
         assert type(BACnetClient.normalize_property(prop)) is str
+
+
+class TestStableCovProcessId:
+    """#52: a new subscriber process id after every HA restart left the old
+    subscriptions occupying the controller's COV slots until they expired
+    (Black Pear 2: 248 COV objects dropped to 8 after a quick restart).
+    The same object must get the same id, so the device replaces the old
+    subscription instead of adding one."""
+
+    def _pid(self, *args, **kwargs):
+        client = BACnetClient(local_ip="127.0.0.1", local_port=47870)
+        client._app = _FakeCovApp()
+        return client._stable_cov_process_id(*args, **kwargs)
+
+    def test_same_object_same_id_across_restarts(self):
+        from bacpypes3.pdu import Address
+
+        addr = Address("192.168.1.5")
+        assert self._pid(addr, 0, 1) == self._pid(addr, 0, 1)
+        assert self._pid(addr, 0, 1, "units") == self._pid(addr, 0, 1, "units")
+
+    def test_different_objects_and_properties_differ(self):
+        from bacpypes3.pdu import Address
+
+        addr = Address("192.168.1.5")
+        ids = {
+            self._pid(addr, 0, 1),
+            self._pid(addr, 0, 2),
+            self._pid(addr, 1, 1),
+            self._pid(addr, 0, 1, "units"),
+        }
+        assert len(ids) == 4
+        assert all(0 < pid < (1 << 22) for pid in ids)
+
+    def test_id_in_use_is_skipped(self):
+        from bacpypes3.pdu import Address
+
+        addr = Address("192.168.1.5")
+        client = BACnetClient(local_ip="127.0.0.1", local_port=47871)
+        client._app = _FakeCovApp()
+        first = client._stable_cov_process_id(addr, 0, 1)
+        client._app._cov_contexts[(addr, first)] = object()
+        assert client._stable_cov_process_id(addr, 0, 1) != first
+
+
+def test_subscribe_cov_uses_the_stable_process_id():
+    """The value-COV path must hand the stable id to bacpypes3 instead of
+    letting it take the next number of its counter."""
+    from bacpypes3.pdu import Address
+
+    seen = {}
+    scm = _FakeCovValueSCM([])
+
+    class _App:
+        def __init__(self):
+            self._cov_contexts = {}
+
+        def change_of_value(self, addr, oid, **kwargs):
+            seen.update(kwargs)
+            return scm
+
+    client = BACnetClient(local_ip="127.0.0.1", local_port=47872)
+    client._app = _App()
+
+    async def run():
+        sub_key = await client.subscribe_cov("192.168.1.5", 0, 7, lambda *a: None)
+        await client.unsubscribe_cov(sub_key)
+
+    asyncio.run(run())
+    expected = client._stable_cov_process_id(Address("192.168.1.5"), 0, 7)
+    assert seen["subscriber_process_identifier"] == expected

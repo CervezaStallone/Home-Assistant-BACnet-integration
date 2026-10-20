@@ -2545,6 +2545,7 @@ class BACnetClient:
                     callback,
                     ready_event,
                     stop_event,
+                    self._stable_cov_process_id(addr, object_type, instance),
                 )
             )
             self._cov_tasks[sub_key] = task
@@ -2614,6 +2615,7 @@ class BACnetClient:
         callback: Callable[[str, dict[str, Any]], None],
         ready_event: asyncio.Event,
         stop_event: asyncio.Event,
+        subscriber_process_identifier: int | None = None,
     ) -> None:
         """Long-running task that reads from a COV subscription queue.
 
@@ -2637,7 +2639,12 @@ class BACnetClient:
         the subscription on the device until its lifetime expires (#29).
         """
         try:
-            scm = self._app.change_of_value(addr, oid, lifetime=lifetime)
+            scm = self._app.change_of_value(
+                addr,
+                oid,
+                subscriber_process_identifier=subscriber_process_identifier,
+                lifetime=lifetime,
+            )
             async with scm:
                 ready_event.set()  # Subscription confirmed — unblock subscribe_cov()
                 while True:
@@ -2766,21 +2773,28 @@ class BACnetClient:
     # SubscribeCOVProperty — live metadata push (issue #26)
     # ------------------------------------------------------------------
 
-    def _next_cov_process_id(self, address: Address) -> int:
-        """Return a subscriber_process_identifier unused for *address*.
+    def _stable_cov_process_id(
+        self,
+        address: Address,
+        object_type: int,
+        instance: int,
+        property_name: str | None = None,
+    ) -> int:
+        """Subscriber process id that is the same for an object on every run.
 
-        Reuses the same counter/collision-check bacpypes3's own
-        ChangeOfValueServices.change_of_value() uses internally for plain
-        COV subscriptions (accessed via the app's private _cov_next_id /
-        _cov_contexts) so property-COV and value-COV subscriptions to the
-        same device never collide — they share the same _cov_contexts dict.
+        A fresh id after each Home Assistant restart left the previous
+        subscriptions occupying the device's COV slots until their lifetime
+        ran out (#52). With the same subscriber address, process id and
+        object, the device replaces the old subscription instead. An id
+        already in use in this run (a hash collision) moves to the next.
         """
-        app = self._app
-        while True:
-            pid = app._cov_next_id
-            app._cov_next_id = (app._cov_next_id + 1) % (1 << 22)
-            if (address, pid) not in app._cov_contexts:
-                return pid
+        digest = hashlib.sha256(
+            f"{object_type}:{instance}:{property_name or ''}".encode()
+        ).digest()
+        pid = int.from_bytes(digest[:4], "big") % ((1 << 22) - 1) + 1
+        while (address, pid) in self._app._cov_contexts:
+            pid = pid % ((1 << 22) - 1) + 1
+        return pid
 
     @staticmethod
     def _coerce_cov_property_value(property_name: str, value: Any) -> Any:
@@ -2841,7 +2855,9 @@ class BACnetClient:
         stop_event: asyncio.Event = asyncio.Event()
 
         try:
-            subscriber_process_identifier = self._next_cov_process_id(addr)
+            subscriber_process_identifier = self._stable_cov_process_id(
+                addr, object_type, instance, property_name
+            )
             scm = _PropertyCOVSubscriptionContextManager(
                 self._app,
                 addr,
