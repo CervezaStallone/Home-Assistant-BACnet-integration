@@ -120,3 +120,12 @@ class TestDiagnosticSensors:
         coord = _polling_coordinator(None)
         coord.last_update_success = False
         assert all(s.available for s in self._sensors(coord).values())
+
+
+def test_failed_polls_sensor_enabled_by_default():
+    """Feedback in #50: the count makes a struggling gateway visible early."""
+    from custom_components.bacnet.sensor import DIAGNOSTIC_SENSORS
+
+    sensors = {s.key: s for s in DIAGNOSTIC_SENSORS}
+    assert sensors["consecutive_failed_polls"].enabled_default is True
+    assert sensors["cov_subscriptions"].enabled_default is False

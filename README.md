@@ -283,7 +283,7 @@ Every device also gets diagnostic sensors (under *Diagnostic* on the device page
 |---|---|
 | Last successful poll | Yes |
 | COV subscriptions | No |
-| Consecutive failed polls | No |
+| Consecutive failed polls | Yes |
 
 They stay available while the device is offline, which is exactly when they're useful.
 
