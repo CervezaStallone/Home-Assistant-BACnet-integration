@@ -558,25 +558,6 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self.entry is None:
             return
         _LOGGER.info("BACnet object metadata changed on device — reloading entry")
-        # TEMP(#62): remove once #62 is resolved — logs exactly what changed.
-        stored = {
-            f"{o['object_type']}:{o['instance']}": o
-            for o in self.entry.data.get(CONF_SELECTED_OBJECTS, [])
-        }
-        for obj in self.objects:
-            old = stored.get(f"{obj['object_type']}:{obj['instance']}", {})
-            for key in _METADATA_KEYS:
-                if not _same(old.get(key), obj.get(key)):
-                    _LOGGER.warning(
-                        "TEMP(#62) %s:%s %s: %r (%s) -> %r (%s)",
-                        obj["object_type"],
-                        obj["instance"],
-                        key,
-                        old.get(key),
-                        type(old.get(key)).__name__,
-                        obj.get(key),
-                        type(obj.get(key)).__name__,
-                    )
         self.hass.config_entries.async_update_entry(
             self.entry,
             data={**self.entry.data, CONF_SELECTED_OBJECTS: self.objects},

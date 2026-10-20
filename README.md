@@ -152,6 +152,7 @@ Devices that users have reported working with this integration. BACnet is a stan
 | Kieback&Peter | DDC420 | — |
 | Microtrol | Black Pear 2 | 0.8.6 |
 | Signify | Interact BACnet gateway | — |
+| Siemens | PXC200-E.D + PXA40-W2 | V6.00.338 |
 | Tridium | Niagara JACE | — |
 <!-- tested-devices:end -->
 
