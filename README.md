@@ -63,6 +63,47 @@ In plain terms: if your building has BACnet controllers, thermostats, sensors, o
 
 ---
 
+## Screenshots
+
+*Demo: a simulated air handling unit ("AHU 1"), not a real installation.*
+
+<p align="center">
+  <img src="img/screenshots/03-device-page.png" alt="The AHU 1 device page with controls, sensors, alarm status and an extra property" width="800">
+</p>
+
+<p align="center">
+  <img src="img/screenshots/05-history.png" alt="History graph of supply, return, outdoor and server room temperature" width="800">
+</p>
+
+<table>
+  <tr>
+    <td><img src="img/screenshots/01-setup-network.png" alt="Setup step 1: network settings and target device address"></td>
+    <td><img src="img/screenshots/02-setup-select-objects.png" alt="Setup: choose which objects to import, labelled with their descriptions"></td>
+  </tr>
+  <tr>
+    <td align="center">Setup: network settings</td>
+    <td align="center">Setup: pick the objects to import</td>
+  </tr>
+  <tr>
+    <td><img src="img/screenshots/04-entity-attributes.png" alt="Sensor details with the bacnet_* attributes"></td>
+    <td><img src="img/screenshots/06-customize-objects.png" alt="Customize objects with the list of extra properties"></td>
+  </tr>
+  <tr>
+    <td align="center">BACnet attributes on every entity</td>
+    <td align="center">Extra properties per object</td>
+  </tr>
+  <tr>
+    <td><img src="img/screenshots/07-climate.png" alt="Climate entity for a room setpoint with the return air temperature as current temperature"></td>
+    <td><img src="img/screenshots/08-active-alarms.png" alt="Active alarms sensor listing a high-limit alarm"></td>
+  </tr>
+  <tr>
+    <td align="center">Setpoint as a climate entity</td>
+    <td align="center">Active alarms from the controller</td>
+  </tr>
+</table>
+
+---
+
 ## Supported object types
 
 | BACnet Object | Default entity | Writable? |
