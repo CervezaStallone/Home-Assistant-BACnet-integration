@@ -10,12 +10,13 @@ from __future__ import annotations
 
 import unicodedata
 from collections import Counter
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from typing import Any
 
 from .const import (
     CONF_FIRMWARE_VERSION,
     CONF_MODEL_NAME,
+    CONF_SHARE_USAGE,
     CONF_USE_BBMD,
     CONF_VENDOR_NAME,
     TELEMETRY_SCHEMA,
@@ -61,6 +62,33 @@ def device_report(
         "rpm": bool(rpm),
         "objects": object_counts(objects),
     }
+
+
+def collect_devices(entries: Iterable[Any]) -> list[dict]:
+    """Devices of opted-in entries that are loaded and have polled.
+
+    A device that hasn't answered a poll yet is left out rather than
+    reported with flags that mean nothing.
+    """
+    devices = []
+    for entry in entries:
+        if not entry.options.get(CONF_SHARE_USAGE, False):
+            continue
+        runtime_data = getattr(entry, "runtime_data", None)
+        if runtime_data is None:
+            continue
+        coordinator = runtime_data.coordinator
+        if coordinator.last_successful_poll is None:
+            continue
+        devices.append(
+            device_report(
+                entry.data,
+                coordinator.objects,
+                cov=coordinator.cov_active,
+                rpm=coordinator.client.rpm_supported(coordinator.device_address),
+            )
+        )
+    return devices
 
 
 def build_report(

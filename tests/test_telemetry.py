@@ -7,10 +7,13 @@ contract, so the payload limits are pinned here.
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
+from unittest.mock import MagicMock
 
 from custom_components.bacnet.telemetry import (
     build_report,
     clean_text,
+    collect_devices,
     device_report,
     object_counts,
 )
@@ -68,3 +71,38 @@ def test_build_report_shape():
     assert rep["schema"] == 1
     assert len(rep["devices"]) == 256
     assert rep["install_id"] == install_id
+
+
+def _entry(share=True, polled=True, loaded=True):
+    if loaded:
+        entry = MagicMock()
+        coord = entry.runtime_data.coordinator
+        coord.last_successful_poll = datetime.now(UTC) if polled else None
+        coord.objects = [{"object_type": 0, "instance": 1}]
+        coord.cov_active = True
+        coord.device_address = "10.0.0.5"
+        coord.client.rpm_supported.return_value = False
+    else:
+        entry = MagicMock(spec=["options", "data"])
+    entry.options = {"share_usage": share}
+    entry.data = {"vendor_name": "Siemens", "model_name": "PXC200-E.D"}
+    return entry
+
+
+def test_collect_devices_only_opted_in_loaded_polled():
+    included = _entry()
+    entries = [
+        included,
+        _entry(share=False),
+        _entry(loaded=False),
+        _entry(polled=False),
+    ]
+    devices = collect_devices(entries)
+    assert len(devices) == 1
+    assert devices[0]["vendor"] == "Siemens"
+    assert devices[0]["cov"] is True
+    assert devices[0]["rpm"] is False
+    assert devices[0]["objects"] == {"0": 1}
+    included.runtime_data.coordinator.client.rpm_supported.assert_called_with(
+        "10.0.0.5"
+    )

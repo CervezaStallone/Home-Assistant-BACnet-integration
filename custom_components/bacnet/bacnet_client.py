@@ -1825,6 +1825,10 @@ class BACnetClient:
             for reason in ("unrecognized-service", "service-request-denied")
         )
 
+    def rpm_supported(self, device_address: str) -> bool:
+        """Return False once the device rejected ReadPropertyMultiple."""
+        return self._rpm_supported.get(device_address, True)
+
     async def poll_objects(
         self,
         device_address: str,

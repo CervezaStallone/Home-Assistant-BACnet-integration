@@ -1047,6 +1047,11 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return obj["description"]
         return obj.get("object_name", f"BACnet {obj['object_type']}:{obj['instance']}")
 
+    @property
+    def cov_active(self) -> bool:
+        """Return True if any object of this device has a COV subscription."""
+        return bool(self._cov_subscriptions)
+
     def is_cov_subscribed(self, obj_key: str) -> bool:
         """Return True if this object has an active COV subscription."""
         return obj_key in self._cov_subscriptions

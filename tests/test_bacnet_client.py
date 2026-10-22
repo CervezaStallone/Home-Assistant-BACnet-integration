@@ -1153,3 +1153,10 @@ def test_subscribe_cov_uses_the_stable_process_id():
     asyncio.run(run())
     expected = client._stable_cov_process_id(Address("192.168.1.5"), 0, 7)
     assert seen["subscriber_process_identifier"] == expected
+
+
+def test_rpm_supported_defaults_true_and_follows_fallback():
+    client = BACnetClient(local_ip="127.0.0.1", local_port=47861)
+    assert client.rpm_supported("10.0.0.5") is True
+    client._rpm_supported["10.0.0.5"] = False
+    assert client.rpm_supported("10.0.0.5") is False

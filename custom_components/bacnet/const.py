@@ -255,6 +255,7 @@ WRITE_PRIORITY_OPTIONS: list[int] = [8, 9, 12, 13, 14, 15, 16]  # BACnet: 1-16
 # Opt-in anonymous usage report (telemetry.py)
 # ---------------------------------------------------------------------------
 TELEMETRY_SCHEMA = 1  # payload contract version, shared with the server
+CONF_SHARE_USAGE = "share_usage"  # entry option, off by default
 
 # ---------------------------------------------------------------------------
 # Extra properties offered per object in the options flow
