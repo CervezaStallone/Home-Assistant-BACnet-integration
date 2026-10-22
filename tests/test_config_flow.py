@@ -50,3 +50,28 @@ class TestValidateTargetAddress:
 
     def test_garbage_rejected(self):
         assert _validate_target_address("garbage") is False
+
+
+def test_select_objects_stores_share_usage_in_options():
+    # Opt-in lives in the options (switchable later), never in entry data.
+    import asyncio
+    from unittest.mock import AsyncMock
+
+    from custom_components.bacnet.config_flow import BACnetConfigFlow
+
+    def finish(user_input):
+        flow = BACnetConfigFlow()
+        flow._network_config = {}
+        flow._selected_device = {"device_id": 1, "address": "10.0.0.5"}
+        flow._discovered_objects = [{"object_type": 0, "instance": 1}]
+        flow._cleanup_client = AsyncMock()
+        flow.async_create_entry = lambda **kw: kw
+        return asyncio.run(
+            flow.async_step_select_objects({"selected_objects": ["0:1"], **user_input})
+        )
+
+    on = finish({"share_usage": True})
+    off = finish({})
+    assert on["options"] == {"share_usage": True}
+    assert off["options"] == {"share_usage": False}
+    assert "share_usage" not in on["data"]

@@ -34,6 +34,7 @@ from .const import (
     CONF_MODEL_NAME,
     CONF_SELECT_ALL,
     CONF_SELECTED_OBJECTS,
+    CONF_SHARE_USAGE,
     CONF_SOFTWARE_VERSION,
     CONF_TARGET_ADDRESS,
     CONF_TARGET_DEVICE_ID,
@@ -521,6 +522,9 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         ),
                         CONF_SELECTED_OBJECTS: selected_objects,
                     },
+                    options={
+                        CONF_SHARE_USAGE: bool(user_input.get(CONF_SHARE_USAGE, False))
+                    },
                 )
 
         # --- Read object list from device (first visit to this step) ---
@@ -591,6 +595,7 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     vol.Optional(
                         CONF_SELECTED_OBJECTS, default=list(object_options.keys())
                     ): cv.multi_select(object_options),
+                    vol.Optional(CONF_SHARE_USAGE, default=False): bool,
                 }
             )
         except Exception as exc:

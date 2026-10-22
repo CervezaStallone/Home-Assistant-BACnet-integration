@@ -312,3 +312,22 @@ def test_entities_left_on_an_old_platform_are_removed(monkeypatch):
     )
     removed = sorted(c.args[0] for c in registry.async_remove.call_args_list)
     assert removed == ["number.ahu_setpoint", "sensor.ahu_mode"]
+
+
+def test_async_setup_starts_one_usage_reporter(monkeypatch):
+    import asyncio
+    from unittest.mock import MagicMock
+
+    import custom_components.bacnet as integration
+    from custom_components.bacnet import services, telemetry
+
+    monkeypatch.setattr(services, "async_setup_services", MagicMock())
+    reporter_cls = MagicMock()
+    monkeypatch.setattr(telemetry, "TelemetryReporter", reporter_cls)
+    hass = MagicMock()
+    hass.data = {}
+
+    assert asyncio.run(integration.async_setup(hass, {})) is True
+
+    reporter_cls.return_value.async_start.assert_called_once()
+    assert hass.data["bacnet"]["_telemetry"] is reporter_cls.return_value

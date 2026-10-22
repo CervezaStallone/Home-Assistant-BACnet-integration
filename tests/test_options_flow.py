@@ -278,3 +278,11 @@ def test_customize_unknown_property_shows_error(monkeypatch):
     )
     assert result["type"] == "form"
     assert errors == {"base": "unknown_property"}
+
+
+def test_options_init_shows_share_usage_with_current_value(monkeypatch):
+    # Usage statistics stay off unless the user ticked them.
+    on = _run(_flow([], options={"share_usage": True}).async_step_init(), monkeypatch)
+    off = _run(_flow([]).async_step_init(), monkeypatch)
+    assert on["fields"]["share_usage"] is True
+    assert off["fields"]["share_usage"] is False

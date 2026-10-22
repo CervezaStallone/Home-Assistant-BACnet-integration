@@ -1371,3 +1371,11 @@ def test_cov_metadata_check_keeps_values_the_device_did_not_return():
     assert coord.objects[0]["state_text"] == msv["state_text"]
     assert coord.objects[0]["number_of_states"] == 4
     coord.hass.config_entries.async_update_entry.assert_not_called()
+
+
+def test_cov_active_reflects_subscriptions():
+    # The usage report says whether COV works on a device.
+    coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
+    assert coord.cov_active is False
+    coord._cov_subscriptions["0:1"] = "sub"
+    assert coord.cov_active is True
