@@ -49,10 +49,13 @@ _MAX_OBJECT_COUNT = 100000
 
 
 def clean_text(value: object, limit: int) -> str:
-    """Text without control characters, trimmed and cut to limit."""
+    """Text without control characters or lone surrogates, trimmed and cut.
+
+    Those two are what the server rejects; every script is accepted.
+    """
     if value is None:
         return ""
-    text = "".join(c for c in str(value) if unicodedata.category(c) != "Cc")
+    text = "".join(c for c in str(value) if unicodedata.category(c) not in ("Cc", "Cs"))
     return text.strip()[:limit]
 
 

@@ -263,3 +263,8 @@ def test_start_and_stop_run_in_the_event_loop():
     # cancelling the loop's timers isn't thread-safe.
     assert getattr(telemetry.TelemetryReporter.async_stop, "_hass_callback", False)
     assert getattr(telemetry.TelemetryReporter.async_start, "_hass_callback", False)
+
+
+def test_clean_text_strips_lone_surrogates():
+    # The server rejects them; a broken decoder must not sink the whole report.
+    assert clean_text("PXC\ud800200", 128) == "PXC200"
