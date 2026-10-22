@@ -18,7 +18,7 @@ from typing import Any
 import aiohttp
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP
 from homeassistant.const import __version__ as HA_VERSION
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.event import async_call_later, async_track_time_interval
 from homeassistant.helpers.storage import Store
@@ -155,14 +155,17 @@ class TelemetryReporter:
                 HA_VERSION,
                 collect_devices(entries),
             )
-            await async_get_clientsession(self._hass).post(
+            async with async_get_clientsession(self._hass).post(
                 TELEMETRY_URL,
                 json=report,
                 timeout=aiohttp.ClientTimeout(total=TELEMETRY_TIMEOUT),
-            )
+            ) as response:
+                if response.status >= 300:
+                    _LOGGER.debug("Usage report rejected: HTTP %s", response.status)
         except Exception as err:  # noqa: BLE001 — never bother the user with it
             _LOGGER.debug("Usage report not sent: %r", err)
 
+    @callback
     def async_start(self) -> None:
         """Schedule the first and the daily report."""
         self._unsubs = [
@@ -171,6 +174,7 @@ class TelemetryReporter:
         ]
         self._hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, self.async_stop)
 
+    @callback
     def async_stop(self, _event: Any = None) -> None:
         """Cancel the scheduled reports."""
         while self._unsubs:

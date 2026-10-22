@@ -122,7 +122,11 @@ def _reporter(entries, store_data=None):
     store.async_load = AsyncMock(return_value=store_data)
     store.async_save = AsyncMock()
     session = MagicMock()
-    session.post = AsyncMock()
+    response = MagicMock(status=204)
+    post_cm = MagicMock()
+    post_cm.__aenter__ = AsyncMock(return_value=response)
+    post_cm.__aexit__ = AsyncMock(return_value=False)
+    session.post = MagicMock(return_value=post_cm)
     integration = MagicMock(version="1.0.50-beta.10")
     patches = [
         patch.object(telemetry, "Store", return_value=store),
@@ -159,7 +163,7 @@ def _send(entries, store_data=None):
 
 def test_send_posts_report_with_timeout():
     _, session = _send([_entry()])
-    session.post.assert_awaited_once()
+    session.post.assert_called_once()
     args, kwargs = session.post.call_args
     assert args[0] == "https://ha-bacnet.telemetry.brdc.nl/v1/report"
     assert set(kwargs["json"]) == {
@@ -185,6 +189,21 @@ def test_send_swallows_errors_at_debug(error, caplog):
     finally:
         for p in patches:
             p.stop()
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+
+
+def test_rejected_report_is_logged_at_debug_only(caplog):
+    # A 400 from the server's strict validator must be findable in a debug log.
+    reporter, _, session, patches = _reporter([_entry()])
+    session.post.return_value.__aenter__.return_value.status = 400
+    try:
+        with caplog.at_level(logging.DEBUG):
+            asyncio.run(reporter.async_send())
+    finally:
+        for p in patches:
+            p.stop()
+    session.post.return_value.__aexit__.assert_awaited_once()
+    assert any("400" in r.getMessage() for r in caplog.records)
     assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
 
 
@@ -237,3 +256,10 @@ def test_start_registers_and_stop_cancels_timers():
     reporter.async_stop()
     first.assert_called_once()
     daily.assert_called_once()
+
+
+def test_start_and_stop_run_in_the_event_loop():
+    # Without @callback HA runs the stop listener in a worker thread, where
+    # cancelling the loop's timers isn't thread-safe.
+    assert getattr(telemetry.TelemetryReporter.async_stop, "_hass_callback", False)
+    assert getattr(telemetry.TelemetryReporter.async_start, "_hass_callback", False)

@@ -21,7 +21,8 @@ import pytest
 
 
 def _noop_callback(fn):
-    """Stub for HA's @callback decorator — returns the function unchanged."""
+    """Stub for HA's @callback decorator — marks the function like HA does."""
+    fn._hass_callback = True
     return fn
 
 
