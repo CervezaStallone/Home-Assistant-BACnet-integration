@@ -34,6 +34,7 @@ from .const import (
     CONF_POLLING_INTERVAL,
     CONF_RESCAN_OBJECTS,
     CONF_SELECTED_OBJECTS,
+    CONF_SHARE_USAGE,
     CONF_USE_DESCRIPTION,
     DEFAULT_COV_INCREMENT,
     DEFAULT_ENABLE_COV,
@@ -115,6 +116,7 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
         current_live_metadata = self._config_entry.options.get(
             CONF_LIVE_METADATA_PROPERTIES, DEFAULT_LIVE_METADATA_PROPERTIES
         )
+        current_share = self._config_entry.options.get(CONF_SHARE_USAGE, False)
 
         schema = vol.Schema(
             {
@@ -134,6 +136,7 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
                         for p in LIVE_METADATA_PROPERTY_CHOICES
                     }
                 ),
+                vol.Optional(CONF_SHARE_USAGE, default=current_share): bool,
                 vol.Optional(CONF_RESCAN_OBJECTS, default=False): bool,
             }
         )

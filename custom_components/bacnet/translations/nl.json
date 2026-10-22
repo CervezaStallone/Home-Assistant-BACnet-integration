@@ -39,11 +39,13 @@
         "data": {
           "device_name": "Apparaatnaam",
           "select_all": "Alle objecten selecteren",
-          "selected_objects": "BACnet-objecten"
+          "selected_objects": "BACnet-objecten",
+          "share_usage": "Anonieme gebruiksstatistieken delen"
         },
         "data_description": {
           "device_name": "Naam van dit apparaat in Home Assistant. Vooraf ingevuld met de BACnet-objectName.",
-          "selected_objects": "Vink de objecten aan die je in Home Assistant wilt volgen of bedienen."
+          "selected_objects": "Vink de objecten aan die je in Home Assistant wilt volgen of bedienen.",
+          "share_usage": "Standaard uit. Stuurt één keer per dag fabrikant, model en firmware van dit apparaat, of COV en ReadPropertyMultiple werken, het aantal objecten per type en hoe het verbonden is (direct of via BBMD), plus de versie van de integratie en van Home Assistant en een willekeurige installatie-ID. Nooit adressen, namen of waarden. Gebruikt om de lijst met geteste apparaten aan te vullen. Zie 'Privacy and usage statistics' in de README."
         }
       },
       "reconfigure": {
@@ -133,7 +135,8 @@
           "polling_interval": "Poll-interval (seconden)",
           "use_description": "Description (property-id 28) gebruiken in plaats van de naam",
           "rescan_objects": "Apparaat opnieuw scannen en objectselectie beheren",
-          "live_metadata_properties": "Live metadata-properties"
+          "live_metadata_properties": "Live metadata-properties",
+          "share_usage": "Anonieme gebruiksstatistieken delen"
         },
         "data_description": {
           "enable_cov": "Indien ingeschakeld abonneert de integratie zich op COV-meldingen. Ondersteunt het apparaat geen COV of mislukt het abonnement, dan wordt gepolld.",
@@ -141,7 +144,8 @@
           "polling_interval": "Hoe vaak alle objecten worden gepolld, in seconden (minimaal 10). Pollen gebeurt altijd; COV voegt daartussen alleen snellere updates toe.",
           "use_description": "Indien aangevinkt krijgen entiteiten hun naam uit de BACnet-property 'description' (ID 28) in plaats van 'objectName' (ID 77).",
           "rescan_objects": "Leest de huidige Object_List van het apparaat opnieuw in, zodat je objecten kunt toevoegen die bij het instellen niet gekozen waren, of objecten die sindsdien aan het apparaat zijn toegevoegd. Al geïmporteerde objecten blijven standaard geselecteerd.",
-          "live_metadata_properties": "Properties die een eigen live COV-Property-abonnement krijgen in plaats van het periodiek opnieuw uitlezen. Elke property is een extra abonnement op het apparaat, en niet elk apparaat ondersteunt dit."
+          "live_metadata_properties": "Properties die een eigen live COV-Property-abonnement krijgen in plaats van het periodiek opnieuw uitlezen. Elke property is een extra abonnement op het apparaat, en niet elk apparaat ondersteunt dit.",
+          "share_usage": "Standaard uit. Stuurt één keer per dag fabrikant, model en firmware van dit apparaat, of COV en ReadPropertyMultiple werken, het aantal objecten per type en hoe het verbonden is (direct of via BBMD), plus de versie van de integratie en van Home Assistant en een willekeurige installatie-ID. Nooit adressen, namen of waarden. Gebruikt om de lijst met geteste apparaten aan te vullen. Zie 'Privacy and usage statistics' in de README."
         }
       },
       "rescan_objects": {

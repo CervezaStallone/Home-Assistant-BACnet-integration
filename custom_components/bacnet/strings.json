@@ -39,11 +39,13 @@
         "data": {
           "device_name": "Device name",
           "select_all": "Select all objects",
-          "selected_objects": "BACnet objects"
+          "selected_objects": "BACnet objects",
+          "share_usage": "Share anonymous usage statistics"
         },
         "data_description": {
           "device_name": "Name for this device in Home Assistant. Pre-filled with the BACnet objectName.",
-          "selected_objects": "Check the objects you want to monitor or control in Home Assistant."
+          "selected_objects": "Check the objects you want to monitor or control in Home Assistant.",
+          "share_usage": "Off by default. Once a day, sends this device's manufacturer, model and firmware, whether COV and ReadPropertyMultiple work, the number of objects per type and how it is connected (direct or BBMD), plus the integration and Home Assistant version and a random installation ID. Never addresses, names or values. Used to grow the tested devices list. See 'Privacy and usage statistics' in the README."
         }
       },
       "reconfigure": {
@@ -133,7 +135,8 @@
           "polling_interval": "Polling interval (seconds)",
           "use_description": "Use description (property id 28) instead of name",
           "rescan_objects": "Rescan device and manage BACnet object selection",
-          "live_metadata_properties": "Live metadata properties"
+          "live_metadata_properties": "Live metadata properties",
+          "share_usage": "Share anonymous usage statistics"
         },
         "data_description": {
           "enable_cov": "When enabled, the integration subscribes to COV notifications. If the device does not support COV or subscription fails, polling is used as fallback.",
@@ -141,7 +144,8 @@
           "polling_interval": "How often all objects are polled, in seconds (minimum 10). Polling always runs; COV only adds faster updates in between.",
           "use_description": "When checked, entities will be named using the BACnet 'description' property (ID 28) instead of 'objectName' (ID 77).",
           "rescan_objects": "Rereads the device's current Object_List so you can add objects that weren't selected during setup, or pick up objects added to the device since. Currently imported objects stay selected by default.",
-          "live_metadata_properties": "Properties that get their own live COV-Property subscription instead of the periodic re-read. Each one is an extra subscription on the device, and not every device supports it."
+          "live_metadata_properties": "Properties that get their own live COV-Property subscription instead of the periodic re-read. Each one is an extra subscription on the device, and not every device supports it.",
+          "share_usage": "Off by default. Once a day, sends this device's manufacturer, model and firmware, whether COV and ReadPropertyMultiple work, the number of objects per type and how it is connected (direct or BBMD), plus the integration and Home Assistant version and a random installation ID. Never addresses, names or values. Used to grow the tested devices list. See 'Privacy and usage statistics' in the README."
         }
       },
       "rescan_objects": {
