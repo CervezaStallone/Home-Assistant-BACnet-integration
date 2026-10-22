@@ -737,9 +737,9 @@ What a report contains — everything, nothing else:
 | `rpm` | `true` | Whether the device accepts ReadPropertyMultiple |
 | `objects` | `{"0": 12, "2": 40}` | Number of imported objects per BACnet object type |
 
-**Never sent:** IP or BACnet addresses, device instance numbers, object or device names, descriptions, values, or anything about your Home Assistant setup. The server uses your IP address only to limit the number of requests and does not store it.
+**Never sent:** IP or BACnet addresses, device instance numbers, object or device names, descriptions, values, or anything about your Home Assistant setup. The server derives the country from your IP address and stores only the country; the IP address itself is not stored.
 
-The reports are kept for statistics (how many installations, which devices and object types are in use). The only thing that ever becomes public is a device's manufacturer, model and firmware, in the [tested devices](#tested-devices) list, after the maintainer has checked it.
+The reports are kept for statistics (how many installations and in which countries, which devices and object types are in use). The only thing that ever becomes public is a device's manufacturer, model and firmware, in the [tested devices](#tested-devices) list, after the maintainer has checked it.
 
 To stop: untick the option in each device's options. A failed report is never retried and never shows up in your log (only at debug level).
 
