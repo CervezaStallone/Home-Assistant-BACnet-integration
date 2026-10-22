@@ -38,7 +38,7 @@
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=CervezaStallone&repository=Home-Assistant-BACnet-integration&category=integration)
 </p>
 
-**Contents:** [What it does](#what-does-this-integration-do) · [Features](#features-at-a-glance) · [Safety](#safety-on-a-live-site) · [Screenshots](#screenshots) · [Object types](#supported-object-types) · [Tested devices](#tested-devices) · [Installation](#installation) · [Getting started](#getting-started) · [Configuration](#configuration-options) · [Entity attributes](#entity-attributes) · [Device information](#device-information) · [How writes work](#how-writes-work) · [Examples](#examples) · [Troubleshooting](#troubleshooting) · [Requirements](#requirements) · [Contributing](#contributing) · [License](#license)
+**Contents:** [What it does](#what-does-this-integration-do) · [Features](#features-at-a-glance) · [Safety](#safety-on-a-live-site) · [Screenshots](#screenshots) · [Object types](#supported-object-types) · [Tested devices](#tested-devices) · [Installation](#installation) · [Getting started](#getting-started) · [Configuration](#configuration-options) · [Entity attributes](#entity-attributes) · [Device information](#device-information) · [How writes work](#how-writes-work) · [Examples](#examples) · [Troubleshooting](#troubleshooting) · [Privacy](#privacy-and-usage-statistics-1050-beta) · [Requirements](#requirements) · [Contributing](#contributing) · [License](#license)
 
 ## What does this integration do?
 
@@ -76,6 +76,7 @@ In plain terms: if your building has BACnet controllers, thermostats, sensors, o
 - **Diagnostics** — a diagnostics download and health sensors for troubleshooting
 - **Efficient on the network** — batched ReadPropertyMultiple reads that adapt to what the device can handle
 - **English and Dutch** user interface
+- **Opt-in usage statistics** *(1.0.50 beta)* — off by default; when on, helps grow the tested devices list. See [Privacy and usage statistics](#privacy-and-usage-statistics-1050-beta)
 
 ---
 
@@ -173,7 +174,7 @@ Devices that users have reported working with this integration. BACnet is a stan
 | Tridium | Niagara JACE | — |
 <!-- tested-devices:end -->
 
-**Works on your device?** Please [send a device report](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/issues/new?template=device_report.yml): manufacturer, model and what you've used. It helps others decide, and it shows which devices get real-world testing. Once checked, it's added here.
+**Works on your device?** Please [send a device report](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/issues/new?template=device_report.yml): manufacturer, model and what you've used. It helps others decide, and it shows which devices get real-world testing. Once checked, it's added here. *(1.0.50 beta)* The list also grows from installations that opted in to [usage statistics](#privacy-and-usage-statistics-1050-beta): only manufacturer, model and firmware, added after the maintainer checks them.
 
 ---
 
@@ -234,6 +235,7 @@ After setup, click **Configure** on the integration card to adjust:
 | **Polling interval** | How often all objects are polled, in seconds (minimum 10). Polling always runs — COV only adds faster updates in between. | `30` |
 | **Use description** | Show BACnet `description` (property 28) instead of `objectName` as entity name | Off |
 | **Live metadata properties** | Opt-in per property (`object_name`, `description`, `units`) for a *live* push update via BACnet's SubscribeCOVProperty service, instead of periodic re-reads. Each one is a separate COV subscription on the device — leave off unless you need instant updates and know your device supports it. | None |
+| **Share anonymous usage statistics** *(1.0.50 beta)* | Once a day, send this device's manufacturer, model, firmware and a few anonymous counts. See [Privacy and usage statistics](#privacy-and-usage-statistics-1050-beta) for every field. Also offered on the last setup page. | Off |
 | **Rescan device** | Re-read the device's object list to add or remove objects. Objects found for the first time are listed first and marked **NEW**; labels include the object's description when it differs from its name. | — |
 
 After this page comes [Customize objects](#customize-objects). Changes take effect immediately — the integration reloads automatically.
@@ -710,6 +712,36 @@ The defaults suit most controllers. For unusual devices they can be changed in `
 | `METADATA_PERSIST_DELAY` | `5` s | Metadata changes found within this window cause one reload together |
 
 ---
+
+## Privacy and usage statistics *(1.0.50 beta)*
+
+> **Beta:** available in the 1.0.50 pre-releases (enable *Show beta versions* in HACS).
+
+The integration can send anonymous usage statistics. It is **opt-in and off by default**: tick **Share anonymous usage statistics** on the last setup page or in a device's options. Devices added before this option existed stay off; nothing asks you about it.
+
+While at least one device has it ticked, Home Assistant sends one report a day (the first about 10 minutes after start) to `https://ha-bacnet.telemetry.brdc.nl`, a server run by the maintainer in the EU. Only ticked devices are included, and only once they have answered a poll.
+
+What a report contains — everything, nothing else:
+
+| Field | Example | Meaning |
+|---|---|---|
+| `schema` | `1` | Report format version |
+| `install_id` | `3f2b…` | A random ID created by this integration, only used to count installations. Not derived from your Home Assistant |
+| `integration_version` | `1.0.50` | Version of this integration |
+| `ha_version` | `2026.10.1` | Version of Home Assistant |
+| `vendor` | `Siemens` | The device's `vendorName` |
+| `model` | `PXC200-E.D` | The device's `modelName` |
+| `firmware` | `V6.00.338` | The device's `firmwareRevision` |
+| `connection` | `direct` | `direct`, or `foreign_device` when connected through a BBMD |
+| `cov` | `true` | Whether at least one COV subscription works |
+| `rpm` | `true` | Whether the device accepts ReadPropertyMultiple |
+| `objects` | `{"0": 12, "2": 40}` | Number of imported objects per BACnet object type |
+
+**Never sent:** IP or BACnet addresses, device instance numbers, object or device names, descriptions, values, or anything about your Home Assistant setup. The server uses your IP address only to limit the number of requests and does not store it.
+
+The reports are kept for statistics (how many installations, which devices and object types are in use). The only thing that ever becomes public is a device's manufacturer, model and firmware, in the [tested devices](#tested-devices) list, after the maintainer has checked it.
+
+To stop: untick the option in each device's options. A failed report is never retried and never shows up in your log (only at debug level).
 
 ## Requirements
 
