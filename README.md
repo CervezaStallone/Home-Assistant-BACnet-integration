@@ -65,10 +65,10 @@ In plain terms: if your building has BACnet controllers, thermostats, sensors, o
 - **Selective import** — only import the objects you actually need
 - **Configurable write priority** — per-device select entity to change the BACnet write priority (disabled by default)
 - **Relinquish & one-off writes** — `bacnet.relinquish` and `bacnet.write_value` services for full Priority Array control
-- **Alarms** *(1.0.50 beta)* — an Alarm binary sensor and an Active alarms sensor per device, plus a `bacnet_alarm` event for automations
-- **Any BACnet property** *(1.0.50 beta)* — read or write any property (e.g. `minimumOnTime`, property 67) with `bacnet.read_property` and `bacnet.write_value`, also on objects you didn't import
-- **Trend logs** *(1.0.50 beta)* — read the records a controller logged with `bacnet.read_trend_log`
-- **Schedules** *(1.0.50 beta)* — BACnet Schedule objects as a sensor, with `bacnet.read_schedule` and `bacnet.write_schedule` services for the weekly schedule, exceptions and default
+- **Alarms** — an Alarm binary sensor and an Active alarms sensor per device, plus a `bacnet_alarm` event for automations
+- **Any BACnet property** — read or write any property (e.g. `minimumOnTime`, property 67) with `bacnet.read_property` and `bacnet.write_value`, also on objects you didn't import
+- **Trend logs** — read the records a controller logged with `bacnet.read_trend_log`
+- **Schedules** — BACnet Schedule objects as a sensor, with `bacnet.read_schedule` and `bacnet.write_schedule` services for the weekly schedule, exceptions and default
 - **Device limits & state texts** — number limits from `minPresValue`/`maxPresValue`/`resolution`, multi-state objects as a select with their `stateText` labels
 - **Climate with a real room temperature** — pair a setpoint with a separate temperature object
 - **Automatic outage recovery** — detects network outages, reconnects automatically and tells you in Repairs when a device stays unreachable
@@ -88,7 +88,7 @@ What this integration writes to your devices, so you know before trying it on a 
 - **Priority 16 by default** — entities write at the lowest priority, so anything at 1–15, including a Manual Operator command at 8, still wins. The [Write Priority](#write-priority-entity) select offers 8, 9 and 12–16.
 - **Services can go higher** — `bacnet.write_value` and `bacnet.relinquish` accept any priority from 1 to 16. A write at 1–7 outranks a Manual Operator command; use those levels only on purpose.
 - **Turning off is a command** — switching off writes `inactive` at the same priority; it does not release the output. Use `bacnet.relinquish` to hand control back.
-- **Schedules have no priority** *(1.0.50 beta)* — `bacnet.write_schedule` changes the Schedule object's configuration itself. It refuses to remove existing exceptions unless you set `allow_removal`, and reads the result back. See [Schedules](#schedules-1050-beta).
+- **Schedules have no priority** — `bacnet.write_schedule` changes the Schedule object's configuration itself. It refuses to remove existing exceptions unless you set `allow_removal`, and reads the result back. See [Schedules](#schedules).
 - **No read-only mode yet** — to keep an object read-only, import it as a `sensor` or `binary_sensor` (see [Customize objects](#customize-objects)), or leave it out. Services can still write to any object on the device.
 
 ---
@@ -147,8 +147,8 @@ What this integration writes to your devices, so you know before trying it on a 
 | Multi-State Input | Sensor | No |
 | Multi-State Output | Number | Yes |
 | Multi-State Value | Sensor | Auto-detected |
-| Schedule *(1.0.50 beta)* | Sensor (current value) | Via `bacnet.write_schedule` |
-| Trend Log *(1.0.50 beta)* | Sensor (number of records) | No — records via `bacnet.read_trend_log` |
+| Schedule | Sensor (current value) | Via `bacnet.write_schedule` |
+| Trend Log | Sensor (number of records) | No — records via `bacnet.read_trend_log` |
 
 > Value objects may or may not support writes — the integration auto-detects this by checking for a Priority Array during discovery.
 >
@@ -245,8 +245,8 @@ The second options page lists your objects by name. Tick the ones you want to ch
 - **type** — the Home Assistant entity type (`sensor`, `binary_sensor`, `switch`, `number`, `climate`, or `select` for multi-state objects)
 - **COV** — use COV for this object, overriding the device-wide **Enable COV** setting
 - **temperature sensor** (climate objects only) — the object that provides the room temperature. Without one, the climate entity shows its setpoint as the current temperature. Just changed an object to climate? Save, then open the options again to pick its sensor.
-- **extra properties** *(1.0.50 beta)* — other BACnet properties of the object to show as their own entity, picked from a list that fits the object type. See [Extra properties as entities](#extra-properties-as-entities-1050-beta).
-- **other properties** *(1.0.50 beta)* — any other property, typed by name (`inactiveText`) or number, separated by commas. These become read-only sensors (unless the extra properties table lists them for that object type).
+- **extra properties** — other BACnet properties of the object to show as their own entity, picked from a list that fits the object type. See [Extra properties as entities](#extra-properties-as-entities).
+- **other properties** — any other property, typed by name (`inactiveText`) or number, separated by commas. These become read-only sensors (unless the extra properties table lists them for that object type).
 
 Unticked objects use the defaults. Settings of objects you remove with a rescan are remembered and come back if you add the object again.
 
@@ -292,7 +292,7 @@ Every entity exposes additional BACnet metadata as state attributes:
 | `bacnet_units` | Engineering units (e.g. "degrees-celsius") |
 | `bacnet_description` | BACnet description property |
 | `bacnet_status_flags` | BACnet status flags array |
-| `bacnet_in_alarm` *(1.0.50 beta)* | `true` while the object's IN_ALARM status flag is set |
+| `bacnet_in_alarm` | `true` while the object's IN_ALARM status flag is set |
 | `bacnet_update_method` | How this entity is updated: `COV` or `polling` |
 | `bacnet_cov_increment` | Configured COV sensitivity (analog objects with active COV only) |
 | `bacnet_state_text` | The `stateText` label of the current state (multi-state objects only) |
@@ -315,9 +315,7 @@ Every device also gets diagnostic sensors (under *Diagnostic* on the device page
 
 They stay available while the device is offline, which is exactly when they're useful.
 
-### Alarms *(1.0.50 beta)*
-
-> **Beta:** available in the 1.0.50 pre-releases (enable *Show beta versions* in HACS).
+### Alarms
 
 Alarms the controller already tracks are shown in Home Assistant. Nothing is configured or acknowledged on the device.
 
@@ -363,9 +361,9 @@ Binary outputs use the `Enumerated` BACnet type (`0 = inactive`, `1 = active`), 
 | Service | What it does |
 |---|---|
 | `bacnet.relinquish` | Release Home Assistant's command on an object (write Null) so lower priorities or the Relinquish Default take over. Optional `priority` (1–16), default: the device's Write Priority. |
-| `bacnet.write_value` | Write a value once at a chosen `priority`, without changing the device's Write Priority setting. Binary objects: `0` = inactive, `1` = active. *(1.0.50 beta)* With `property`, writes any other property instead (no priority). |
-| `bacnet.read_property` *(1.0.50 beta)* | Read any property of an object and return it as response data. |
-| `bacnet.read_trend_log` *(1.0.50 beta)* | Read the records of a Trend Log object on a device. See [Trend logs](#trend-logs-1050-beta). |
+| `bacnet.write_value` | Write a value once at a chosen `priority`, without changing the device's Write Priority setting. Binary objects: `0` = inactive, `1` = active. With `property`, writes any other property instead (no priority). |
+| `bacnet.read_property` | Read any property of an object and return it as response data. |
+| `bacnet.read_trend_log` | Read the records of a Trend Log object on a device. See [Trend logs](#trend-logs). |
 
 `bacnet.relinquish` works on BACnet switch, number and climate entities:
 
@@ -377,9 +375,7 @@ data:
   priority: 8
 ```
 
-### Other properties *(1.0.50 beta)*
-
-> **Beta:** available in the 1.0.50 pre-releases (enable *Show beta versions* in HACS).
+### Other properties
 
 Entities show an object's present value. To read or change any other property — a fan's minimum run time (`minimumOnTime`, property 67), an alarm limit (`highLimit`), `outOfService` — use `bacnet.read_property` and the `property` field of `bacnet.write_value`. The property can be given by name (`minimumOnTime` or `minimum-on-time`) or by number (`67`).
 
@@ -419,9 +415,7 @@ response_variable: result
 
 If the device refuses (for example `unknown-property`), the action fails with the device's error.
 
-### Extra properties as entities *(1.0.50 beta)*
-
-> **Beta:** available in the 1.0.50 pre-releases (enable *Show beta versions* in HACS).
+### Extra properties as entities
 
 For properties you want to see or change from the dashboard, no automation or template is needed: in **Configure → Customize objects**, tick the object and pick its **extra properties**. Each becomes its own entity on the device, named after the object and the property (e.g. *Ventilation fan Minimum On Time*), and is read with every poll.
 
@@ -440,9 +434,7 @@ Targeting one of these entities with `bacnet.write_value` or `bacnet.read_proper
 
 Properties you type under **other properties** become read-only sensors, unless the table above lists them for that object type. Writable ones (number, switch) are under *Configuration* on the device page, read-only ones under *Diagnostic*. A property the object doesn't have shows as *unknown*.
 
-### Trend logs *(1.0.50 beta)*
-
-> **Beta:** available in the 1.0.50 pre-releases (enable *Show beta versions* in HACS).
+### Trend logs
 
 Controllers log values in Trend Log objects, so changes between two polls aren't lost. Trend Logs show up in the object list of the setup wizard and the rescan; imported, each becomes a sensor with the number of records it holds (attribute `bacnet_log_enabled` tells whether it is logging). `bacnet.read_trend_log` reads the records with BACnet `ReadRange`.
 
@@ -465,9 +457,7 @@ response_variable: trend
 
 returns `{"sensor.ahu_1_supply_temperature_log": {"instance": 4, "records": [{"time": "2026-10-19T10:00:00", "value": 21.5}, …]}}`, oldest first. Only records with a time and a value are returned: log-status changes, time changes, failures and buffer-cleared markers are left out. Times are the controller's local time, without a time zone.
 
-### Schedules *(1.0.50 beta)*
-
-> **Beta:** Schedule support is available in the 1.0.50 pre-releases. In HACS, enable *Show beta versions* for this integration to try it; the current stable release does not include it yet.
+### Schedules
 
 A BACnet Schedule object is imported as a sensor showing the value the schedule currently commands. The schedule itself is read and changed with two services that target that sensor:
 
@@ -592,7 +582,7 @@ actions:
       message: "AHU 1 is not responding to BACnet requests."
 ```
 
-### Notify on BACnet alarms *(1.0.50 beta)*
+### Notify on BACnet alarms
 
 ```yaml
 alias: BACnet alarm notification
@@ -610,7 +600,7 @@ actions:
         {% endif %}
 ```
 
-### Calendar events as schedule exceptions *(1.0.50 beta)*
+### Calendar events as schedule exceptions
 
 Instead of overriding the controller, add each calendar event to its Schedule object as an exception. The controller then knows about the event in advance, so features like optimal start can prepare the space. This automation adds the exception 12 hours before the event and removes it when the event ends.
 
