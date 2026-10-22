@@ -51,7 +51,7 @@ jobs:
           # Install the exact bacpypes3 pin declared in manifest.json so tests
           # exercise the same version that actually ships to users.
           pip install "${{ steps.manifest.outputs.requirement }}"
-          pip install pytest pytest-cov voluptuous
+          pip install pytest pytest-cov voluptuous aiohttp
 
       - name: Run pytest with coverage
         run: |
