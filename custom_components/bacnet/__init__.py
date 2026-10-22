@@ -276,10 +276,15 @@ def _async_check_stale_overrides(
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
-    """Register the integration-wide services (once, not per entry)."""
+    """Register the integration-wide services and the usage reporter (once)."""
+    from . import telemetry  # noqa: WPS433
     from .services import async_setup_services  # noqa: WPS433
 
     async_setup_services(hass)
+    # Sends nothing unless an entry has opted in; see telemetry.py.
+    reporter = telemetry.TelemetryReporter(hass)
+    reporter.async_start()
+    hass.data.setdefault(DOMAIN, {})["_telemetry"] = reporter
     return True
 
 

@@ -220,6 +220,7 @@ _ha_config_entries.ConfigFlow = _ConfigFlow
 _ha_const = MagicMock()
 _ha_const.Platform = _Platform
 _ha_const.ATTR_TEMPERATURE = "temperature"
+_ha_const.__version__ = "2026.10.1"
 _ha_const.UnitOfTemperature = _UnitOfTemperature
 _ha_const.EntityCategory = _EntityCategory
 
@@ -354,6 +355,10 @@ sys.modules.update(
         "homeassistant.helpers.config_validation": MagicMock(),
         "homeassistant.helpers.service": MagicMock(),
         "homeassistant.helpers.target": MagicMock(),
+        "homeassistant.helpers.storage": MagicMock(),
+        "homeassistant.helpers.aiohttp_client": MagicMock(),
+        "homeassistant.helpers.event": MagicMock(),
+        "homeassistant.loader": MagicMock(),
         "homeassistant.data_entry_flow": _ha_flow,
         "voluptuous": _voluptuous,
     }
