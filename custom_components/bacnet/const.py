@@ -252,6 +252,11 @@ CONF_WRITE_PRIORITY = "write_priority"
 WRITE_PRIORITY_OPTIONS: list[int] = [8, 9, 12, 13, 14, 15, 16]  # BACnet: 1-16
 
 # ---------------------------------------------------------------------------
+# Opt-in anonymous usage report (telemetry.py)
+# ---------------------------------------------------------------------------
+TELEMETRY_SCHEMA = 1  # payload contract version, shared with the server
+
+# ---------------------------------------------------------------------------
 # Extra properties offered per object in the options flow
 # ---------------------------------------------------------------------------
 _ANALOG = frozenset({0, 1, 2})
