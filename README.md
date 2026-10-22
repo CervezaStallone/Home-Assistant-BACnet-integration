@@ -719,7 +719,7 @@ The defaults suit most controllers. For unusual devices they can be changed in `
 
 The integration can send anonymous usage statistics. It is **opt-in and off by default**: tick **Share anonymous usage statistics** on the last setup page or in a device's options. Devices added before this option existed stay off; nothing asks you about it.
 
-While at least one device has it ticked, Home Assistant sends one report a day (the first about 10 minutes after start) to `https://ha-bacnet.telemetry.brdc.nl`, a server run by the maintainer in the EU. Only ticked devices are included, and only once they have answered a poll.
+While at least one device has it ticked, Home Assistant sends one report a day (the first about 10 minutes after start) to a server run by the maintainer. The data is stored in the EU. Only ticked devices are included, and only once they have answered a poll.
 
 What a report contains — everything, nothing else:
 
