@@ -167,6 +167,7 @@ Devices that users have reported working with this integration. BACnet is a stan
 | Distech | ECY-VAV Gen 1 NON BI | 1.19.26161 |
 | Distech Controls | ECY-TU203 Rev 1.0A | 1.22.22026.1 / 1.19.23041.871 |
 | Global Control 5 | iSMA-B-MIX18-IP | 6.5.3 |
+| HMS Industrial Networks SLU | PA-AC-BAC | 14.1.2.0 |
 | Kieback&Peter | DDC4000 | — |
 | Kieback&Peter | DDC420 | — |
 | Microtrol | Black Pear 2 | 0.8.6 |
