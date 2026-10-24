@@ -55,12 +55,13 @@ class TestValidateTargetAddress:
 def test_select_objects_stores_share_usage_in_options():
     # Opt-in lives in the options (switchable later), never in entry data.
     import asyncio
-    from unittest.mock import AsyncMock
+    from unittest.mock import AsyncMock, MagicMock
 
     from custom_components.bacnet.config_flow import BACnetConfigFlow
 
     def finish(user_input):
         flow = BACnetConfigFlow()
+        flow.hass = MagicMock(data={})
         flow._network_config = {}
         flow._selected_device = {"device_id": 1, "address": "10.0.0.5"}
         flow._discovered_objects = [{"object_type": 0, "instance": 1}]
@@ -75,3 +76,38 @@ def test_select_objects_stores_share_usage_in_options():
     assert on["options"] == {"share_usage": True}
     assert off["options"] == {"share_usage": False}
     assert "share_usage" not in on["data"]
+
+
+def test_select_objects_links_the_privacy_policy():
+    import asyncio
+
+    from custom_components.bacnet.config_flow import BACnetConfigFlow
+    from custom_components.bacnet.const import PRIVACY_URL
+
+    flow = BACnetConfigFlow()
+    flow._selected_device = {"device_id": 1, "device_name": "Dev"}
+    flow._discovered_objects = [{"object_type": 0, "instance": 1}]
+    flow.async_show_form = lambda **kw: kw
+    shown = asyncio.run(flow.async_step_select_objects())
+    assert shown["description_placeholders"] == {"privacy_url": PRIVACY_URL}
+
+
+def test_setup_ticks_share_usage_by_default(monkeypatch):
+    import asyncio
+
+    from custom_components.bacnet import config_flow as cf
+    from custom_components.bacnet.config_flow import BACnetConfigFlow
+
+    defaults = {}
+
+    def optional(key, default=None):
+        defaults[key] = default
+        return key
+
+    monkeypatch.setattr(cf.vol, "Optional", optional)
+    flow = BACnetConfigFlow()
+    flow._selected_device = {"device_id": 1, "device_name": "Dev"}
+    flow._discovered_objects = [{"object_type": 0, "instance": 1}]
+    flow.async_show_form = lambda **kw: kw
+    asyncio.run(flow.async_step_select_objects())
+    assert defaults["share_usage"] is True

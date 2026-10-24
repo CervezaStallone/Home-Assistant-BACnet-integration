@@ -1,7 +1,9 @@
 """Opt-in anonymous usage report.
 
 Once a day, while at least one config entry has "share usage" ticked, one
-report per Home Assistant installation goes to the telemetry server. The
+report per Home Assistant installation goes to the telemetry server.
+Installations that existed before the option was ticked by default are
+asked once, in Repairs (repairs.py). The
 server rejects the whole report when anything is outside its contract, so
 every value is cleaned and cut here.
 """
@@ -19,6 +21,7 @@ import aiohttp
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP
 from homeassistant.const import __version__ as HA_VERSION
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.event import async_call_later, async_track_time_interval
 from homeassistant.helpers.storage import Store
@@ -31,6 +34,8 @@ from .const import (
     CONF_USE_BBMD,
     CONF_VENDOR_NAME,
     DOMAIN,
+    ISSUE_SHARE_USAGE,
+    PRIVACY_URL,
     TELEMETRY_FIRST_DELAY,
     TELEMETRY_INTERVAL,
     TELEMETRY_SCHEMA,
@@ -131,19 +136,53 @@ class TelemetryReporter:
     def __init__(self, hass: HomeAssistant) -> None:
         self._hass = hass
         self._store: Store = Store(hass, 1, "bacnet.telemetry")
-        self._install_id: str | None = None
+        self._data: dict | None = None
         self._unsubs: list = []
+
+    async def _async_load(self) -> dict:
+        """The stored data; empty when missing or corrupt."""
+        if self._data is None:
+            try:
+                self._data = dict(await self._store.async_load() or {})
+            except Exception:  # noqa: BLE001 — corrupt: start over
+                self._data = {}
+        return self._data
 
     async def async_install_id(self) -> str:
         """The random installation ID, created and saved on first use."""
-        if self._install_id is None:
-            try:
-                data = await self._store.async_load()
-                self._install_id = str(uuid.UUID(data["install_id"]))
-            except Exception:  # noqa: BLE001 — missing or corrupt: start over
-                self._install_id = str(uuid.uuid4())
-                await self._store.async_save({"install_id": self._install_id})
-        return self._install_id
+        data = await self._async_load()
+        try:
+            return str(uuid.UUID(data["install_id"]))
+        except Exception:  # noqa: BLE001 — missing or corrupt: start over
+            data["install_id"] = str(uuid.uuid4())
+            await self._store.async_save(data)
+            return data["install_id"]
+
+    async def async_mark_asked(self) -> None:
+        """Remember that the user chose, so the Repairs question never returns."""
+        ir.async_delete_issue(self._hass, DOMAIN, ISSUE_SHARE_USAGE)
+        data = await self._async_load()
+        if not data.get("asked"):
+            data["asked"] = True
+            await self._store.async_save(data)
+
+    async def async_ask_once(self) -> None:
+        """Ask an installation that never chose, once, in Repairs."""
+        entries = self._hass.config_entries.async_entries(DOMAIN)
+        if any(e.options.get(CONF_SHARE_USAGE, False) for e in entries):
+            ir.async_delete_issue(self._hass, DOMAIN, ISSUE_SHARE_USAGE)
+            return
+        if not entries or (await self._async_load()).get("asked"):
+            return
+        ir.async_create_issue(
+            self._hass,
+            DOMAIN,
+            ISSUE_SHARE_USAGE,
+            is_fixable=True,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key=ISSUE_SHARE_USAGE,
+            translation_placeholders={"privacy_url": PRIVACY_URL},
+        )
 
     async def async_send(self, _now: Any = None) -> None:
         """Send one report; do nothing when no entry has opted in."""

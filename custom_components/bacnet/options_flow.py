@@ -47,6 +47,7 @@ from .const import (
     OBJECT_TYPE_ANALOG_INPUT,
     OBJECT_TYPE_ANALOG_OUTPUT,
     OBJECT_TYPE_ANALOG_VALUE,
+    PRIVACY_URL,
     SUPPORTED_DOMAINS,
 )
 from .helpers import default_domain_for, property_label
@@ -145,6 +146,7 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
             step_id="init",
             data_schema=schema,
             errors=errors,
+            description_placeholders={"privacy_url": PRIVACY_URL},
         )
 
     # ------------------------------------------------------------------

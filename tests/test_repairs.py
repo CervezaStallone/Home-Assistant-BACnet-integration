@@ -106,3 +106,51 @@ class TestIssueLifecycle:
         ir = self._run({})
         ir.async_create_issue.assert_not_called()
         ir.async_delete_issue.assert_called_once()
+
+
+class TestShareUsageRepairFlow:
+    def _flow(self):
+        from unittest.mock import AsyncMock
+
+        from custom_components.bacnet.repairs import async_create_fix_flow
+
+        entries = [MagicMock(options={"x": 1}), MagicMock(options={})]
+        hass = MagicMock()
+        hass.config_entries.async_entries.return_value = entries
+        reporter = MagicMock(async_mark_asked=AsyncMock())
+        hass.data = {"bacnet": {"_telemetry": reporter}}
+        flow = asyncio.run(async_create_fix_flow(hass, "share_usage", None))
+        flow.hass = hass
+        flow.async_show_form = lambda **kw: kw
+        flow.async_create_entry = lambda **kw: {"type": "create_entry"}
+        return flow, hass, entries, reporter
+
+    def test_form_is_ticked_and_links_the_privacy_policy(self, monkeypatch):
+        from custom_components.bacnet import repairs
+        from custom_components.bacnet.const import PRIVACY_URL
+
+        monkeypatch.setattr(
+            repairs.vol, "Optional", lambda key, default=None: (key, default)
+        )
+        flow, *_ = self._flow()
+        form = asyncio.run(flow.async_step_init())
+        assert form["description_placeholders"] == {"privacy_url": PRIVACY_URL}
+        assert form["data_schema"] == {("share_usage", True): bool}
+
+    def test_yes_ticks_every_device(self):
+        flow, hass, _, reporter = self._flow()
+        asyncio.run(flow.async_step_confirm({"share_usage": True}))
+        assert [
+            c.kwargs["options"]
+            for c in hass.config_entries.async_update_entry.call_args_list
+        ] == [
+            {"x": 1, "share_usage": True},
+            {"share_usage": True},
+        ]
+        reporter.async_mark_asked.assert_awaited_once()
+
+    def test_no_changes_nothing_but_is_not_asked_again(self):
+        flow, hass, _, reporter = self._flow()
+        asyncio.run(flow.async_step_confirm({"share_usage": False}))
+        hass.config_entries.async_update_entry.assert_not_called()
+        reporter.async_mark_asked.assert_awaited_once()
