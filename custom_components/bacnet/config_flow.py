@@ -43,6 +43,7 @@ from .const import (
     DEFAULT_BBMD_TTL,
     DEFAULT_PORT,
     DOMAIN,
+    PRIVACY_URL,
 )
 from .helpers import mask_address as _mask_address
 from .helpers import object_key as _object_key
@@ -613,6 +614,7 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="select_objects",
             data_schema=schema,
             errors=errors,
+            description_placeholders={"privacy_url": PRIVACY_URL},
         )
 
     # ------------------------------------------------------------------

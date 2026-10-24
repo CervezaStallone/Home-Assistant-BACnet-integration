@@ -45,7 +45,7 @@
         "data_description": {
           "device_name": "Naam van dit apparaat in Home Assistant. Vooraf ingevuld met de BACnet-objectName.",
           "selected_objects": "Vink de objecten aan die je in Home Assistant wilt volgen of bedienen.",
-          "share_usage": "Standaard uit. Stuurt één keer per dag fabrikant, model en firmware van dit apparaat, of COV en ReadPropertyMultiple werken, het aantal objecten per type en hoe het verbonden is (direct of via BBMD), plus de versie van de integratie en van Home Assistant en een willekeurige installatie-ID. Nooit adressen, namen of waarden. Gebruikt om de lijst met geteste apparaten aan te vullen. Zie 'Privacy and usage statistics' in de README."
+          "share_usage": "Standaard uit. Stuurt één keer per dag fabrikant, model en firmware van dit apparaat, of COV en ReadPropertyMultiple werken, het aantal objecten per type en hoe het verbonden is (direct of via BBMD), plus de versie van de integratie en van Home Assistant en een willekeurige installatie-ID. Nooit adressen, namen of waarden. Gebruikt om de lijst met geteste apparaten aan te vullen. [Privacyverklaring]({privacy_url}#nederlands)"
         }
       },
       "reconfigure": {
@@ -145,7 +145,7 @@
           "use_description": "Indien aangevinkt krijgen entiteiten hun naam uit de BACnet-property 'description' (ID 28) in plaats van 'objectName' (ID 77).",
           "rescan_objects": "Leest de huidige Object_List van het apparaat opnieuw in, zodat je objecten kunt toevoegen die bij het instellen niet gekozen waren, of objecten die sindsdien aan het apparaat zijn toegevoegd. Al geïmporteerde objecten blijven standaard geselecteerd.",
           "live_metadata_properties": "Properties die een eigen live COV-Property-abonnement krijgen in plaats van het periodiek opnieuw uitlezen. Elke property is een extra abonnement op het apparaat, en niet elk apparaat ondersteunt dit.",
-          "share_usage": "Standaard uit. Stuurt één keer per dag fabrikant, model en firmware van dit apparaat, of COV en ReadPropertyMultiple werken, het aantal objecten per type en hoe het verbonden is (direct of via BBMD), plus de versie van de integratie en van Home Assistant en een willekeurige installatie-ID. Nooit adressen, namen of waarden. Gebruikt om de lijst met geteste apparaten aan te vullen. Zie 'Privacy and usage statistics' in de README."
+          "share_usage": "Standaard uit. Stuurt één keer per dag fabrikant, model en firmware van dit apparaat, of COV en ReadPropertyMultiple werken, het aantal objecten per type en hoe het verbonden is (direct of via BBMD), plus de versie van de integratie en van Home Assistant en een willekeurige installatie-ID. Nooit adressen, namen of waarden. Gebruikt om de lijst met geteste apparaten aan te vullen. [Privacyverklaring]({privacy_url}#nederlands)"
         }
       },
       "rescan_objects": {

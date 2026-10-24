@@ -720,7 +720,7 @@ The defaults suit most controllers. For unusual devices they can be changed in `
 
 The integration can send anonymous usage statistics. It is **opt-in and off by default**: tick **Share anonymous usage statistics** on the last setup page or in a device's options. Devices added before this option existed stay off; nothing asks you about it.
 
-While at least one device has it ticked, Home Assistant sends one report a day (the first about 10 minutes after start) to a server run by the maintainer. The data is stored in the EU. Only ticked devices are included, and only once they have answered a poll.
+While at least one device has it ticked, Home Assistant sends one report a day (the first about 10 minutes after start) to a server run by the maintainer, on servers in the EU. The full [privacy policy](PRIVACY.md) (English and Nederlands) explains what is collected, why, how long it is kept and how to have it deleted; it is also linked under the checkbox. Only ticked devices are included, and only once they have answered a poll.
 
 What a report contains — everything, nothing else:
 
@@ -738,7 +738,7 @@ What a report contains — everything, nothing else:
 | `rpm` | `true` | Whether the device accepts ReadPropertyMultiple |
 | `objects` | `{"0": 12, "2": 40}` | Number of imported objects per BACnet object type |
 
-**Never sent:** IP or BACnet addresses, device instance numbers, object or device names, descriptions, values, or anything about your Home Assistant setup. The server does not store your IP address.
+**Never sent:** IP or BACnet addresses, device instance numbers, object or device names, descriptions, values, or anything about your Home Assistant setup. The server does not store your IP address with the data; it adds only the country the report came from and the date it arrived.
 
 The reports are kept for statistics (how many installations, which devices and object types are in use). The only thing that ever becomes public is a device's manufacturer, model and firmware, in the [tested devices](#tested-devices) list, after the maintainer has checked it.
 
