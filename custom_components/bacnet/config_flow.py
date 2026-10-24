@@ -505,6 +505,11 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 # Clean up the client used during flow
                 await self._cleanup_client()
 
+                # The user saw the usage checkbox: no Repairs question later
+                reporter = self.hass.data.get(DOMAIN, {}).get("_telemetry")
+                if reporter is not None:
+                    await reporter.async_mark_asked()
+
                 # --- Create the config entry ---
                 return self.async_create_entry(
                     title=device_name,
@@ -596,7 +601,7 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     vol.Optional(
                         CONF_SELECTED_OBJECTS, default=list(object_options.keys())
                     ): cv.multi_select(object_options),
-                    vol.Optional(CONF_SHARE_USAGE, default=False): bool,
+                    vol.Optional(CONF_SHARE_USAGE, default=True): bool,
                 }
             )
         except Exception as exc:

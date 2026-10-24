@@ -10,7 +10,7 @@ Last updated: 24 October 2026. Applies to the opt-in usage statistics, available
 
 ### In short
 
-The integration only sends data when you tick **Share anonymous usage statistics**. It is off by default. When it is on, Home Assistant sends one small report a day about your BACnet devices: manufacturer, model, firmware and a few counts. It never sends addresses, names or values. The reports help decide which devices to test and support.
+The integration only sends data while **Share anonymous usage statistics** is ticked. It is ticked by default when you add a device, and you can untick it on that same page or later in the device's options. Installations that existed before 1.0.51-beta.2 are asked once, in Repairs. When it is on, Home Assistant sends one small report a day about your BACnet devices: manufacturer, model, firmware and a few counts. It never sends addresses, names or values. The reports help decide which devices to test and support.
 
 ### Who is responsible
 
@@ -47,7 +47,7 @@ Your IP address is used only while your report is received: to look up your coun
 
 ### Why, and on what basis
 
-To learn which BACnet devices and object types are in use, so testing and support go where they matter. The only thing that ever becomes public is a device's manufacturer, model and firmware in the [tested devices](README.md#tested-devices) list, after the maintainer has checked it. The legal basis is your consent (GDPR art. 6(1)(a)): ticking the option.
+To learn which BACnet devices and object types are in use, so testing and support go where they matter. The only thing that ever becomes public is a device's manufacturer, model and firmware in the [tested devices](README.md#tested-devices) list, after the maintainer has checked it. The legal basis is our legitimate interest in knowing which devices to support (GDPR art. 6(1)(f)): the data is minimal, contains no names, addresses or values, and you can object at any time by unticking the option.
 
 ### Pseudonymous, not anonymous
 
@@ -77,7 +77,7 @@ Changes to this policy are made in this file and are visible in its history on G
 
 ### In het kort
 
-De integratie stuurt alleen gegevens als je **Anonieme gebruiksstatistieken delen** aanvinkt. Standaard staat dat uit. Staat het aan, dan stuurt Home Assistant één keer per dag een klein rapport over je BACnet-apparaten: fabrikant, model, firmware en een paar aantallen. Nooit adressen, namen of waarden. De rapporten helpen bepalen welke apparaten getest en ondersteund worden.
+De integratie stuurt alleen gegevens zolang **Anonieme gebruiksstatistieken delen** is aangevinkt. Bij het toevoegen van een apparaat staat het standaard aan; je kunt het op die pagina uitvinken, of later in de opties van het apparaat. Installaties van vóór 1.0.51-beta.2 krijgen één keer de vraag, in Reparaties. Staat het aan, dan stuurt Home Assistant één keer per dag een klein rapport over je BACnet-apparaten: fabrikant, model, firmware en een paar aantallen. Nooit adressen, namen of waarden. De rapporten helpen bepalen welke apparaten getest en ondersteund worden.
 
 ### Wie is verantwoordelijk
 
@@ -114,7 +114,7 @@ Je IP-adres wordt alleen gebruikt tijdens het ontvangen van je rapport: om je la
 
 ### Waarom, en op welke grond
 
-Om te weten welke BACnet-apparaten en objecttypes in gebruik zijn, zodat testen en ondersteuning gaan naar waar het telt. Het enige dat ooit openbaar wordt, is de fabrikant, het model en de firmware van een apparaat in de lijst met [geteste apparaten](README.md#tested-devices), nadat de maker die heeft gecontroleerd. De grondslag is je toestemming (AVG art. 6 lid 1 onder a): het aanvinken van de optie.
+Om te weten welke BACnet-apparaten en objecttypes in gebruik zijn, zodat testen en ondersteuning gaan naar waar het telt. Het enige dat ooit openbaar wordt, is de fabrikant, het model en de firmware van een apparaat in de lijst met [geteste apparaten](README.md#tested-devices), nadat de maker die heeft gecontroleerd. De grondslag is ons gerechtvaardigd belang om te weten welke apparaten we moeten ondersteunen (AVG art. 6 lid 1 onder f): de gegevens zijn minimaal, bevatten geen namen, adressen of waarden, en je kunt op elk moment bezwaar maken door de optie uit te vinken.
 
 ### Pseudoniem, niet anoniem
 

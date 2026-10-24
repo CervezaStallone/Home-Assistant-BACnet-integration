@@ -4,23 +4,36 @@ stale_domain_overrides: before 1.0.47 the options flow stored a type-only
 domain default as an override for every object, forcing e.g. non-commandable
 Binary Values onto the switch platform. The user confirms before those
 overrides are removed, since the mapping is theirs to own.
+
+share_usage: installations from before the usage statistics were ticked by
+default are asked once whether to share them (telemetry.py).
 """
 
 from __future__ import annotations
 
 from typing import Any
 
+import voluptuous as vol
 from homeassistant.components.repairs import RepairsFlow
 from homeassistant.core import HomeAssistant
 
-from .const import CONF_DOMAIN_MAPPING, CONF_SELECTED_OBJECTS
+from .const import (
+    CONF_DOMAIN_MAPPING,
+    CONF_SELECTED_OBJECTS,
+    CONF_SHARE_USAGE,
+    DOMAIN,
+    ISSUE_SHARE_USAGE,
+    PRIVACY_URL,
+)
 from .helpers import stale_domain_overrides
 
 
 async def async_create_fix_flow(
     hass: HomeAssistant, issue_id: str, data: dict[str, Any] | None
 ) -> RepairsFlow:
-    """Create the fix flow for a stale-domain-overrides issue."""
+    """Create the fix flow for the issue."""
+    if issue_id == ISSUE_SHARE_USAGE:
+        return ShareUsageRepairFlow()
     return StaleDomainOverridesRepairFlow((data or {}).get("entry_id", ""))
 
 
@@ -54,4 +67,29 @@ class StaleDomainOverridesRepairFlow(RepairsFlow):
                     },
                 },
             )
+        return self.async_create_entry(data={})
+
+
+class ShareUsageRepairFlow(RepairsFlow):
+    """Tick or leave the usage statistics for every device; asked only once."""
+
+    async def async_step_init(self, user_input: dict[str, Any] | None = None):
+        return await self.async_step_confirm()
+
+    async def async_step_confirm(self, user_input: dict[str, Any] | None = None):
+        if user_input is None:
+            return self.async_show_form(
+                step_id="confirm",
+                data_schema=vol.Schema(
+                    {vol.Optional(CONF_SHARE_USAGE, default=True): bool}
+                ),
+                description_placeholders={"privacy_url": PRIVACY_URL},
+            )
+
+        await self.hass.data[DOMAIN]["_telemetry"].async_mark_asked()
+        if user_input.get(CONF_SHARE_USAGE, False):
+            for entry in self.hass.config_entries.async_entries(DOMAIN):
+                self.hass.config_entries.async_update_entry(
+                    entry, options={**entry.options, CONF_SHARE_USAGE: True}
+                )
         return self.async_create_entry(data={})

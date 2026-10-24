@@ -45,7 +45,7 @@
         "data_description": {
           "device_name": "Name for this device in Home Assistant. Pre-filled with the BACnet objectName.",
           "selected_objects": "Check the objects you want to monitor or control in Home Assistant.",
-          "share_usage": "Off by default. Once a day, sends this device's manufacturer, model and firmware, whether COV and ReadPropertyMultiple work, the number of objects per type and how it is connected (direct or BBMD), plus the integration and Home Assistant version and a random installation ID. Never addresses, names or values. Used to grow the tested devices list. [Privacy policy]({privacy_url})"
+          "share_usage": "Ticked by default; untick to send nothing. Once a day, sends this device's manufacturer, model and firmware, whether COV and ReadPropertyMultiple work, the number of objects per type and how it is connected (direct or BBMD), plus the integration and Home Assistant version and a random installation ID. Never addresses, names or values. Used to grow the tested devices list. [Privacy policy]({privacy_url})"
         }
       },
       "reconfigure": {
@@ -145,7 +145,7 @@
           "use_description": "When checked, entities will be named using the BACnet 'description' property (ID 28) instead of 'objectName' (ID 77).",
           "rescan_objects": "Rereads the device's current Object_List so you can add objects that weren't selected during setup, or pick up objects added to the device since. Currently imported objects stay selected by default.",
           "live_metadata_properties": "Properties that get their own live COV-Property subscription instead of the periodic re-read. Each one is an extra subscription on the device, and not every device supports it.",
-          "share_usage": "Off by default. Once a day, sends this device's manufacturer, model and firmware, whether COV and ReadPropertyMultiple work, the number of objects per type and how it is connected (direct or BBMD), plus the integration and Home Assistant version and a random installation ID. Never addresses, names or values. Used to grow the tested devices list. [Privacy policy]({privacy_url})"
+          "share_usage": "Ticked by default; untick to send nothing. Once a day, sends this device's manufacturer, model and firmware, whether COV and ReadPropertyMultiple work, the number of objects per type and how it is connected (direct or BBMD), plus the integration and Home Assistant version and a random installation ID. Never addresses, names or values. Used to grow the tested devices list. [Privacy policy]({privacy_url})"
         }
       },
       "rescan_objects": {
@@ -189,6 +189,20 @@
     "device_unreachable": {
       "title": "{device} is not responding",
       "description": "Home Assistant has not received data from the BACnet device {device} for several polls, and reconnecting did not help. Its entities are unavailable until it answers again.\n\nCheck that the device is powered and on the network, that its address is still correct (you can change it via Reconfigure), and — when a BBMD is used — that the BBMD is reachable. This message disappears by itself once the device responds."
+    },
+    "share_usage": {
+      "title": "Help grow the tested devices list",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Share usage statistics?",
+            "description": "This integration can send a small report once a day about your BACnet devices: manufacturer, model and firmware, whether COV and ReadPropertyMultiple work, and the number of objects per type. Never addresses, names or values. It helps decide which devices get tested and supported.\n\nTick to share for all your BACnet devices, untick to keep it off. You are only asked once and can change it per device in its options. [Privacy policy]({privacy_url})",
+            "data": {
+              "share_usage": "Share usage statistics"
+            }
+          }
+        }
+      }
     }
   },
   "exceptions": {

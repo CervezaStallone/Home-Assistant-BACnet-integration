@@ -257,7 +257,8 @@ WRITE_PRIORITY_OPTIONS: list[int] = [8, 9, 12, 13, 14, 15, 16]  # BACnet: 1-16
 # Opt-in anonymous usage report (telemetry.py)
 # ---------------------------------------------------------------------------
 TELEMETRY_SCHEMA = 1  # payload contract version, shared with the server
-CONF_SHARE_USAGE = "share_usage"  # entry option, off by default
+CONF_SHARE_USAGE = "share_usage"  # entry option; ticked by default in setup
+ISSUE_SHARE_USAGE = "share_usage"  # one-time question for existing installations
 TELEMETRY_URL = "https://ha-bacnet.telemetry.brdc.nl/v1/report"
 PRIVACY_URL = "https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/blob/master/PRIVACY.md"
 TELEMETRY_TIMEOUT = 10  # seconds; fire-and-forget, no retries

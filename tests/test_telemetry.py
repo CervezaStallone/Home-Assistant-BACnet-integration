@@ -268,3 +268,49 @@ def test_start_and_stop_run_in_the_event_loop():
 def test_clean_text_strips_lone_surrogates():
     # The server rejects them; a broken decoder must not sink the whole report.
     assert clean_text("PXC\ud800200", 128) == "PXC200"
+
+
+def _ask(entries, store_data=None):
+    """Run async_ask_once; return the faked issue registry and store."""
+    reporter, store, _, patches = _reporter(entries, store_data)
+    issues = MagicMock()
+    patches.append(patch.object(telemetry, "ir", issues))
+    patches[-1].start()
+    try:
+        asyncio.run(reporter.async_ask_once())
+    finally:
+        for p in patches:
+            p.stop()
+    return issues, store
+
+
+def test_existing_install_that_never_chose_is_asked_once():
+    issues, _ = _ask([_entry(share=False)])
+    issues.async_create_issue.assert_called_once()
+    assert issues.async_create_issue.call_args.kwargs["is_fixable"] is True
+
+    issues, _ = _ask([_entry(share=False)], {"asked": True})
+    issues.async_create_issue.assert_not_called()
+
+    issues, _ = _ask([])
+    issues.async_create_issue.assert_not_called()
+
+
+def test_opted_in_install_is_not_asked_and_question_disappears():
+    issues, _ = _ask([_entry(share=False), _entry()])
+    issues.async_create_issue.assert_not_called()
+    issues.async_delete_issue.assert_called_once()
+
+
+def test_mark_asked_keeps_install_id_and_saves_once():
+    stored = str(uuid.uuid4())
+    reporter, store, _, patches = _reporter([], {"install_id": stored})
+    patches.append(patch.object(telemetry, "ir", MagicMock()))
+    patches[-1].start()
+    try:
+        asyncio.run(reporter.async_mark_asked())
+        asyncio.run(reporter.async_mark_asked())
+    finally:
+        for p in patches:
+            p.stop()
+    store.async_save.assert_awaited_once_with({"install_id": stored, "asked": True})
