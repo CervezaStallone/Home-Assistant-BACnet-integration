@@ -10,7 +10,7 @@ Last updated: 24 October 2026. Applies to the opt-in usage statistics, available
 
 ### In short
 
-The integration only sends data while **Share anonymous usage statistics** is ticked. It is ticked by default when you add a device, and you can untick it on that same page or later in the device's options. Installations that existed before 1.0.51-beta.2 are asked once, in Repairs. When it is on, Home Assistant sends one small report a day about your BACnet devices: manufacturer, model, firmware and a few counts. It never sends addresses, names or values. The reports help decide which devices to test and support.
+The integration only sends data while **Share usage statistics** is ticked. It is ticked by default when you add a device, and you can untick it on that same page or later in the device's options. Installations that existed before 1.0.51-beta.2 are asked once, in Repairs. When it is on, Home Assistant sends one small report a day about your BACnet devices: manufacturer, model, firmware and a few counts. It never sends addresses, names or values. The reports help decide which devices to test and support.
 
 ### Who is responsible
 
@@ -77,7 +77,7 @@ Changes to this policy are made in this file and are visible in its history on G
 
 ### In het kort
 
-De integratie stuurt alleen gegevens zolang **Anonieme gebruiksstatistieken delen** is aangevinkt. Bij het toevoegen van een apparaat staat het standaard aan; je kunt het op die pagina uitvinken, of later in de opties van het apparaat. Installaties van vóór 1.0.51-beta.2 krijgen één keer de vraag, in Reparaties. Staat het aan, dan stuurt Home Assistant één keer per dag een klein rapport over je BACnet-apparaten: fabrikant, model, firmware en een paar aantallen. Nooit adressen, namen of waarden. De rapporten helpen bepalen welke apparaten getest en ondersteund worden.
+De integratie stuurt alleen gegevens zolang **Gebruiksstatistieken delen** is aangevinkt. Bij het toevoegen van een apparaat staat het standaard aan; je kunt het op die pagina uitvinken, of later in de opties van het apparaat. Installaties van vóór 1.0.51-beta.2 krijgen één keer de vraag, in Reparaties. Staat het aan, dan stuurt Home Assistant één keer per dag een klein rapport over je BACnet-apparaten: fabrikant, model, firmware en een paar aantallen. Nooit adressen, namen of waarden. De rapporten helpen bepalen welke apparaten getest en ondersteund worden.
 
 ### Wie is verantwoordelijk
 

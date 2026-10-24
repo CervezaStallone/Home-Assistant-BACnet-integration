@@ -40,7 +40,7 @@
           "device_name": "Device name",
           "select_all": "Select all objects",
           "selected_objects": "BACnet objects",
-          "share_usage": "Share anonymous usage statistics"
+          "share_usage": "Share usage statistics"
         },
         "data_description": {
           "device_name": "Name for this device in Home Assistant. Pre-filled with the BACnet objectName.",
@@ -136,7 +136,7 @@
           "use_description": "Use description (property id 28) instead of name",
           "rescan_objects": "Rescan device and manage BACnet object selection",
           "live_metadata_properties": "Live metadata properties",
-          "share_usage": "Share anonymous usage statistics"
+          "share_usage": "Share usage statistics"
         },
         "data_description": {
           "enable_cov": "When enabled, the integration subscribes to COV notifications. If the device does not support COV or subscription fails, polling is used as fallback.",

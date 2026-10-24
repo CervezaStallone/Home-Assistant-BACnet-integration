@@ -40,7 +40,7 @@
           "device_name": "Apparaatnaam",
           "select_all": "Alle objecten selecteren",
           "selected_objects": "BACnet-objecten",
-          "share_usage": "Anonieme gebruiksstatistieken delen"
+          "share_usage": "Gebruiksstatistieken delen"
         },
         "data_description": {
           "device_name": "Naam van dit apparaat in Home Assistant. Vooraf ingevuld met de BACnet-objectName.",
@@ -136,7 +136,7 @@
           "use_description": "Description (property-id 28) gebruiken in plaats van de naam",
           "rescan_objects": "Apparaat opnieuw scannen en objectselectie beheren",
           "live_metadata_properties": "Live metadata-properties",
-          "share_usage": "Anonieme gebruiksstatistieken delen"
+          "share_usage": "Gebruiksstatistieken delen"
         },
         "data_description": {
           "enable_cov": "Indien ingeschakeld abonneert de integratie zich op COV-meldingen. Ondersteunt het apparaat geen COV of mislukt het abonnement, dan wordt gepolld.",

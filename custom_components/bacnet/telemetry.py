@@ -1,4 +1,4 @@
-"""Opt-in anonymous usage report.
+"""Daily usage report.
 
 Once a day, while at least one config entry has "share usage" ticked, one
 report per Home Assistant installation goes to the telemetry server.
