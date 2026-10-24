@@ -1,4 +1,4 @@
-"""Tests for the opt-in anonymous usage report (telemetry.py).
+"""Tests for the daily usage report (telemetry.py).
 
 The server rejects the whole report with 400 when anything is outside its
 contract, so the payload limits are pinned here.
