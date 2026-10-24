@@ -27,7 +27,7 @@ requests-mock==1.11.0
 respx==0.21.0
 syrupy==4.6.1
 tqdm==4.66.2
-uv==0.1.24
+uv>=0.13.4  # GHSA-hq85-5cpj-mr62; the harness pins 0.1.24, HA 2024.4 itself needs none
 homeassistant==2024.4.3
 SQLAlchemy==2.0.29
 paho-mqtt==1.6.1
