@@ -435,6 +435,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # ---- 8. Listen for option changes ----
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
 
+    # ---- 9. Ask installations from before the opt-in default once ----
+    reporter = hass.data[DOMAIN].get("_telemetry")
+    if reporter is not None:
+        await reporter.async_ask_once()
+
     _LOGGER.info(
         "BACnet integration setup complete for device '%s' with %d objects",
         entry.data.get("device_name", "unknown"),

@@ -76,7 +76,7 @@ In plain terms: if your building has BACnet controllers, thermostats, sensors, o
 - **Diagnostics** — a diagnostics download and health sensors for troubleshooting
 - **Efficient on the network** — batched ReadPropertyMultiple reads that adapt to what the device can handle
 - **English and Dutch** user interface
-- **Opt-in usage statistics** *(1.0.51 beta)* — off by default; when on, helps grow the tested devices list. See [Privacy and usage statistics](#privacy-and-usage-statistics-1051-beta)
+- **Usage statistics** *(1.0.51 beta)* — ticked by default on the setup page, existing installations are asked once; helps grow the tested devices list. See [Privacy and usage statistics](#privacy-and-usage-statistics-1051-beta)
 
 ---
 
@@ -237,7 +237,7 @@ After setup, click **Configure** on the integration card to adjust:
 | **Polling interval** | How often all objects are polled, in seconds (minimum 10). Polling always runs — COV only adds faster updates in between. | `30` |
 | **Use description** | Show BACnet `description` (property 28) instead of `objectName` as entity name | Off |
 | **Live metadata properties** | Opt-in per property (`object_name`, `description`, `units`) for a *live* push update via BACnet's SubscribeCOVProperty service, instead of periodic re-reads. Each one is a separate COV subscription on the device — leave off unless you need instant updates and know your device supports it. | None |
-| **Share anonymous usage statistics** *(1.0.51 beta)* | Once a day, send this device's manufacturer, model, firmware and a few anonymous counts. See [Privacy and usage statistics](#privacy-and-usage-statistics-1051-beta) for every field. Also offered on the last setup page. | Off |
+| **Share anonymous usage statistics** *(1.0.51 beta)* | Once a day, send this device's manufacturer, model, firmware and a few anonymous counts. See [Privacy and usage statistics](#privacy-and-usage-statistics-1051-beta) for every field. Also on the last setup page, ticked there by default. | On for new devices |
 | **Rescan device** | Re-read the device's object list to add or remove objects. Objects found for the first time are listed first and marked **NEW**; labels include the object's description when it differs from its name. | — |
 
 After this page comes [Customize objects](#customize-objects). Changes take effect immediately — the integration reloads automatically.
@@ -719,9 +719,9 @@ The defaults suit most controllers. For unusual devices they can be changed in `
 
 > **Beta:** available in the 1.0.51 pre-releases (enable *Show beta versions* in HACS).
 
-The integration can send anonymous usage statistics. It is **opt-in and off by default**: tick **Share anonymous usage statistics** on the last setup page or in a device's options. Devices added before this option existed stay off; nothing asks you about it.
+The integration can send anonymous usage statistics. **Share anonymous usage statistics** is ticked by default on the last setup page; untick it there, or later in a device's options, to send nothing. Installations from before 1.0.51-beta.2 are asked once, in **Settings → Repairs**: tick to share for all devices, untick to keep it off. That question never comes back.
 
-While at least one device has it ticked, Home Assistant sends one report a day (the first about 10 minutes after start) to a server run by the maintainer. The data is stored in the EU. Only ticked devices are included, and only once they have answered a poll.
+While at least one device has it ticked, Home Assistant sends one report a day (the first about 10 minutes after start) to a server run by the maintainer, on servers in the EU. The full [privacy policy](PRIVACY.md) (English and Nederlands) explains what is collected, why, how long it is kept and how to have it deleted; it is also linked under the checkbox. Only ticked devices are included, and only once they have answered a poll.
 
 What a report contains — everything, nothing else:
 
@@ -739,7 +739,7 @@ What a report contains — everything, nothing else:
 | `rpm` | `true` | Whether the device accepts ReadPropertyMultiple |
 | `objects` | `{"0": 12, "2": 40}` | Number of imported objects per BACnet object type |
 
-**Never sent:** IP or BACnet addresses, device instance numbers, object or device names, descriptions, values, or anything about your Home Assistant setup. The server does not store your IP address.
+**Never sent:** IP or BACnet addresses, device instance numbers, object or device names, descriptions, values, or anything about your Home Assistant setup. The server does not store your IP address with the data; it adds only the country the report came from and the date it arrived.
 
 The reports are kept for statistics (how many installations, which devices and object types are in use). The only thing that ever becomes public is a device's manufacturer, model and firmware, in the [tested devices](#tested-devices) list, after the maintainer has checked it.
 
