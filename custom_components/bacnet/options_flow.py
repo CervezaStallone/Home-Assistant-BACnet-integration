@@ -21,6 +21,7 @@ from homeassistant.data_entry_flow import FlowResult
 
 from .bacnet_client import BACnetClient
 from .const import (
+    CONF_ADD_OBJECTS,
     CONF_CLIMATE_TEMPERATURE_SOURCES,
     CONF_COV_INCREMENT,
     CONF_COV_OVERRIDES,
@@ -32,7 +33,9 @@ from .const import (
     CONF_EXTRA_PROPERTIES,
     CONF_LIVE_METADATA_PROPERTIES,
     CONF_POLLING_INTERVAL,
+    CONF_REMOVE_OBJECTS,
     CONF_RESCAN_OBJECTS,
+    CONF_SELECT_TYPES,
     CONF_SELECTED_OBJECTS,
     CONF_SHARE_USAGE,
     CONF_USE_DESCRIPTION,
@@ -53,6 +56,8 @@ from .const import (
 from .helpers import default_domain_for, property_label
 from .helpers import object_key as _object_key
 from .helpers import object_label as _object_label
+from .helpers import object_picker as _object_picker
+from .helpers import object_type_options as _object_type_options
 from .helpers import select_objects_by_key as _select_objects_by_key
 
 _LOGGER = logging.getLogger(__name__)
@@ -172,9 +177,20 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
         current_keys = {_object_key(obj) for obj in current_objects}
 
         if user_input is not None:
-            selected_keys = set(user_input.get(CONF_SELECTED_OBJECTS, []))
+            # Objects the device no longer has drop out by themselves
+            found = {_object_key(obj) for obj in self._rescanned_objects}
+            types = {int(t) for t in user_input.get(CONF_SELECT_TYPES, [])}
+            selected_keys = (
+                (current_keys & found) - set(user_input.get(CONF_REMOVE_OBJECTS, []))
+                | set(user_input.get(CONF_ADD_OBJECTS, []))
+                | {
+                    _object_key(obj)
+                    for obj in self._rescanned_objects
+                    if obj["object_type"] in types
+                }
+            )
             if not selected_keys:
-                errors["base"] = "no_objects_found"
+                errors["base"] = "no_objects_selected"
             else:
                 new_selected = _select_objects_by_key(
                     self._rescanned_objects, selected_keys
@@ -192,43 +208,42 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
                     },
                 )
                 return await self.async_step_domain_mapping()
+        else:
+            if client is None:
+                return self.async_abort(reason="cannot_connect")
 
-        if client is None:
-            return self.async_abort(reason="cannot_connect")
+            try:
+                self._rescanned_objects = await client.read_object_list(
+                    device_address=self._config_entry.data.get(CONF_DEVICE_ADDRESS, ""),
+                    device_id=self._config_entry.data[CONF_DEVICE_ID],
+                )
+            except Exception:
+                _LOGGER.exception("Failed to rescan BACnet object list")
+                return self.async_abort(reason="cannot_connect")
 
-        try:
-            self._rescanned_objects = await client.read_object_list(
-                device_address=self._config_entry.data.get(CONF_DEVICE_ADDRESS, ""),
-                device_id=self._config_entry.data[CONF_DEVICE_ID],
-            )
-        except Exception:
-            _LOGGER.exception("Failed to rescan BACnet object list")
-            return self.async_abort(reason="cannot_connect")
+            if not self._rescanned_objects:
+                errors["base"] = "no_objects_found"
 
-        if not self._rescanned_objects:
-            errors["base"] = "no_objects_found"
-
-        # Default selection: everything already imported, plus nothing new
-        # (newly discovered objects are opt-in, matching the requested UX).
-        # New objects are listed first and marked, so they're easy to find
-        # on a controller with hundreds of objects (issue #61).
+        # Three fields, all empty: submitting unchanged keeps the selection.
+        # Big devices made one preselected list of hundreds unusable
+        # (issue #90); objects not imported yet are marked NEW (issue #61).
         new_objects = [
             o for o in self._rescanned_objects if _object_key(o) not in current_keys
         ]
-        object_options = {
-            _object_key(obj): _object_label(obj, new=True) for obj in new_objects
-        } | {
-            _object_key(obj): _object_label(obj)
-            for obj in self._rescanned_objects
-            if _object_key(obj) in current_keys
-        }
-        default_keys = [k for k in object_options if k in current_keys]
-
+        imported = [
+            o for o in self._rescanned_objects if _object_key(o) in current_keys
+        ]
         schema = vol.Schema(
             {
-                vol.Optional(
-                    CONF_SELECTED_OBJECTS, default=default_keys
-                ): cv.multi_select(object_options),
+                vol.Optional(CONF_ADD_OBJECTS, default=[]): _object_picker(
+                    {_object_key(o): _object_label(o, new=True) for o in new_objects}
+                ),
+                vol.Optional(CONF_SELECT_TYPES, default=[]): cv.multi_select(
+                    _object_type_options(new_objects)
+                ),
+                vol.Optional(CONF_REMOVE_OBJECTS, default=[]): _object_picker(
+                    {_object_key(o): _object_label(o) for o in imported}
+                ),
             }
         )
 
@@ -284,7 +299,7 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
                 vol.Optional(
                     CONF_CUSTOMIZE_OBJECTS,
                     default=[k for k in options if k in customised],
-                ): cv.multi_select(options),
+                ): _object_picker(options),
             }
         )
         return self.async_show_form(step_id="domain_mapping", data_schema=schema)

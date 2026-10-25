@@ -13,7 +13,6 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import logging
-from collections import Counter
 from typing import Any
 
 import homeassistant.helpers.config_validation as cv
@@ -22,12 +21,6 @@ from bacpypes3.pdu import Address
 from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
-from homeassistant.helpers.selector import (
-    SelectOptionDict,
-    SelectSelector,
-    SelectSelectorConfig,
-    SelectSelectorMode,
-)
 
 from .const import (
     CONF_BBMD_ADDRESS,
@@ -51,12 +44,13 @@ from .const import (
     DEFAULT_BBMD_TTL,
     DEFAULT_PORT,
     DOMAIN,
-    OBJECT_TYPE_NAMES,
     PRIVACY_URL,
 )
 from .helpers import mask_address as _mask_address
 from .helpers import object_key as _object_key
 from .helpers import object_label as _object_label
+from .helpers import object_picker as _object_picker
+from .helpers import object_type_options as _object_type_options
 from .helpers import select_objects_by_key as _select_objects_by_key
 
 _LOGGER = logging.getLogger(__name__)
@@ -612,30 +606,18 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
 
             default_name = self._selected_device.get("device_name", "BACnet Device")
-            type_counts = Counter(o["object_type"] for o in self._discovered_objects)
-            type_options = {
-                str(t): f"{OBJECT_TYPE_NAMES.get(t, f'Type {t}')} ({n})"
-                for t, n in sorted(type_counts.items())
-            }
 
             schema = vol.Schema(
                 {
                     vol.Optional(CONF_DEVICE_NAME, default=default_name): str,
                     vol.Optional(CONF_SELECT_ALL, default=False): bool,
                     vol.Optional(CONF_SELECT_TYPES, default=[]): cv.multi_select(
-                        type_options
+                        _object_type_options(self._discovered_objects)
                     ),
                     # A searchable dropdown with nothing preselected: devices
                     # can have hundreds of objects (issue #90)
-                    vol.Optional(CONF_SELECTED_OBJECTS, default=[]): SelectSelector(
-                        SelectSelectorConfig(
-                            options=[
-                                SelectOptionDict(value=key, label=label)
-                                for key, label in object_options.items()
-                            ],
-                            multiple=True,
-                            mode=SelectSelectorMode.DROPDOWN,
-                        )
+                    vol.Optional(CONF_SELECTED_OBJECTS, default=[]): _object_picker(
+                        object_options
                     ),
                     vol.Optional(CONF_SHARE_USAGE, default=True): bool,
                 }

@@ -153,11 +153,21 @@
       },
       "rescan_objects": {
         "title": "Manage BACnet Objects",
-        "description": "Currently imported objects are pre-selected. Check any additional objects you want to add, or uncheck ones to remove. Per-object settings are preserved for objects that stay selected."
+        "description": "Add or remove objects. Everything you leave empty stays as it is: submitting without changes keeps the current selection. Objects the device no longer has are dropped. Settings of removed objects are remembered.",
+        "data": {
+          "add_objects": "Objects to add",
+          "select_types": "Add all objects of these types",
+          "remove_objects": "Objects to remove"
+        },
+        "data_description": {
+          "add_objects": "Objects not imported yet; those marked NEW. Type to search by abbreviation (AI, BO 3), instance or name.",
+          "select_types": "Every object of a ticked type that is not imported yet is added. The number is how many that are.",
+          "remove_objects": "Imported objects to remove. Type to search."
+        }
       },
       "domain_mapping": {
         "title": "Customize objects",
-        "description": "Tick the BACnet objects whose entity type, COV setting or climate temperature sensor you want to change. Objects that already have a custom setting are ticked. Unticked objects use the defaults.",
+        "description": "Pick the BACnet objects whose entity type, COV setting or climate temperature sensor you want to change. Type to search. Objects that already have a custom setting are already picked; objects not picked use the defaults.",
         "data": {
           "customize_objects": "Objects to customize"
         }
@@ -171,7 +181,8 @@
       "invalid_polling_interval": "The polling interval must be at least 10 seconds.",
       "no_objects_found": "No readable BACnet objects were found on this device.",
       "unknown": "An unexpected error occurred.",
-      "unknown_property": "Unknown BACnet property. Use names such as minimumOnTime or minimum-on-time, or numbers such as 67, separated by commas."
+      "unknown_property": "Unknown BACnet property. Use names such as minimumOnTime or minimum-on-time, or numbers such as 67, separated by commas.",
+      "no_objects_selected": "Select at least one object, or keep some of the imported ones."
     },
     "abort": {
       "cannot_connect": "Could not reach the BACnet device to rescan its object list. Make sure the device is online and try again."

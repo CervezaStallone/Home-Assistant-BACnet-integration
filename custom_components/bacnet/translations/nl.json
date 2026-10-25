@@ -153,11 +153,21 @@
       },
       "rescan_objects": {
         "title": "BACnet-objecten beheren",
-        "description": "De al geïmporteerde objecten zijn vooraf geselecteerd. Vink extra objecten aan om ze toe te voegen, of vink objecten uit om ze te verwijderen. Objectinstellingen blijven bewaard voor objecten die geselecteerd blijven."
+        "description": "Voeg objecten toe of verwijder ze. Wat je leeg laat, blijft zoals het is: zonder wijzigingen verzenden houdt de huidige selectie. Objecten die het apparaat niet meer heeft, vervallen. Instellingen van verwijderde objecten worden onthouden.",
+        "data": {
+          "add_objects": "Objecten toevoegen",
+          "select_types": "Alle objecten van deze types toevoegen",
+          "remove_objects": "Objecten verwijderen"
+        },
+        "data_description": {
+          "add_objects": "Objecten die nog niet geïmporteerd zijn, gemarkeerd met NEW. Typ om te zoeken op afkorting (AI, BO 3), instance of naam.",
+          "select_types": "Elk nog niet geïmporteerd object van een aangevinkt type wordt toegevoegd. Het getal is hoeveel dat er zijn.",
+          "remove_objects": "Geïmporteerde objecten om te verwijderen. Typ om te zoeken."
+        }
       },
       "domain_mapping": {
         "title": "Objecten aanpassen",
-        "description": "Vink de BACnet-objecten aan waarvan je het entiteittype, de COV-instelling of de temperatuursensor (bij climate) wilt wijzigen. Objecten met een eigen instelling zijn al aangevinkt. Niet-aangevinkte objecten gebruiken de standaardinstellingen.",
+        "description": "Kies de BACnet-objecten waarvan je het entiteittype, de COV-instelling of de temperatuursensor (bij climate) wilt wijzigen. Typ om te zoeken. Objecten met een eigen instelling zijn al gekozen; niet-gekozen objecten gebruiken de standaardinstellingen.",
         "data": {
           "customize_objects": "Aan te passen objecten"
         }
@@ -171,7 +181,8 @@
       "invalid_polling_interval": "Het poll-interval moet minstens 10 seconden zijn.",
       "no_objects_found": "Er zijn op dit apparaat geen leesbare BACnet-objecten gevonden.",
       "unknown": "Er is een onverwachte fout opgetreden.",
-      "unknown_property": "Onbekende BACnet-property. Gebruik namen zoals minimumOnTime of minimum-on-time, of nummers zoals 67, gescheiden door komma's."
+      "unknown_property": "Onbekende BACnet-property. Gebruik namen zoals minimumOnTime of minimum-on-time, of nummers zoals 67, gescheiden door komma's.",
+      "no_objects_selected": "Kies minstens één object, of houd een deel van de geïmporteerde objecten."
     },
     "abort": {
       "cannot_connect": "Het BACnet-apparaat is niet bereikbaar om de objectlijst opnieuw te scannen. Controleer of het apparaat online is en probeer het opnieuw."
