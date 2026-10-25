@@ -32,7 +32,9 @@ CONF_SOFTWARE_VERSION = "software_version"
 # Object selection
 CONF_SELECTED_OBJECTS = "selected_objects"
 CONF_SELECT_ALL = "select_all"
-CONF_SELECT_TYPES = "select_types"  # setup: import every object of these types
+CONF_SELECT_TYPES = "select_types"  # setup/rescan: import every object of these types
+CONF_ADD_OBJECTS = "add_objects"  # rescan: objects to import as well
+CONF_REMOVE_OBJECTS = "remove_objects"  # rescan: imported objects to drop
 CONF_RESCAN_OBJECTS = "rescan_objects"  # options-flow only, never persisted
 
 # Naming

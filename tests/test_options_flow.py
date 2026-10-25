@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import ClassVar
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 from custom_components.bacnet.const import (
     CONF_CLIMATE_TEMPERATURE_SOURCES,
@@ -206,39 +206,103 @@ class TestClimateTemperatureSource:
         assert result["data"][CONF_CLIMATE_TEMPERATURE_SOURCES] == {}
 
 
-def test_rescan_lists_new_objects_first_and_marked(monkeypatch):
-    """Issue #61: on rescan, new objects come first with a NEW marker."""
-    new_obj = {"object_type": 0, "instance": 9, "object_name": "New"}
-    flow = _flow([_AI])
+_NEW_AI = {"object_type": 0, "instance": 9, "object_name": "New"}
+_NEW_BO = {"object_type": 4, "instance": 7, "object_name": "Pump"}
+
+
+def _rescan(monkeypatch, user_input=None, device=None):
+    """Run the rescan step on an entry with _AI and _BV_COMMANDABLE imported."""
+    from custom_components.bacnet import options_flow as of
+
+    imported = [_AI, _BV_COMMANDABLE]
+    flow = _flow(imported)
+    flow.hass = MagicMock()
     flow._config_entry.data = {
-        CONF_SELECTED_OBJECTS: [_AI],
+        CONF_SELECTED_OBJECTS: imported,
         "device_address": "1.2.3.4",
         "device_id": 1,
     }
+    found = device or [_AI, _BV_COMMANDABLE, _NEW_AI, _NEW_BO]
 
     async def _read_object_list(**_):
-        return [_AI, new_obj]
+        return found
 
     flow._config_entry.runtime_data.coordinator.client.read_object_list = (
         _read_object_list
     )
-    import custom_components.bacnet.options_flow as of
-
-    monkeypatch.setattr(of.cv, "multi_select", lambda options: options)
+    monkeypatch.setattr(of.cv, "multi_select", lambda options: ("multi", options))
     shown = {}
-
-    def _show_form(step_id, data_schema, **_):
-        ((key, options),) = data_schema.items()
-        shown["options"], shown["default"] = options, key.default
-        return {"type": "form"}
-
-    flow.async_show_form = _show_form
+    flow.async_show_form = lambda **kw: shown.update(kw) or {"type": "form"}
+    flow.async_step_domain_mapping = AsyncMock(return_value={"type": "next"})
     _run(flow.async_step_rescan_objects(), monkeypatch)
+    if user_input is not None:
+        shown.clear()
+        _run(flow.async_step_rescan_objects(user_input), monkeypatch)
+    return flow, shown
 
-    assert list(shown["options"]) == ["0:9", "0:3"]
-    assert shown["options"]["0:9"] == object_label(new_obj, new=True)
-    assert shown["options"]["0:3"] == object_label(_AI)
-    assert shown["default"] == ["0:3"]
+
+def _saved(flow):
+    call = flow.hass.config_entries.async_update_entry.call_args
+    return [
+        (o["object_type"], o["instance"])
+        for o in call.kwargs["data"][CONF_SELECTED_OBJECTS]
+    ]
+
+
+def test_rescan_offers_add_types_and_remove_with_nothing_preselected(monkeypatch):
+    """Issue #90: a rescan on a big device must not mean hundreds of checkboxes."""
+    _, shown = _rescan(monkeypatch)
+    fields = {k.key: (k.default, v) for k, v in shown["data_schema"].items()}
+
+    default, (kind, config) = fields["add_objects"]
+    assert default == []
+    assert kind == "select" and config["multiple"] is True
+    assert {o["value"]: o["label"] for o in config["options"]} == {
+        "0:9": object_label(_NEW_AI, new=True),
+        "4:7": object_label(_NEW_BO, new=True),
+    }
+
+    default, (kind, options) = fields["select_types"]
+    assert default == []
+    assert options == {"0": "Analog Input (1)", "4": "Binary Output (1)"}
+
+    default, (kind, config) = fields["remove_objects"]
+    assert default == []
+    assert [o["value"] for o in config["options"]] == ["0:3", "5:2"]
+
+
+def test_rescan_submit_without_changes_keeps_the_selection(monkeypatch):
+    flow, _ = _rescan(monkeypatch, {})
+    assert _saved(flow) == [(0, 3), (5, 2)]
+
+
+def test_rescan_adds_picked_objects_and_types_and_removes(monkeypatch):
+    flow, _ = _rescan(
+        monkeypatch,
+        {"add_objects": ["0:9"], "select_types": ["4"], "remove_objects": ["5:2"]},
+    )
+    assert _saved(flow) == [(0, 3), (0, 9), (4, 7)]
+
+
+def test_rescan_drops_objects_the_device_no_longer_has(monkeypatch):
+    flow, _ = _rescan(monkeypatch, {}, device=[_AI, _NEW_AI])
+    assert _saved(flow) == [(0, 3)]
+
+
+def test_rescan_removing_everything_says_none_selected(monkeypatch):
+    flow, shown = _rescan(monkeypatch, {"remove_objects": ["0:3", "5:2"]})
+    flow.hass.config_entries.async_update_entry.assert_not_called()
+    assert shown["errors"] == {"base": "no_objects_selected"}
+
+
+def test_customize_picker_is_searchable(monkeypatch):
+    flow = _flow([_AI], options={CONF_DOMAIN_MAPPING: {"0:3": "number"}})
+    shown = {}
+    flow.async_show_form = lambda **kw: shown.update(kw)
+    _run(flow.async_step_domain_mapping(), monkeypatch)
+    ((key, (kind, config)),) = shown["data_schema"].items()
+    assert key.default == ["0:3"]
+    assert kind == "select" and config["mode"] == "dropdown"
 
 
 def test_customize_stores_extra_properties(monkeypatch):

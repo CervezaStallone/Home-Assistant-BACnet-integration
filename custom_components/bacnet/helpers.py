@@ -3,7 +3,16 @@
 from __future__ import annotations
 
 import re
+from collections import Counter
+from collections.abc import Iterable
 from typing import Any
+
+from homeassistant.helpers.selector import (
+    SelectOptionDict,
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
+)
 
 
 def object_key(obj: dict[str, Any]) -> str:
@@ -45,6 +54,32 @@ def object_label(obj: dict[str, Any], *, new: bool = False) -> str:
     if description and description != name:
         label += f" ({description})"
     return f"NEW · {label}" if new else label
+
+
+def object_picker(options: dict[str, str]) -> SelectSelector:
+    """Searchable multi-select of object keys → labels.
+
+    A device can have hundreds of objects (issue #90); typing filters the
+    list, picked objects show as chips.
+    """
+    return SelectSelector(
+        SelectSelectorConfig(
+            options=[SelectOptionDict(value=k, label=v) for k, v in options.items()],
+            multiple=True,
+            mode=SelectSelectorMode.DROPDOWN,
+        )
+    )
+
+
+def object_type_options(objects: Iterable[dict[str, Any]]) -> dict[str, str]:
+    """One choice per object type present, with its count: "Analog Input (40)"."""
+    from .const import OBJECT_TYPE_NAMES  # local import avoids a cycle at module load
+
+    counts = Counter(obj["object_type"] for obj in objects)
+    return {
+        str(t): f"{OBJECT_TYPE_NAMES.get(t, f'Type {t}')} ({n})"
+        for t, n in sorted(counts.items())
+    }
 
 
 def mask_address(addr: str | object) -> str:
