@@ -221,7 +221,7 @@ The integration discovers BACnet devices on the network and shows them in a drop
 ### 4. Choose objects and name your device
 
 - Enter a **device name** (pre-filled with the BACnet device name — you can change it)
-- Use **Select All** or pick individual objects to import
+- Pick the objects to import: nothing is selected yet, and typing in the list filters it by object type, instance or name. Tick **Select all objects** to import everything
 - Click **Submit** — your entities are created and data starts flowing immediately
 
 ---
