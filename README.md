@@ -161,6 +161,7 @@ Devices that users have reported working with this integration. BACnet is a stan
 |---|---|---|
 | Control Solutions | Babel Buster BB2-7010-01 | 2.39.1 |
 | Control Solutions | Babel Buster BB3-7101 | 3.15.18 |
+| Delta Controls | eZNT-Wi-T304CHM | 510082 |
 | Distech | ECY-VAV Gen 1 NON BI | 1.19.26161 |
 | Distech Controls | ECY-TU203 Rev 1.0A | 1.22.22026.1 / 1.19.23041.871 |
 | Global Control 5 | iSMA-B-MIX18-IP | 6.5.3 |
