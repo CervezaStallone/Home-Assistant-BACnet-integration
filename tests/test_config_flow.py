@@ -113,10 +113,13 @@ def test_setup_ticks_share_usage_by_default(monkeypatch):
     assert defaults["share_usage"] is True
 
 
-def _object_form(monkeypatch, user_input=None):
+_TYPE_OPTIONS: dict = {}
+
+
+def _object_form(monkeypatch, user_input=None, objects=None):
     """Run select_objects with two discovered objects; return form and defaults."""
     import asyncio
-    from unittest.mock import MagicMock
+    from unittest.mock import AsyncMock, MagicMock
 
     from custom_components.bacnet import config_flow as cf
     from custom_components.bacnet.config_flow import BACnetConfigFlow
@@ -127,16 +130,24 @@ def _object_form(monkeypatch, user_input=None):
         defaults[key] = default
         return key
 
+    def multi_select(options):
+        _TYPE_OPTIONS.clear()
+        _TYPE_OPTIONS.update(options)
+        return "multi_select"
+
     monkeypatch.setattr(cf.vol, "Optional", optional)
+    monkeypatch.setattr(cf.cv, "multi_select", multi_select)
     flow = BACnetConfigFlow()
     flow.hass = MagicMock(data={})
     flow._network_config = {}
+    flow._cleanup_client = AsyncMock()
     flow._selected_device = {"device_id": 1, "device_name": "Dev"}
-    flow._discovered_objects = [
+    flow._discovered_objects = objects or [
         {"object_type": 0, "instance": 1, "object_name": "Room temp"},
         {"object_type": 4, "instance": 2, "object_name": "Fan"},
     ]
     flow.async_show_form = lambda **kw: kw
+    flow.async_create_entry = lambda **kw: kw
     return asyncio.run(flow.async_step_select_objects(user_input)), defaults
 
 
@@ -157,3 +168,28 @@ def test_submitting_no_objects_says_none_were_selected(monkeypatch):
     form, _ = _object_form(monkeypatch, {"selected_objects": []})
     assert form["errors"] == {"base": "no_objects_selected"}
     assert "selected_objects" in form["data_schema"]
+
+
+def test_type_checkboxes_list_present_types_with_counts(monkeypatch):
+    form, defaults = _object_form(monkeypatch)
+    assert defaults["select_types"] == []
+    assert form["data_schema"]["select_types"] == "multi_select"
+    assert _TYPE_OPTIONS == {"0": "Analog Input (1)", "4": "Binary Output (1)"}
+
+
+def test_ticked_types_are_imported_with_the_picked_objects(monkeypatch):
+    objects = [
+        {"object_type": 0, "instance": 1, "object_name": "A"},
+        {"object_type": 0, "instance": 2, "object_name": "B"},
+        {"object_type": 3, "instance": 1, "object_name": "C"},
+        {"object_type": 4, "instance": 2, "object_name": "D"},
+    ]
+    result, _ = _object_form(
+        monkeypatch,
+        {"select_types": ["0"], "selected_objects": ["4:2"]},
+        objects=objects,
+    )
+    picked = [
+        (o["object_type"], o["instance"]) for o in result["data"]["selected_objects"]
+    ]
+    assert picked == [(0, 1), (0, 2), (4, 2)]

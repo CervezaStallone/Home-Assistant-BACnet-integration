@@ -35,16 +35,18 @@
       },
       "select_objects": {
         "title": "Select BACnet Objects",
-        "description": "Pick the BACnet objects to import as Home Assistant entities, or tick Select all objects to import every object.",
+        "description": "Tick object types to import all their objects, pick single objects in the list, or tick Select all objects to import everything.",
         "data": {
           "device_name": "Device name",
           "select_all": "Select all objects",
+          "select_types": "Import all objects of these types",
           "selected_objects": "BACnet objects",
           "share_usage": "Share usage statistics"
         },
         "data_description": {
           "device_name": "Name for this device in Home Assistant. Pre-filled with the BACnet objectName.",
-          "selected_objects": "Type to search by object type, instance or name, and pick the objects you want in Home Assistant. Nothing is selected yet; tick Select all objects to import everything.",
+          "select_types": "Every object of a ticked type is imported, together with the objects you pick below.",
+          "selected_objects": "Type to search by object type (for example AI or BO), instance or name, and pick the objects you want in Home Assistant. Nothing is selected yet.",
           "share_usage": "Ticked by default; untick to send nothing. Once a day, sends this device's manufacturer, model and firmware, whether COV and ReadPropertyMultiple work, the number of objects per type and how it is connected (direct or BBMD), plus the integration and Home Assistant version and a random installation ID. Never addresses, names or values. Used to grow the tested devices list. [Privacy policy]({privacy_url})"
         }
       },

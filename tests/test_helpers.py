@@ -93,17 +93,29 @@ class TestObjectLabel:
             "object_name": "AI1",
             "description": "Room temp",
         }
-        assert object_label(obj) == "Analog Input (1) — AI1 (Room temp)"
+        assert object_label(obj) == "Analog Input (AI 1) — AI1 (Room temp)"
 
     def test_no_parentheses_for_empty_or_duplicate_description(self):
         from custom_components.bacnet.helpers import object_label
 
         base = {"object_type": 0, "instance": 1, "object_name": "AI1"}
-        assert object_label({**base, "description": ""}) == "Analog Input (1) — AI1"
-        assert object_label({**base, "description": "AI1"}) == "Analog Input (1) — AI1"
+        assert object_label({**base, "description": ""}) == "Analog Input (AI 1) — AI1"
+        assert (
+            object_label({**base, "description": "AI1"}) == "Analog Input (AI 1) — AI1"
+        )
 
     def test_new_marker(self):
         from custom_components.bacnet.helpers import object_label
 
         obj = {"object_type": 0, "instance": 1, "object_name": "AI1"}
-        assert object_label(obj, new=True) == "NEW · Analog Input (1) — AI1"
+        assert object_label(obj, new=True) == "NEW · Analog Input (AI 1) — AI1"
+
+    def test_abbreviation_makes_the_type_searchable(self):
+        # Issue #90 follow-up: typing "AI" or "BO 3" in the object picker
+        # finds the objects; unknown types keep a plain number.
+        from custom_components.bacnet.helpers import object_label
+
+        bo = {"object_type": 4, "instance": 3, "object_name": "Fan"}
+        assert object_label(bo) == "Binary Output (BO 3) — Fan"
+        odd = {"object_type": 99, "instance": 5, "object_name": "X"}
+        assert object_label(odd) == "Type 99 (5) — X"

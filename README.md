@@ -221,7 +221,10 @@ The integration discovers BACnet devices on the network and shows them in a drop
 ### 4. Choose objects and name your device
 
 - Enter a **device name** (pre-filled with the BACnet device name — you can change it)
-- Pick the objects to import: nothing is selected yet, and typing in the list filters it by object type, instance or name. Tick **Select all objects** to import everything
+- Pick what to import. Nothing is selected yet; combine any of these:
+  - **Import all objects of these types**: tick e.g. *Analog Input (40)* to import every AI
+  - **BACnet objects**: a searchable list; type an abbreviation (`AI`, `BO 3`, `MSV`), an instance or a name to find single objects
+  - **Select all objects**: everything on the device
 - Click **Submit** — your entities are created and data starts flowing immediately
 
 ---

@@ -31,12 +31,16 @@ def object_label(obj: dict[str, Any], *, new: bool = False) -> str:
     Siemens PXC objects have technical names, the description says what
     they are). *new* marks objects a rescan found for the first time.
     """
-    from .const import OBJECT_TYPE_NAMES  # local import avoids a cycle at module load
+    # local import avoids a cycle at module load
+    from .const import OBJECT_TYPE_ABBREVIATIONS, OBJECT_TYPE_NAMES
 
-    type_name = OBJECT_TYPE_NAMES.get(obj["object_type"], f"Type {obj['object_type']}")
+    object_type = obj["object_type"]
+    type_name = OBJECT_TYPE_NAMES.get(object_type, f"Type {object_type}")
     name = obj.get("object_name", "unnamed")
     instance = obj["instance"]
-    label = f"{type_name} ({instance}) — {name}"
+    abbreviation = OBJECT_TYPE_ABBREVIATIONS.get(object_type)
+    number = f"{abbreviation} {instance}" if abbreviation else instance
+    label = f"{type_name} ({number}) — {name}"
     description = obj.get("description")
     if description and description != name:
         label += f" ({description})"

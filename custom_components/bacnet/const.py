@@ -32,6 +32,7 @@ CONF_SOFTWARE_VERSION = "software_version"
 # Object selection
 CONF_SELECTED_OBJECTS = "selected_objects"
 CONF_SELECT_ALL = "select_all"
+CONF_SELECT_TYPES = "select_types"  # setup: import every object of these types
 CONF_RESCAN_OBJECTS = "rescan_objects"  # options-flow only, never persisted
 
 # Naming
@@ -156,6 +157,20 @@ OBJECT_TYPE_NAMES: dict[int, str] = {
     OBJECT_TYPE_MULTI_STATE_VALUE: "Multi-State Value",
     OBJECT_TYPE_SCHEDULE: "Schedule",
     OBJECT_TYPE_TREND_LOG: "Trend Log",
+}
+# Common BACnet abbreviations, in the labels so the object picker finds them
+OBJECT_TYPE_ABBREVIATIONS: dict[int, str] = {
+    OBJECT_TYPE_ANALOG_INPUT: "AI",
+    OBJECT_TYPE_ANALOG_OUTPUT: "AO",
+    OBJECT_TYPE_ANALOG_VALUE: "AV",
+    OBJECT_TYPE_BINARY_INPUT: "BI",
+    OBJECT_TYPE_BINARY_OUTPUT: "BO",
+    OBJECT_TYPE_BINARY_VALUE: "BV",
+    OBJECT_TYPE_MULTI_STATE_INPUT: "MSI",
+    OBJECT_TYPE_MULTI_STATE_OUTPUT: "MSO",
+    OBJECT_TYPE_MULTI_STATE_VALUE: "MSV",
+    OBJECT_TYPE_SCHEDULE: "SCH",
+    OBJECT_TYPE_TREND_LOG: "TL",
 }
 
 # ---------------------------------------------------------------------------
