@@ -195,7 +195,11 @@
         "step": {
           "confirm": {
             "title": "Reset incorrect entity types",
-            "description": "An earlier version of this integration saved an entity type for these BACnet objects that ignores whether the object is commandable:\n\n{objects}\n\nNon-commandable objects set to a writable type (switch, number) reject every write; commandable objects stuck on a read-only type (sensor) can't be controlled. Confirm to remove these overrides. The objects return to their correct default type and the integration reloads. If you chose one of these types deliberately, set it again in the integration options."
+            "description": "An earlier version of this integration saved an entity type for these BACnet objects that ignores whether the object is commandable:\n\n{objects}\n\nNon-commandable objects set to a writable type (switch, number) usually reject writes; commandable objects stuck on a read-only type (sensor) can't be controlled. Remove these overrides to return the objects to their default type, or keep them if you chose these types deliberately (some devices accept writes without a Priority Array). The integration reloads either way and doesn't ask again for kept objects.",
+            "menu_options": {
+              "remove": "Remove the overrides (use the default types)",
+              "keep": "Keep my types"
+            }
           }
         }
       }

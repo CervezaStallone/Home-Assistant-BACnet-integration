@@ -271,6 +271,9 @@ class _RepairsFlow:
     def async_show_form(self, *, step_id, **kwargs):
         return {"type": "form", "step_id": step_id}
 
+    def async_show_menu(self, *, step_id, menu_options, **kwargs):
+        return {"type": "menu", "step_id": step_id, "menu_options": menu_options}
+
     def async_create_entry(self, *, data, **kwargs):
         return {"type": "create_entry", "data": data}
 

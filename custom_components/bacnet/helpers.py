@@ -126,7 +126,9 @@ def default_domain_for(obj: dict[str, Any]) -> str:
 
 
 def stale_domain_overrides(
-    objects: list[dict[str, Any]], domain_overrides: dict[str, str]
+    objects: list[dict[str, Any]],
+    domain_overrides: dict[str, str],
+    kept: Iterable[str] = (),
 ) -> list[str]:
     """Return keys of overrides left behind by the pre-1.0.47 options-flow bug.
 
@@ -134,16 +136,19 @@ def stale_domain_overrides(
     override for every object. Only the overrides where that value differs
     from the commandable-aware default are harmful: a non-commandable BV
     forced to "switch", or a commandable AV/MSV stuck on read-only "sensor".
-    Any other value was a deliberate user choice.
+    Any other value was a deliberate user choice, as are the *kept* keys:
+    a device can accept writes without a Priority Array (issue #97).
     """
     from .const import DEFAULT_DOMAIN_MAP  # local import avoids a cycle at module load
 
+    kept = set(kept)
     stale = []
     for obj in objects:
         key = object_key(obj)
         override = domain_overrides.get(key)
         if (
-            override is not None
+            key not in kept
+            and override is not None
             and override == DEFAULT_DOMAIN_MAP.get(obj["object_type"])
             and override != default_domain_for(obj)
         ):

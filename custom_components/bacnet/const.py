@@ -48,6 +48,10 @@ CONF_COV_INCREMENT = "cov_increment"
 # Domain mapping
 CONF_DOMAIN_MAPPING = "domain_mapping"
 
+# Override keys the user chose on purpose (options flow or the repair's
+# "keep"), so the stale-override repair never flags them (issue #97).
+CONF_KEPT_DOMAIN_OVERRIDES = "kept_domain_overrides"
+
 # Options-flow only, never persisted: which objects to customise.
 CONF_CUSTOMIZE_OBJECTS = "customize_objects"
 

@@ -35,6 +35,7 @@ from .const import (
     CONF_DOMAIN_MAPPING,
     CONF_ENABLE_COV,
     CONF_EXTRA_PROPERTIES,
+    CONF_KEPT_DOMAIN_OVERRIDES,
     CONF_LIVE_METADATA_PROPERTIES,
     CONF_LOCAL_IP,
     CONF_LOCAL_PORT,
@@ -247,7 +248,13 @@ def _async_check_stale_overrides(
     cleanup in Settings → Repairs (see repairs.py).
     """
     issue_id = f"stale_domain_overrides_{entry.entry_id}"
-    stale = set(stale_domain_overrides(objects, domain_overrides))
+    stale = set(
+        stale_domain_overrides(
+            objects,
+            domain_overrides,
+            entry.options.get(CONF_KEPT_DOMAIN_OVERRIDES, []),
+        )
+    )
     if not stale:
         ir.async_delete_issue(hass, DOMAIN, issue_id)
         return

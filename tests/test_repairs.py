@@ -11,7 +11,11 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import MagicMock
 
-from custom_components.bacnet.const import CONF_DOMAIN_MAPPING, CONF_SELECTED_OBJECTS
+from custom_components.bacnet.const import (
+    CONF_DOMAIN_MAPPING,
+    CONF_KEPT_DOMAIN_OVERRIDES,
+    CONF_SELECTED_OBJECTS,
+)
 from custom_components.bacnet.helpers import stale_domain_overrides
 
 _BV_NON_COMMANDABLE = {"object_type": 5, "instance": 1, "commandable": False}
@@ -40,6 +44,13 @@ class TestStaleDomainOverrides:
     def test_unselected_objects_are_ignored(self):
         assert stale_domain_overrides([], {"5:1": "switch"}) == []
 
+    def test_kept_overrides_are_not_stale(self):
+        # Issue #97: a BV without priorityArray that still accepts writes
+        assert (
+            stale_domain_overrides([_BV_NON_COMMANDABLE], {"5:1": "switch"}, ["5:1"])
+            == []
+        )
+
 
 def _repair_flow(options):
     from custom_components.bacnet.repairs import async_create_fix_flow
@@ -55,15 +66,35 @@ def _repair_flow(options):
 
 
 class TestRepairFlow:
-    def test_init_shows_confirm_form(self):
+    def test_init_offers_remove_or_keep(self):
         flow, _, _ = _repair_flow({CONF_DOMAIN_MAPPING: {"5:1": "switch"}})
-        assert asyncio.run(flow.async_step_init())["step_id"] == "confirm"
+        menu = asyncio.run(flow.async_step_init())
+        assert menu["step_id"] == "confirm"
+        assert menu["menu_options"] == ["remove", "keep"]
 
-    def test_confirm_removes_only_stale_overrides(self):
+    def test_keep_remembers_the_overrides(self):
+        # Issue #97: the issue came back on every start for deliberate choices
+        flow, hass, entry = _repair_flow(
+            {
+                CONF_DOMAIN_MAPPING: {"5:1": "switch"},
+                CONF_KEPT_DOMAIN_OVERRIDES: ["9:9"],
+            }
+        )
+        result = asyncio.run(flow.async_step_keep())
+        assert result["type"] == "create_entry"
+        hass.config_entries.async_update_entry.assert_called_once_with(
+            entry,
+            options={
+                CONF_DOMAIN_MAPPING: {"5:1": "switch"},
+                CONF_KEPT_DOMAIN_OVERRIDES: ["9:9", "5:1"],
+            },
+        )
+
+    def test_remove_drops_only_stale_overrides(self):
         flow, hass, entry = _repair_flow(
             {CONF_DOMAIN_MAPPING: {"5:1": "switch", "2:3": "climate"}, "x": 1}
         )
-        result = asyncio.run(flow.async_step_confirm({}))
+        result = asyncio.run(flow.async_step_remove())
         assert result["type"] == "create_entry"
         hass.config_entries.async_update_entry.assert_called_once_with(
             entry, options={CONF_DOMAIN_MAPPING: {"2:3": "climate"}, "x": 1}
@@ -72,17 +103,19 @@ class TestRepairFlow:
     def test_confirm_when_entry_is_gone_just_finishes(self):
         flow, hass, _ = _repair_flow({})
         hass.config_entries.async_get_entry.return_value = None
-        assert asyncio.run(flow.async_step_confirm({}))["type"] == "create_entry"
+        assert asyncio.run(flow.async_step_remove())["type"] == "create_entry"
+        assert asyncio.run(flow.async_step_keep())["type"] == "create_entry"
 
 
 class TestIssueLifecycle:
-    def _run(self, overrides):
+    def _run(self, overrides, options=None):
         import custom_components.bacnet as integration
 
         ir = MagicMock()
         entry = MagicMock()
         entry.entry_id = "abc"
         entry.data = {"device_name": "AHU-1"}
+        entry.options = options or {}
         original = integration.ir
         integration.ir = ir
         try:
@@ -101,6 +134,11 @@ class TestIssueLifecycle:
         assert kwargs["data"] == {"entry_id": "abc"}
         assert kwargs["translation_placeholders"]["device"] == "AHU-1"
         ir.async_delete_issue.assert_not_called()
+
+    def test_no_issue_for_kept_overrides(self):
+        ir = self._run({"5:1": "switch"}, {CONF_KEPT_DOMAIN_OVERRIDES: ["5:1"]})
+        ir.async_create_issue.assert_not_called()
+        ir.async_delete_issue.assert_called_once()
 
     def test_issue_deleted_when_clean(self):
         ir = self._run({})
