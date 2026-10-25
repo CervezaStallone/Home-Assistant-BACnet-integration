@@ -35,7 +35,7 @@
 > <a href="https://github.com/sponsors/CervezaStallone"><img src="https://img.shields.io/badge/Sponsor-GitHub-ea4aaa?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="Sponsor on GitHub" height="32"></a>
 > <a href="https://buymeacoffee.com/cervezastalone"><img src="https://img.shields.io/badge/Buy_me_a-Coffee-FFDD00?style=for-the-badge&logo=buymeacoffee&logoColor=black" alt="Buy Me A Coffee" height="32"></a>
 
-**Contents:** [What it does](#what-does-this-integration-do) · [Features](#features-at-a-glance) · [Safety](#safety-on-a-live-site) · [Screenshots](#screenshots) · [Object types](#supported-object-types) · [Tested devices](#tested-devices) · [Installation](#installation) · [Getting started](#getting-started) · [Configuration](#configuration-options) · [Entity attributes](#entity-attributes) · [Device information](#device-information) · [How writes work](#how-writes-work) · [Examples](#examples) · [Troubleshooting](#troubleshooting) · [Privacy](#privacy-and-usage-statistics-1051-beta) · [Requirements](#requirements) · [Contributing](#contributing) · [License](#license)
+**Contents:** [What it does](#what-does-this-integration-do) · [Features](#features-at-a-glance) · [Safety](#safety-on-a-live-site) · [Screenshots](#screenshots) · [Object types](#supported-object-types) · [Tested devices](#tested-devices) · [Installation](#installation) · [Getting started](#getting-started) · [Configuration](#configuration-options) · [Entity attributes](#entity-attributes) · [Device information](#device-information) · [How writes work](#how-writes-work) · [Examples](#examples) · [Troubleshooting](#troubleshooting) · [Privacy](#privacy-and-usage-statistics) · [Requirements](#requirements) · [Contributing](#contributing) · [License](#license)
 
 ## What does this integration do?
 
@@ -73,7 +73,7 @@ In plain terms: if your building has BACnet controllers, thermostats, sensors, o
 - **Diagnostics** — a diagnostics download and health sensors for troubleshooting
 - **Efficient on the network** — batched ReadPropertyMultiple reads that adapt to what the device can handle
 - **English and Dutch** user interface
-- **Usage statistics** *(1.0.51 beta)* — ticked by default on the setup page, existing installations are asked once; helps grow the tested devices list. See [Privacy and usage statistics](#privacy-and-usage-statistics-1051-beta)
+- **Usage statistics** — ticked by default on the setup page, existing installations are asked once; helps grow the tested devices list. See [Privacy and usage statistics](#privacy-and-usage-statistics)
 
 ---
 
@@ -174,7 +174,7 @@ Devices that users have reported working with this integration. BACnet is a stan
 | Tridium | Niagara JACE | — |
 <!-- tested-devices:end -->
 
-**Works on your device?** Please [send a device report](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/issues/new?template=device_report.yml): manufacturer, model and what you've used. It helps others decide, and it shows which devices get real-world testing. Once checked, it's added here. *(1.0.51 beta)* The list also grows from installations that opted in to [usage statistics](#privacy-and-usage-statistics-1051-beta): only manufacturer, model and firmware, added after the maintainer checks them.
+**Works on your device?** Please [send a device report](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/issues/new?template=device_report.yml): manufacturer, model and what you've used. It helps others decide, and it shows which devices get real-world testing. Once checked, it's added here. The list also grows from installations that opted in to [usage statistics](#privacy-and-usage-statistics): only manufacturer, model and firmware, added after the maintainer checks them.
 
 ---
 
@@ -238,7 +238,7 @@ After setup, click **Configure** on the integration card to adjust:
 | **Polling interval** | How often all objects are polled, in seconds (minimum 10). Polling always runs — COV only adds faster updates in between. | `30` |
 | **Use description** | Show BACnet `description` (property 28) instead of `objectName` as entity name | Off |
 | **Live metadata properties** | Opt-in per property (`object_name`, `description`, `units`) for a *live* push update via BACnet's SubscribeCOVProperty service, instead of periodic re-reads. Each one is a separate COV subscription on the device — leave off unless you need instant updates and know your device supports it. | None |
-| **Share usage statistics** *(1.0.51 beta)* | Once a day, send this device's manufacturer, model, firmware and a few counts. See [Privacy and usage statistics](#privacy-and-usage-statistics-1051-beta) for every field. Also on the last setup page, ticked there by default. | On for new devices |
+| **Share usage statistics** | Once a day, send this device's manufacturer, model, firmware and a few counts. See [Privacy and usage statistics](#privacy-and-usage-statistics) for every field. Also on the last setup page, ticked there by default. | On for new devices |
 | **Rescan device** | Re-read the device's object list to add or remove objects. The next page has three fields, all empty: **Objects to add** (objects not imported yet, marked **NEW**), **Add all objects of these types** (with how many), and **Objects to remove**. Both object fields are searchable by abbreviation (`AI`, `BO 3`), instance or name. Submitting without changes keeps the selection; objects the device no longer has are dropped. | — |
 
 After this page comes [Customize objects](#customize-objects). Changes take effect immediately — the integration reloads automatically.
@@ -716,11 +716,11 @@ The defaults suit most controllers. For unusual devices they can be changed in `
 
 ---
 
-## Privacy and usage statistics *(1.0.51 beta)*
+## Privacy and usage statistics
 
 > **Beta:** available in the 1.0.51 pre-releases (enable *Show beta versions* in HACS).
 
-The integration can send usage statistics. **Share usage statistics** is ticked by default on the last setup page; untick it there, or later in a device's options, to send nothing. Installations from before 1.0.51-beta.2 are asked once, in **Settings → Repairs**: tick to share for all devices, untick to keep it off. That question never comes back.
+The integration can send usage statistics. **Share usage statistics** is ticked by default on the last setup page; untick it there, or later in a device's options, to send nothing. Installations from before 1.0.51 are asked once, in **Settings → Repairs**: tick to share for all devices, untick to keep it off. That question never comes back.
 
 While at least one device has it ticked, Home Assistant sends one report a day (the first about 10 minutes after start) to a server run by the maintainer, on servers in the EU. The full [privacy policy](PRIVACY.md) (English and Nederlands) explains what is collected, why, how long it is kept and how to have it deleted; it is also linked under the checkbox. Only ticked devices are included, and only once they have answered a poll.
 
