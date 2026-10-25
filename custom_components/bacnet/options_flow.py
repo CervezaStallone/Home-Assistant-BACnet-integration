@@ -31,6 +31,7 @@ from .const import (
     CONF_DOMAIN_MAPPING,
     CONF_ENABLE_COV,
     CONF_EXTRA_PROPERTIES,
+    CONF_KEPT_DOMAIN_OVERRIDES,
     CONF_LIVE_METADATA_PROPERTIES,
     CONF_POLLING_INTERVAL,
     CONF_REMOVE_OBJECTS,
@@ -407,6 +408,12 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
         covs = dict(self._current(CONF_COV_OVERRIDES))
         sources = dict(self._current(CONF_CLIMATE_TEMPERATURE_SOURCES))
         extras = dict(self._current(CONF_EXTRA_PROPERTIES))
+        selected = {_object_key(o) for o in self._selected_objects}
+        kept = [
+            k
+            for k in self._config_entry.options.get(CONF_KEPT_DOMAIN_OVERRIDES, [])
+            if k not in selected
+        ]
         for obj in self._selected_objects:
             key = _object_key(obj)
             for store in (domains, covs, sources, extras):
@@ -416,6 +423,7 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
                 continue
             if edit["type"] is not None and edit["type"] != default_domain_for(obj):
                 domains[key] = edit["type"]
+                kept.append(key)
             if edit["COV"] is not None and edit["COV"] != self._global_cov:
                 covs[key] = edit["COV"]
             if edit["temperature sensor"]:
@@ -438,5 +446,6 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
                 CONF_COV_OVERRIDES: covs,
                 CONF_CLIMATE_TEMPERATURE_SOURCES: sources,
                 CONF_EXTRA_PROPERTIES: extras,
+                CONF_KEPT_DOMAIN_OVERRIDES: kept,
             },
         )

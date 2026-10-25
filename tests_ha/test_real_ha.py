@@ -289,7 +289,8 @@ async def test_setup_creates_all_entity_types(hass: HomeAssistant) -> None:
     assert prio.entity_category == "config"
 
 
-async def test_stale_override_repair_flow(hass: HomeAssistant) -> None:
+async def _stale_override_repair(hass: HomeAssistant, choice: str):
+    """Set up with a stale BV override and pick *choice* in the repair menu."""
     from homeassistant.setup import async_setup_component
 
     try:  # older HA; newer HA loads repairs platforms lazily
@@ -309,15 +310,28 @@ async def test_stale_override_repair_flow(hass: HomeAssistant) -> None:
     manager = hass.data["repairs"]["flow_manager"]
     flow = await manager.async_init(DOMAIN, data={"issue_id": issue_id})
     assert flow["step_id"] == "confirm"
-    result = await manager.async_configure(flow["flow_id"], {})
+    assert flow["menu_options"] == ["remove", "keep"]
+    result = await manager.async_configure(flow["flow_id"], {"next_step_id": choice})
     assert result["type"] == "create_entry"
     await hass.async_block_till_done()
+    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
+    return entry
 
+
+async def test_stale_override_repair_flow(hass: HomeAssistant) -> None:
+    entry = await _stale_override_repair(hass, "remove")
     assert "5:5" not in entry.options["domain_mapping"]
     assert entry.options["domain_mapping"]["2:3"] == "climate"
-    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
     # After the reload the BV is a binary_sensor again.
     assert _entity_id(hass, ("binary_sensor", "5_5")) is not None
+
+
+async def test_stale_override_repair_keep(hass: HomeAssistant) -> None:
+    # Issue #97: a kept type stays and the issue does not come back on reload.
+    entry = await _stale_override_repair(hass, "keep")
+    assert entry.options["domain_mapping"]["5:5"] == "switch"
+    assert entry.options["kept_domain_overrides"] == ["5:5"]
+    assert _entity_id(hass, ("switch", "5_5")) is not None
 
 
 async def test_services(hass: HomeAssistant) -> None:

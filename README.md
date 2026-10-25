@@ -255,7 +255,7 @@ The second options page has a searchable list of your objects. Pick the ones you
 
 Objects not picked use the defaults. Settings of objects you remove with a rescan are remembered and come back if you add the object again.
 
-> The default type depends on whether a Value object is commandable: a non-commandable Binary Value is a `binary_sensor`, a commandable one a `switch`. Versions before 1.0.47 could save the wrong type when you saved the options; if that happened, a **Repairs** message offers to reset those objects.
+> The default type depends on whether a Value object is commandable: a non-commandable Binary Value is a `binary_sensor`, a commandable one a `switch`. Versions before 1.0.47 could save the wrong type when you saved the options; if that happened, a **Repairs** message offers to reset those objects or keep them. Keep them when you chose the type on purpose, for example a Binary Value without a Priority Array that still accepts writes; types you set in the options are never flagged again.
 
 ### Reconfigure
 

@@ -22,6 +22,7 @@ from custom_components.bacnet.const import (
     CONF_CUSTOMIZE_OBJECTS,
     CONF_DOMAIN_MAPPING,
     CONF_ENABLE_COV,
+    CONF_KEPT_DOMAIN_OVERRIDES,
     CONF_SELECTED_OBJECTS,
 )
 from custom_components.bacnet.helpers import object_label
@@ -156,6 +157,27 @@ class TestCustomizeObjects:
         )
         assert result["data"][CONF_DOMAIN_MAPPING] == {"0:3": "number"}
         assert result["data"][CONF_COV_OVERRIDES] == {"0:3": False}
+
+    def test_chosen_type_is_remembered_as_deliberate(self, monkeypatch):
+        # Issue #97: "set it again in the options" must stop the repair issue
+        flow, _ = self._customize(
+            monkeypatch,
+            [_BV_NON_COMMANDABLE, _AI],
+            ["5:1", "0:3"],
+            options={CONF_KEPT_DOMAIN_OVERRIDES: ["2:9", "0:3"]},
+        )
+        result = _run(
+            flow.async_step_customize_objects(
+                {
+                    _field(_BV_NON_COMMANDABLE, "type"): "switch",
+                    _field(_AI, "type"): "sensor",
+                }
+            ),
+            monkeypatch,
+        )
+        assert result["data"][CONF_DOMAIN_MAPPING] == {"5:1": "switch"}
+        # removed object 2:9 keeps its mark; 0:3 is back on its default
+        assert result["data"][CONF_KEPT_DOMAIN_OVERRIDES] == ["2:9", "5:1"]
 
 
 class TestClimateTemperatureSource:

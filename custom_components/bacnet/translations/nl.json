@@ -195,7 +195,11 @@
         "step": {
           "confirm": {
             "title": "Onjuiste entiteittypes herstellen",
-            "description": "Een eerdere versie van deze integratie heeft voor deze BACnet-objecten een entiteittype opgeslagen dat geen rekening houdt met of het object commandable is:\n\n{objects}\n\nNiet-commandable objecten met een schrijfbaar type (switch, number) weigeren elke schrijfactie; commandable objecten die op een alleen-lezen type (sensor) zijn blijven staan, kun je niet bedienen. Bevestig om deze instellingen te verwijderen. De objecten krijgen weer hun juiste standaardtype en de integratie herlaadt. Had je een van deze types bewust gekozen, stel het dan opnieuw in via de opties van de integratie."
+            "description": "Een eerdere versie van deze integratie heeft voor deze BACnet-objecten een entiteittype opgeslagen dat geen rekening houdt met of het object commandable is:\n\n{objects}\n\nNiet-commandable objecten met een schrijfbaar type (switch, number) weigeren meestal schrijfacties; commandable objecten die op een alleen-lezen type (sensor) zijn blijven staan, kun je niet bedienen. Verwijder deze instellingen om de objecten hun standaardtype terug te geven, of behoud ze als je deze types bewust hebt gekozen (sommige apparaten accepteren schrijfacties zonder Priority Array). De integratie herlaadt in beide gevallen en vraagt het voor behouden objecten niet opnieuw.",
+            "menu_options": {
+              "remove": "Instellingen verwijderen (standaardtypes gebruiken)",
+              "keep": "Mijn types behouden"
+            }
           }
         }
       }
