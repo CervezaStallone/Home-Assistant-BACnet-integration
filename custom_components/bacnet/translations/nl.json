@@ -35,16 +35,18 @@
       },
       "select_objects": {
         "title": "BACnet-objecten kiezen",
-        "description": "Kies de BACnet-objecten die je als Home Assistant-entiteiten wilt importeren, of vink Alle objecten selecteren aan om alle objecten te importeren.",
+        "description": "Vink objecttypes aan om al hun objecten te importeren, kies losse objecten in de lijst, of vink Alle objecten selecteren aan om alles te importeren.",
         "data": {
           "device_name": "Apparaatnaam",
           "select_all": "Alle objecten selecteren",
+          "select_types": "Alle objecten van deze types importeren",
           "selected_objects": "BACnet-objecten",
           "share_usage": "Gebruiksstatistieken delen"
         },
         "data_description": {
           "device_name": "Naam van dit apparaat in Home Assistant. Vooraf ingevuld met de BACnet-objectName.",
-          "selected_objects": "Typ om te zoeken op objecttype, instance of naam, en kies de objecten die je in Home Assistant wilt. Er is nog niets geselecteerd; vink Alle objecten selecteren aan om alles te importeren.",
+          "select_types": "Elk object van een aangevinkt type wordt geïmporteerd, samen met de objecten die je hieronder kiest.",
+          "selected_objects": "Typ om te zoeken op objecttype (bijvoorbeeld AI of BO), instance of naam, en kies de objecten die je in Home Assistant wilt. Er is nog niets geselecteerd.",
           "share_usage": "Standaard aangevinkt; vink uit om niets te versturen. Stuurt één keer per dag fabrikant, model en firmware van dit apparaat, of COV en ReadPropertyMultiple werken, het aantal objecten per type en hoe het verbonden is (direct of via BBMD), plus de versie van de integratie en van Home Assistant en een willekeurige installatie-ID. Nooit adressen, namen of waarden. Gebruikt om de lijst met geteste apparaten aan te vullen. [Privacyverklaring]({privacy_url}#nederlands)"
         }
       },

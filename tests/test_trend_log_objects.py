@@ -16,7 +16,7 @@ def test_trend_log_is_a_supported_sensor_object():
     assert default_domain_for({"object_type": 20, "instance": 4}) == "sensor"
     assert object_label(
         {"object_type": 20, "instance": 4, "object_name": "TL Supply"}
-    ).startswith("Trend Log (4)")
+    ).startswith("Trend Log (TL 4)")
 
 
 def test_coordinator_polls_record_count_not_present_value():

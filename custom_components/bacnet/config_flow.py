@@ -13,8 +13,10 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import logging
+from collections import Counter
 from typing import Any
 
+import homeassistant.helpers.config_validation as cv
 import voluptuous as vol
 from bacpypes3.pdu import Address
 from homeassistant import config_entries
@@ -38,6 +40,7 @@ from .const import (
     CONF_LOCAL_PORT,
     CONF_MODEL_NAME,
     CONF_SELECT_ALL,
+    CONF_SELECT_TYPES,
     CONF_SELECTED_OBJECTS,
     CONF_SHARE_USAGE,
     CONF_SOFTWARE_VERSION,
@@ -48,6 +51,7 @@ from .const import (
     DEFAULT_BBMD_TTL,
     DEFAULT_PORT,
     DOMAIN,
+    OBJECT_TYPE_NAMES,
     PRIVACY_URL,
 )
 from .helpers import mask_address as _mask_address
@@ -497,7 +501,15 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if select_all:
                 selected_keys = [_object_key(obj) for obj in self._discovered_objects]
             else:
-                selected_keys = user_input.get(CONF_SELECTED_OBJECTS, [])
+                types = {int(t) for t in user_input.get(CONF_SELECT_TYPES, [])}
+                selected_keys = [
+                    *user_input.get(CONF_SELECTED_OBJECTS, []),
+                    *(
+                        _object_key(obj)
+                        for obj in self._discovered_objects
+                        if obj["object_type"] in types
+                    ),
+                ]
 
             if not selected_keys:
                 errors["base"] = "no_objects_selected"
@@ -600,11 +612,19 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
 
             default_name = self._selected_device.get("device_name", "BACnet Device")
+            type_counts = Counter(o["object_type"] for o in self._discovered_objects)
+            type_options = {
+                str(t): f"{OBJECT_TYPE_NAMES.get(t, f'Type {t}')} ({n})"
+                for t, n in sorted(type_counts.items())
+            }
 
             schema = vol.Schema(
                 {
                     vol.Optional(CONF_DEVICE_NAME, default=default_name): str,
                     vol.Optional(CONF_SELECT_ALL, default=False): bool,
+                    vol.Optional(CONF_SELECT_TYPES, default=[]): cv.multi_select(
+                        type_options
+                    ),
                     # A searchable dropdown with nothing preselected: devices
                     # can have hundreds of objects (issue #90)
                     vol.Optional(CONF_SELECTED_OBJECTS, default=[]): SelectSelector(
