@@ -28,15 +28,12 @@
 
 ---
 
-<a href="https://buymeacoffee.com/Cervezastalone" target="_blank" title="buymeacoffee">
-  <img src="https://iili.io/JoQ1MeS.md.png"  alt="buymeacoffee-yellow-badge" style="width: 208px;">
-</a>
-
-<br>
-<br>
-
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=CervezaStallone&repository=Home-Assistant-BACnet-integration&category=integration)
-</p>
+
+> **This integration is free and stays free.** It is built and maintained in spare time: new features, support for more devices, answering issues and testing against real controllers. How much time goes into it depends on support from the people who use it. If it saves you time or money, please consider sponsoring or buying me a coffee.
+>
+> <a href="https://github.com/sponsors/CervezaStallone"><img src="https://img.shields.io/badge/Sponsor-GitHub-ea4aaa?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="Sponsor on GitHub" height="32"></a>
+> <a href="https://buymeacoffee.com/cervezastalone"><img src="https://img.shields.io/badge/Buy_me_a-Coffee-FFDD00?style=for-the-badge&logo=buymeacoffee&logoColor=black" alt="Buy Me A Coffee" height="32"></a>
 
 **Contents:** [What it does](#what-does-this-integration-do) · [Features](#features-at-a-glance) · [Safety](#safety-on-a-live-site) · [Screenshots](#screenshots) · [Object types](#supported-object-types) · [Tested devices](#tested-devices) · [Installation](#installation) · [Getting started](#getting-started) · [Configuration](#configuration-options) · [Entity attributes](#entity-attributes) · [Device information](#device-information) · [How writes work](#how-writes-work) · [Examples](#examples) · [Troubleshooting](#troubleshooting) · [Privacy](#privacy-and-usage-statistics-1051-beta) · [Requirements](#requirements) · [Contributing](#contributing) · [License](#license)
 
