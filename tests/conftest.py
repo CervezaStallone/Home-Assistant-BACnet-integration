@@ -323,6 +323,12 @@ _voluptuous.Invalid = type("Invalid", (Exception,), {})
 
 _ha_flow = MagicMock()
 
+_ha_selector = MagicMock()
+_ha_selector.SelectSelector = lambda config: ("select", config)
+_ha_selector.SelectSelectorConfig = dict
+_ha_selector.SelectOptionDict = dict
+_ha_selector.SelectSelectorMode = MagicMock(DROPDOWN="dropdown")
+
 _homeassistant = MagicMock()
 # `from homeassistant import config_entries` resolves via attribute access,
 # not sys.modules — point it at the same stub.
@@ -354,6 +360,7 @@ sys.modules.update(
         "homeassistant.helpers.restore_state": _ha_restore_state,
         "homeassistant.helpers.entity_platform": MagicMock(),
         "homeassistant.helpers.config_validation": MagicMock(),
+        "homeassistant.helpers.selector": _ha_selector,
         "homeassistant.helpers.service": MagicMock(),
         "homeassistant.helpers.target": MagicMock(),
         "homeassistant.helpers.storage": MagicMock(),

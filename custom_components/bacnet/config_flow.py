@@ -15,12 +15,17 @@ import ipaddress
 import logging
 from typing import Any
 
-import homeassistant.helpers.config_validation as cv
 import voluptuous as vol
 from bacpypes3.pdu import Address
 from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
+from homeassistant.helpers.selector import (
+    SelectOptionDict,
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
+)
 
 from .const import (
     CONF_BBMD_ADDRESS,
@@ -495,7 +500,7 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 selected_keys = user_input.get(CONF_SELECTED_OBJECTS, [])
 
             if not selected_keys:
-                errors["base"] = "no_objects_found"
+                errors["base"] = "no_objects_selected"
             else:
                 # Build the final object list with full metadata
                 selected_objects = _select_objects_by_key(
@@ -574,7 +579,9 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if not errors and not self._discovered_objects:
             errors["base"] = "no_objects_found"
 
-        if errors:
+        # Without objects there is nothing to pick; with them, an empty
+        # selection shows its error above the list so the user can retry
+        if errors and not self._discovered_objects:
             return self.async_show_form(
                 step_id="select_objects",
                 data_schema=vol.Schema({}),
@@ -598,9 +605,18 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 {
                     vol.Optional(CONF_DEVICE_NAME, default=default_name): str,
                     vol.Optional(CONF_SELECT_ALL, default=False): bool,
-                    vol.Optional(
-                        CONF_SELECTED_OBJECTS, default=list(object_options.keys())
-                    ): cv.multi_select(object_options),
+                    # A searchable dropdown with nothing preselected: devices
+                    # can have hundreds of objects (issue #90)
+                    vol.Optional(CONF_SELECTED_OBJECTS, default=[]): SelectSelector(
+                        SelectSelectorConfig(
+                            options=[
+                                SelectOptionDict(value=key, label=label)
+                                for key, label in object_options.items()
+                            ],
+                            multiple=True,
+                            mode=SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
                     vol.Optional(CONF_SHARE_USAGE, default=True): bool,
                 }
             )

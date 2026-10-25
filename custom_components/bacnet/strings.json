@@ -35,7 +35,7 @@
       },
       "select_objects": {
         "title": "Select BACnet Objects",
-        "description": "Select the BACnet objects you want to import as Home Assistant entities. Use 'Select All' to toggle all objects at once.",
+        "description": "Pick the BACnet objects to import as Home Assistant entities, or tick Select all objects to import every object.",
         "data": {
           "device_name": "Device name",
           "select_all": "Select all objects",
@@ -44,7 +44,7 @@
         },
         "data_description": {
           "device_name": "Name for this device in Home Assistant. Pre-filled with the BACnet objectName.",
-          "selected_objects": "Check the objects you want to monitor or control in Home Assistant.",
+          "selected_objects": "Type to search by object type, instance or name, and pick the objects you want in Home Assistant. Nothing is selected yet; tick Select all objects to import everything.",
           "share_usage": "Ticked by default; untick to send nothing. Once a day, sends this device's manufacturer, model and firmware, whether COV and ReadPropertyMultiple work, the number of objects per type and how it is connected (direct or BBMD), plus the integration and Home Assistant version and a random installation ID. Never addresses, names or values. Used to grow the tested devices list. [Privacy policy]({privacy_url})"
         }
       },
@@ -77,7 +77,8 @@
       "bbmd_registration_failed": "Foreign Device Registration with the BBMD failed. Verify the BBMD address.",
       "invalid_ip": "The provided IP address is not valid.",
       "timeout": "The operation timed out. The device may be unreachable.",
-      "unknown": "An unexpected error occurred."
+      "unknown": "An unexpected error occurred.",
+      "no_objects_selected": "Select at least one object, or tick Select all objects."
     },
     "abort": {
       "already_configured": "This BACnet device is already configured.",

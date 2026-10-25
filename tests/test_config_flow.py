@@ -111,3 +111,49 @@ def test_setup_ticks_share_usage_by_default(monkeypatch):
     flow.async_show_form = lambda **kw: kw
     asyncio.run(flow.async_step_select_objects())
     assert defaults["share_usage"] is True
+
+
+def _object_form(monkeypatch, user_input=None):
+    """Run select_objects with two discovered objects; return form and defaults."""
+    import asyncio
+    from unittest.mock import MagicMock
+
+    from custom_components.bacnet import config_flow as cf
+    from custom_components.bacnet.config_flow import BACnetConfigFlow
+
+    defaults = {}
+
+    def optional(key, default=None):
+        defaults[key] = default
+        return key
+
+    monkeypatch.setattr(cf.vol, "Optional", optional)
+    flow = BACnetConfigFlow()
+    flow.hass = MagicMock(data={})
+    flow._network_config = {}
+    flow._selected_device = {"device_id": 1, "device_name": "Dev"}
+    flow._discovered_objects = [
+        {"object_type": 0, "instance": 1, "object_name": "Room temp"},
+        {"object_type": 4, "instance": 2, "object_name": "Fan"},
+    ]
+    flow.async_show_form = lambda **kw: kw
+    return asyncio.run(flow.async_step_select_objects(user_input)), defaults
+
+
+def test_objects_are_a_searchable_dropdown_with_nothing_preselected(monkeypatch):
+    # Issue #90: with hundreds of objects, unticking all was the only way to
+    # import a few. Nothing is preselected; Select all covers the other case.
+    form, defaults = _object_form(monkeypatch)
+    assert defaults["selected_objects"] == []
+    kind, config = form["data_schema"]["selected_objects"]
+    assert kind == "select"
+    assert config["multiple"] is True
+    assert config["mode"] == "dropdown"
+    assert [o["value"] for o in config["options"]] == ["0:1", "4:2"]
+    assert "Room temp" in config["options"][0]["label"]
+
+
+def test_submitting_no_objects_says_none_were_selected(monkeypatch):
+    form, _ = _object_form(monkeypatch, {"selected_objects": []})
+    assert form["errors"] == {"base": "no_objects_selected"}
+    assert "selected_objects" in form["data_schema"]
