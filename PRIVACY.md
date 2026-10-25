@@ -2,7 +2,7 @@
 
 **[English](#english)** · **[Nederlands](#nederlands)**
 
-Last updated: 24 October 2026. Applies to the opt-in usage statistics, available from version 1.0.51-beta.1.
+Last updated: 25 October 2026. Applies to the opt-in usage statistics, available from version 1.0.51.
 
 ---
 
@@ -10,7 +10,7 @@ Last updated: 24 October 2026. Applies to the opt-in usage statistics, available
 
 ### In short
 
-The integration only sends data while **Share usage statistics** is ticked. It is ticked by default when you add a device, and you can untick it on that same page or later in the device's options. Installations that existed before 1.0.51-beta.2 are asked once, in Repairs. When it is on, Home Assistant sends one small report a day about your BACnet devices: manufacturer, model, firmware and a few counts. It never sends addresses, names or values. The reports help decide which devices to test and support.
+The integration only sends data while **Share usage statistics** is ticked. It is ticked by default when you add a device, and you can untick it on that same page or later in the device's options. Installations that existed before 1.0.51 are asked once, in Repairs. When it is on, Home Assistant sends one small report a day about your BACnet devices: manufacturer, model, firmware and a few counts. It never sends addresses, names or values. The reports help decide which devices to test and support.
 
 ### Who is responsible
 
@@ -24,7 +24,7 @@ While at least one device has the option ticked, one report a day goes to `ha-ba
 |---|---|---|
 | `schema` | `1` | Report format version |
 | `install_id` | `3f2b…` | A random ID the integration creates once. Not derived from your Home Assistant or your network |
-| `integration_version` | `1.0.51-beta.1` | Version of this integration |
+| `integration_version` | `1.0.51` | Version of this integration |
 | `ha_version` | `2026.10.1` | Version of Home Assistant |
 | `vendor` | `Siemens` | The device's `vendorName` |
 | `model` | `PXC200-E.D` | The device's `modelName` |
@@ -77,7 +77,7 @@ Changes to this policy are made in this file and are visible in its history on G
 
 ### In het kort
 
-De integratie stuurt alleen gegevens zolang **Gebruiksstatistieken delen** is aangevinkt. Bij het toevoegen van een apparaat staat het standaard aan; je kunt het op die pagina uitvinken, of later in de opties van het apparaat. Installaties van vóór 1.0.51-beta.2 krijgen één keer de vraag, in Reparaties. Staat het aan, dan stuurt Home Assistant één keer per dag een klein rapport over je BACnet-apparaten: fabrikant, model, firmware en een paar aantallen. Nooit adressen, namen of waarden. De rapporten helpen bepalen welke apparaten getest en ondersteund worden.
+De integratie stuurt alleen gegevens zolang **Gebruiksstatistieken delen** is aangevinkt. Bij het toevoegen van een apparaat staat het standaard aan; je kunt het op die pagina uitvinken, of later in de opties van het apparaat. Installaties van vóór 1.0.51 krijgen één keer de vraag, in Reparaties. Staat het aan, dan stuurt Home Assistant één keer per dag een klein rapport over je BACnet-apparaten: fabrikant, model, firmware en een paar aantallen. Nooit adressen, namen of waarden. De rapporten helpen bepalen welke apparaten getest en ondersteund worden.
 
 ### Wie is verantwoordelijk
 
@@ -91,7 +91,7 @@ Zolang bij minstens één apparaat de optie aan staat, gaat er één rapport per
 |---|---|---|
 | `schema` | `1` | Versie van het rapportformaat |
 | `install_id` | `3f2b…` | Een willekeurige ID die de integratie één keer aanmaakt. Niet afgeleid van je Home Assistant of je netwerk |
-| `integration_version` | `1.0.51-beta.1` | Versie van deze integratie |
+| `integration_version` | `1.0.51` | Versie van deze integratie |
 | `ha_version` | `2026.10.1` | Versie van Home Assistant |
 | `vendor` | `Siemens` | De `vendorName` van het apparaat |
 | `model` | `PXC200-E.D` | De `modelName` van het apparaat |
