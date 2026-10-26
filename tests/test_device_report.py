@@ -1,7 +1,7 @@
 """scripts/device_report.py: device compatibility reports → tested devices list.
 
 The report comes from a public issue form, so everything in it is
-untrusted text that ends up in the README.
+untrusted text that ends up in TESTED_DEVICES.md.
 """
 
 from __future__ import annotations
@@ -84,23 +84,23 @@ def test_render_table_escapes_untrusted_text():
     assert row == "| Evil Corp | img srcx onerroralert1 | — |"
 
 
-def test_add_report_updates_json_and_readme(tmp_path):
+def test_add_report_updates_json_and_table(tmp_path):
     import json
 
     devices = tmp_path / "devices.json"
     devices.write_text(
         '[{"vendor": "Old", "model": "M", "version": "1.0", "issue": 70}]'
     )
-    readme = tmp_path / "README.md"
-    readme.write_text(
+    table = tmp_path / "TESTED_DEVICES.md"
+    table.write_text(
         "intro\n<!-- tested-devices:start -->\nstale\n<!-- tested-devices:end -->\nend\n"
     )
-    device_report.add_report(_BODY, 70, devices, readme)
+    device_report.add_report(_BODY, 70, devices, table)
 
     # A report edited and verified again replaces its earlier entry.
     (entry,) = json.loads(devices.read_text())
     assert entry["model"] == "PXC200-E.D"
-    text = readme.read_text()
+    text = table.read_text()
     assert "stale" not in text
     assert text.startswith("intro\n<!-- tested-devices:start -->\n| Manufacturer")
     assert "| Siemens | PXC200-E.D |" in text
