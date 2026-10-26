@@ -15,8 +15,11 @@ BACnet devices that users have reported working with the [BACnet IP integration 
 | HMS Industrial Networks SLU | PA-AC-BAC | 14.1.2.0 |
 | Kieback&Peter | DDC4000 | — |
 | Kieback&Peter | DDC420 | — |
+| Kieback&Peter GmbH&Co KG | DDC420 | 1.2 |
+| Kieback&Peter GmbH&Co KG | Kieback&Peter DDC4000 | B1.20#0 |
 | LOYTEC electronics GmbH | LIOB-588 | 7.6 |
 | Microtrol | Black Pear 2 | 0.8.6 |
+| Schneider Electric | RP-C-16A-F-230V | 3.03.01.02101 |
 | Siemens | PXC200-E.D + PXA40-W2 | V6.00.338 |
 | Signify | Interact BACnet gateway | — |
 | Trend Control Systems Ltd | IQ422 | IQ422-12 Iss4.38 Dec 12 2025 |
