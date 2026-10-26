@@ -124,6 +124,20 @@
     "issue": 52
   },
   {
+    "vendor": "LOYTEC electronics GmbH",
+    "model": "LIOB-588",
+    "firmware": "7.6",
+    "version": "1.0.51",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
     "vendor": "Microtrol",
     "model": "Black Pear 2",
     "firmware": "0.8.6",
@@ -163,6 +177,20 @@
     ],
     "notes": "Occupancy sensors and light level control, two gateways.",
     "issue": 50
+  },
+  {
+    "vendor": "Trend Control Systems Ltd",
+    "model": "IQ422",
+    "firmware": "IQ422-12 Iss4.38 Dec 12 2025",
+    "version": "1.0.51-beta.6",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
   },
   {
     "vendor": "Tridium",
