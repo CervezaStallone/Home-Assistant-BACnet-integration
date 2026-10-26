@@ -15,6 +15,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Distech Controls | ECY-VAV Gen 1 NON BI | 1.19.26161 |
 | Global Control 5 | iSMA-B-MIX18-IP | 6.5.3 |
 | HMS Industrial Networks SLU | PA-AC-BAC | 14.1.2.0 |
+| IP Video Corp | HALO-3C | — |
 | Kieback&Peter | DDC4000 | B1.20#0 |
 | Kieback&Peter | DDC420 | 1.2 |
 | LOYTEC electronics GmbH | LIOB-588 | 7.6 |
