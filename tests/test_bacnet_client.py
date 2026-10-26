@@ -1180,9 +1180,12 @@ class _FakeServer:
 
 
 class _FakeNormalApp:
+    """Same shape as BACpypes3's: the server sits on the link layer."""
+
     def __init__(self, device_object, local_addr):
         self.local_addr = local_addr
-        self.server = _FakeServer()
+        self.normal = type("Link", (), {"server": _FakeServer()})()
+        self.server = self.normal.server
         if local_addr.addrBroadcastTuple != local_addr.addrTuple:
             self.server.broadcast_address = local_addr.addrBroadcastTuple
 
@@ -1229,3 +1232,20 @@ class TestBroadcastAutoDetect:
         with_iface = BACnetClient(local_ip="", interface="10.13.37.11/24")
         without = BACnetClient(local_ip="")
         assert with_iface._device_instance == without._device_instance
+
+
+class TestBroadcastOnRealApplication:
+    """The fake app above had a ``server`` attribute; BACpypes3's real
+    NormalApplication keeps it on its link layer (``app.normal.server``), so
+    1.0.52-beta.1/2 set nothing and discovery still failed."""
+
+    def test_real_app_gets_the_subnet_broadcast(self):
+        async def run():
+            client = BACnetClient(local_ip="", local_port=0, interface="10.13.37.11/24")
+            await client.connect()
+            try:
+                return client._app.normal.server.broadcast_address
+            finally:
+                await client.disconnect()
+
+        assert asyncio.run(run()) == ("10.13.37.255", 0)

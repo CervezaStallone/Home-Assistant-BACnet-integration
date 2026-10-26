@@ -737,7 +737,8 @@ class BACnetClient:
         already allows broadcast and, bound to any address, also receives
         the broadcast I-Am replies; only the destination was missing.
         """
-        server = getattr(self._app, "server", None)
+        # NormalApplication keeps its datagram server on its link layer.
+        server = getattr(getattr(self._app, "normal", None), "server", None)
         if server is None or server.broadcast_address or not self._interface:
             return
         network = ipaddress.ip_interface(self._interface).network
