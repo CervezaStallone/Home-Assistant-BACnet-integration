@@ -89,6 +89,22 @@ desktop.ini
 # Environment / secrets
 .env
 .env.*
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+secrets/
+credentials/
+.ha_token
+ha_token
+
+# Security audit output (lists weak spots; never publish)
+security-report.md
+incident-report.md
+memory-security.md
+.skills/
 
 # MemPalace per-project files (issue #185)
 mempalace.yaml
