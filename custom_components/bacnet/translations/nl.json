@@ -14,7 +14,7 @@
           "bbmd_ttl": "Foreign Device TTL (seconden)"
         },
         "data_description": {
-          "local_ip": "Het IP-adres van de netwerkinterface van deze Home Assistant-server om aan te binden. Voeg het subnetprefix toe (bijv. 192.168.1.100/24) zodat broadcasts (Who-Is-discovery) werken — zonder prefix mislukt het zoeken op het lokale subnet. Dit is NIET het adres van het BACnet-apparaat. Leeg laten voor automatische detectie.",
+          "local_ip": "Leeg laten om de netwerkinterface te gebruiken die Home Assistant zelf gebruikt (aanbevolen). Vul alleen het IP-adres van deze Home Assistant-server in om een andere interface te gebruiken, eventueel met subnetprefix (bijv. 192.168.1.100/24). Dit is NIET het adres van het BACnet-apparaat.",
           "local_port": "De standaard BACnet/IP-poort is 47808 (0xBAC0).",
           "target_address": "IP-adres van het BACnet-apparaat dat je wilt toevoegen (bijv. 192.168.1.50 of 192.168.1.50:47808). Leeg laten om apparaten automatisch te zoeken via een Who-Is-broadcast.",
           "target_device_id": "Het BACnet Device Object Instance-nummer (DOI). Wordt alleen gebruikt als er een doeladres is ingevuld. Laat op 0 voor automatische detectie.",
@@ -62,7 +62,7 @@
           "device_address": "Apparaatadres"
         },
         "data_description": {
-          "local_ip": "Het IP-adres van de netwerkinterface van deze Home Assistant-server om aan te binden. Voeg het subnetprefix toe (bijv. 192.168.1.100/24) zodat broadcasts (Who-Is-discovery) werken — zonder prefix mislukt het zoeken op het lokale subnet. Dit is NIET het adres van het BACnet-apparaat. Leeg laten voor automatische detectie.",
+          "local_ip": "Leeg laten om de netwerkinterface te gebruiken die Home Assistant zelf gebruikt (aanbevolen). Vul alleen het IP-adres van deze Home Assistant-server in om een andere interface te gebruiken, eventueel met subnetprefix (bijv. 192.168.1.100/24). Dit is NIET het adres van het BACnet-apparaat.",
           "local_port": "De standaard BACnet/IP-poort is 47808 (0xBAC0).",
           "use_bbmd": "Schakel dit in als de BACnet-apparaten in een ander subnet/VLAN zitten en er een BBMD beschikbaar is.",
           "bbmd_address": "IP-adres en poort van de BBMD (bijv. 192.168.2.1:47808).",

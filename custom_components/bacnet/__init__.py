@@ -52,6 +52,7 @@ from .const import (
     OBJECT_TYPE_TREND_LOG,
 )
 from .helpers import (
+    async_local_interface,
     default_domain_for,
     extra_property_platform,
     object_key,
@@ -367,6 +368,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             client = BACnetClient(
                 local_ip=local_ip,
                 local_port=local_port,
+                interface=await async_local_interface(hass, local_ip),
             )
             try:
                 await client.connect(

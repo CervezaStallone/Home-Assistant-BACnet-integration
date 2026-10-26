@@ -14,7 +14,7 @@
           "bbmd_ttl": "Foreign Device TTL (seconds)"
         },
         "data_description": {
-          "local_ip": "The IP address of this Home Assistant server's network interface to bind to. Include the subnet prefix (e.g. 192.168.1.100/24) so broadcasts (Who-Is discovery) work — without it, discovery on the local subnet will fail. This is NOT the BACnet device address. Leave empty for auto-detect.",
+          "local_ip": "Leave empty to use the network interface Home Assistant itself uses (recommended). Only fill in the IP address of this Home Assistant server to use another interface, optionally with its subnet prefix (e.g. 192.168.1.100/24). This is NOT the BACnet device address.",
           "local_port": "Default BACnet/IP port is 47808 (0xBAC0).",
           "target_address": "IP address of the BACnet device to add (e.g. 192.168.1.50 or 192.168.1.50:47808). Leave empty to discover devices automatically via Who-Is broadcast.",
           "target_device_id": "BACnet Device Object Instance number (DOI). Only used when a target address is specified. Leave at 0 to auto-detect.",
@@ -62,7 +62,7 @@
           "device_address": "Device address"
         },
         "data_description": {
-          "local_ip": "The IP address of this Home Assistant server's network interface to bind to. Include the subnet prefix (e.g. 192.168.1.100/24) so broadcasts (Who-Is discovery) work — without it, discovery on the local subnet will fail. This is NOT the BACnet device address. Leave empty for auto-detect.",
+          "local_ip": "Leave empty to use the network interface Home Assistant itself uses (recommended). Only fill in the IP address of this Home Assistant server to use another interface, optionally with its subnet prefix (e.g. 192.168.1.100/24). This is NOT the BACnet device address.",
           "local_port": "Default BACnet/IP port is 47808 (0xBAC0).",
           "use_bbmd": "Enable this if BACnet devices are on another subnet/VLAN and a BBMD is available.",
           "bbmd_address": "IP address and port of the BBMD (e.g. 192.168.2.1:47808).",

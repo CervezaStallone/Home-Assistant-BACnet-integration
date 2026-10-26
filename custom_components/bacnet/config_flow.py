@@ -46,6 +46,7 @@ from .const import (
     DOMAIN,
     PRIVACY_URL,
 )
+from .helpers import async_local_interface
 from .helpers import mask_address as _mask_address
 from .helpers import object_key as _object_key
 from .helpers import object_label as _object_label
@@ -319,9 +320,11 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             else:
                 from .bacnet_client import BACnetClient  # noqa: WPS433
 
+                local_ip = self._network_config[CONF_LOCAL_IP]
                 client = BACnetClient(
-                    local_ip=self._network_config[CONF_LOCAL_IP],
+                    local_ip=local_ip,
                     local_port=local_port,
+                    interface=await async_local_interface(self.hass, local_ip),
                 )
                 borrowed = False
 

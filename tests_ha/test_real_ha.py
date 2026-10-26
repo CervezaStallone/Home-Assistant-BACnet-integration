@@ -120,7 +120,9 @@ class FakeClient:
     normalize_property = staticmethod(_RealClient.normalize_property)
     _object_type_str_to_int = staticmethod(_RealClient._object_type_str_to_int)
 
-    def __init__(self, local_ip="", local_port=47808, device_instance=None):
+    def __init__(
+        self, local_ip="", local_port=47808, device_instance=None, interface=None
+    ):
         self.local_port = local_port
         self._app = object()
         self._rpm_supported: dict[str, bool] = {}
