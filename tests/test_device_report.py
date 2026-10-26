@@ -138,3 +138,18 @@ def test_render_table_one_row_per_device_with_each_firmware_on_its_own_line():
         "| K&P | DDC4000 | — |",
         "| K&P | DDC420 | 1.0<br>1.2 |",
     ]
+
+
+def test_render_table_groups_like_the_website():
+    """Same key as the brdc.nl list: trimmed and lowercased, inner spaces kept."""
+    table = device_report.render_table(
+        [
+            {"vendor": "K&P", "model": "DDC420", "firmware": "1.0"},
+            {"vendor": " k&p ", "model": "DDC420 ", "firmware": "1.2"},
+            {"vendor": "K & P", "model": "DDC420", "firmware": "2.0"},
+        ]
+    )
+    assert table.splitlines()[2:] == [
+        "| K & P | DDC420 | 2.0 |",
+        "| K&P | DDC420 | 1.0<br>1.2 |",
+    ]
