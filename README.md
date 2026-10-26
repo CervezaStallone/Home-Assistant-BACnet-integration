@@ -154,9 +154,13 @@ What this integration writes to your devices, so you know before trying it on a 
 
 ## Tested devices
 
-BACnet is a standard, so most devices work. The **[list of tested devices](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/blob/master/TESTED_DEVICES.md)** shows what users have actually tried, with manufacturer, model and firmware. There is also a [searchable version](https://www.brdc.nl/en/home-assistant-bacnet-integration/tested-devices/).
+Want to know if your controller works? The list of tested devices shows every BACnet device that users have run with this integration: manufacturer, model, firmware, integration version and what was confirmed to work. You can search and filter it by manufacturer or model.
 
-**Works on your device?** Please [send a device report](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/issues/new?template=device_report.yml): manufacturer, model and what you've used. Once checked, it's added to the list. The list also grows from installations that opted in to [usage statistics](#privacy-and-usage-statistics).
+<a href="https://www.brdc.nl/en/home-assistant-bacnet-integration/tested-devices/"><img src="https://img.shields.io/badge/Tested_devices-View_the_list-41BDF5?style=for-the-badge" alt="View the tested devices list" height="32"></a>
+
+BACnet is a standard, so a device that isn't listed will most likely work too. The list only shows what has actually been tried. Also available in [Nederlands](https://www.brdc.nl/nl/home-assistant-bacnet-integration/tested-devices/) and [Deutsch](https://www.brdc.nl/de/home-assistant-bacnet-integration/tested-devices/), or as a [plain table on GitHub](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/blob/master/TESTED_DEVICES.md).
+
+**Works on your device?** [Send a device report](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/issues/new?template=device_report.yml) with the manufacturer, model and what you've used; it's added to the list once checked. Installations that opted in to [usage statistics](#privacy-and-usage-statistics) add to the list too.
 
 ## Installation
 
