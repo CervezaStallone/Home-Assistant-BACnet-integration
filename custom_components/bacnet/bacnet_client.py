@@ -3095,8 +3095,11 @@ class BACnetClient:
         # instead of raising; str(Null) would be the bogus state "()".
         if value is None or isinstance(value, Null):
             return None
-        if isinstance(value, Real):
-            return float(value)
+        if isinstance(value, Real | float):
+            # NaN/inf (e.g. an unconnected input) is no value: Home Assistant
+            # rejects it for numeric entities and it isn't valid JSON.
+            number = float(value)
+            return number if math.isfinite(number) else None
         if isinstance(value, Unsigned):
             return int(value)
         if isinstance(value, CharacterString):
@@ -3113,8 +3116,6 @@ class BACnetClient:
             return bool(value)
         if isinstance(value, int):
             return int(value)
-        if isinstance(value, float):
-            return float(value)
         if isinstance(value, str):
             return str(value)
         # Generic fallback

@@ -88,6 +88,14 @@ class TestCoerceValue:
     def test_none(self):
         assert BACnetClient._coerce_value(None) is None
 
+    def test_non_finite_real_is_no_value(self):
+        """A device reporting NaN (e.g. an unconnected input) made Home
+        Assistant reject every state write of a numeric sensor."""
+        from bacpypes3.primitivedata import Real
+
+        for raw in (Real(float("nan")), Real(float("inf")), float("-inf")):
+            assert BACnetClient._coerce_value(raw) is None
+
     def test_plain_int_roundtrips(self):
         result = BACnetClient._coerce_value(42)
         assert result == 42
