@@ -121,3 +121,20 @@ def test_render_table_lists_only_make_model_and_firmware():
         "| A | B | 2.1 |",
         "| V | M | — |",
     ]
+
+
+def test_render_table_one_row_per_device_with_each_firmware_on_its_own_line():
+    """Reports of the same make and model share a row; firmware is listed once each."""
+    table = device_report.render_table(
+        [
+            {"vendor": "K&P", "model": "DDC420", "firmware": ""},
+            {"vendor": "k&p", "model": "ddc420", "firmware": "1.2"},
+            {"vendor": "K&P", "model": "DDC420", "firmware": "1.0"},
+            {"vendor": "K&P", "model": "DDC420", "firmware": "1.2"},
+            {"vendor": "K&P", "model": "DDC4000", "firmware": ""},
+        ]
+    )
+    assert table.splitlines()[2:] == [
+        "| K&P | DDC4000 | — |",
+        "| K&P | DDC420 | 1.0<br>1.2 |",
+    ]

@@ -56,13 +56,19 @@ def _clean(text: str, limit: int = 60) -> str:
 def render_table(devices: list[dict]) -> str:
     """Markdown table of the tested devices, sorted by manufacturer and model.
 
-    Only what it works on; the report details stay in tested_devices.json.
+    One row per make and model (case-insensitive); each firmware reported
+    for it gets its own line in the firmware cell. Only what it works on;
+    the report details stay in tested_devices.json.
     """
-    rows = [_HEADER]
+    groups: dict[tuple[str, str], list[dict]] = {}
     for d in sorted(devices, key=lambda d: (d["vendor"].lower(), d["model"].lower())):
+        groups.setdefault((d["vendor"].lower(), d["model"].lower()), []).append(d)
+    rows = [_HEADER]
+    for same in groups.values():
+        firmware = sorted({_clean(d.get("firmware", "")) for d in same} - {""})
         rows.append(
-            f"| {_clean(d['vendor'])} | {_clean(d['model'])} "
-            f"| {_clean(d.get('firmware', '')) or '—'} |"
+            f"| {_clean(same[0]['vendor'])} | {_clean(same[0]['model'])} "
+            f"| {'<br>'.join(firmware) or '—'} |"
         )
     return "\n".join(rows)
 
