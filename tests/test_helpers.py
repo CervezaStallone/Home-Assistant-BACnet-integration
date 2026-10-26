@@ -119,3 +119,36 @@ class TestObjectLabel:
         assert object_label(bo) == "Binary Output (BO 3) — Fan"
         odd = {"object_type": 99, "instance": 5, "object_name": "X"}
         assert object_label(odd) == "Type 99 (5) — X"
+
+
+def test_local_interface_comes_from_home_assistant_network_adapters(monkeypatch):
+    """Empty local IP: HA's source IP, with the prefix of its adapter."""
+    import asyncio
+    import sys
+    import types
+
+    from custom_components.bacnet.helpers import async_local_interface
+
+    network = types.SimpleNamespace()
+
+    async def source_ip(hass):
+        return "10.13.37.11"
+
+    async def adapters(hass):
+        return [
+            {"ipv4": [{"address": "172.30.32.1", "network_prefix": 23}]},
+            {"ipv4": [{"address": "10.13.37.11", "network_prefix": 24}]},
+        ]
+
+    network.async_get_source_ip = source_ip
+    network.async_get_adapters = adapters
+    monkeypatch.setitem(sys.modules, "homeassistant.components.network", network)
+    monkeypatch.setattr(
+        sys.modules["homeassistant.components"], "network", network, raising=False
+    )
+
+    run = asyncio.run
+    assert run(async_local_interface(None, "")) == "10.13.37.11/24"
+    assert run(async_local_interface(None, "172.30.32.1")) == "172.30.32.1/23"
+    assert run(async_local_interface(None, "10.13.37.11/16")) is None
+    assert run(async_local_interface(None, "192.168.9.9")) is None

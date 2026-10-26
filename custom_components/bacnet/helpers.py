@@ -82,6 +82,29 @@ def object_type_options(objects: Iterable[dict[str, Any]]) -> dict[str, str]:
     }
 
 
+async def async_local_interface(hass: Any, local_ip: str) -> str | None:
+    """'ip/prefix' of the host interface for *local_ip*, or None.
+
+    An empty local IP means Home Assistant's own source IP. None when the
+    user gave a prefix already (BACpypes3 then finds the broadcast itself)
+    or no Home Assistant network adapter has that address.
+    """
+    if "/" in local_ip:
+        return None
+    from homeassistant.components import network
+
+    try:
+        ip = local_ip or await network.async_get_source_ip(hass)
+        adapters = await network.async_get_adapters(hass)
+    except Exception:  # noqa: BLE001 — auto-detect is best effort
+        return None
+    for adapter in adapters:
+        for ipv4 in adapter.get("ipv4", []):
+            if ipv4.get("address") == ip:
+                return f"{ip}/{ipv4['network_prefix']}"
+    return None
+
+
 def mask_address(addr: str | object) -> str:
     """Partially mask a network address for safe logging.
 

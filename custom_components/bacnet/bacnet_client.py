@@ -17,6 +17,7 @@ import contextlib
 import datetime
 import errno
 import hashlib
+import ipaddress
 import json
 import logging
 import math
@@ -566,9 +567,13 @@ class BACnetClient:
         local_ip: str = "",
         local_port: int = 47808,
         device_instance: int | None = None,
+        interface: str | None = None,
     ) -> None:
         self._local_ip = local_ip
         self._local_port = local_port
+        # "ip/prefix" of the host interface (helpers.async_local_interface),
+        # used to find the subnet broadcast when local_ip has no prefix.
+        self._interface = interface
         # Use caller-supplied instance or derive one from the port.
         # Range 3900000–4194302 is the high end of the BACnet instance space —
         # unlikely to collide with real building automation devices.
@@ -630,8 +635,17 @@ class BACnetClient:
 
     def _build_app_args(self) -> tuple[DeviceObject, IPv4Address]:
         """Prepare IPv4Address and device object for app construction."""
-        if self._local_ip:
-            local_addr = IPv4Address(f"{self._local_ip}:{self._local_port}")
+        local_ip = self._local_ip
+        if (
+            local_ip
+            and "/" not in local_ip
+            and self._interface
+            and self._interface.split("/")[0] == local_ip
+        ):
+            # Without a prefix BACpypes3 assumes /32 and has no broadcast.
+            local_ip = self._interface
+        if local_ip:
+            local_addr = IPv4Address(f"{local_ip}:{self._local_port}")
         else:
             local_addr = IPv4Address(f"0.0.0.0:{self._local_port}")
 
@@ -691,6 +705,7 @@ class BACnetClient:
         else:
             _LOGGER.debug("Creating Normal BACnet application on %s", local_addr)
             self._app = NormalApplication(device_object, local_addr)
+            self._set_broadcast_address()
             _LOGGER.info(
                 "BACnet client connected on %s (type=%s)",
                 local_addr,
@@ -713,6 +728,24 @@ class BACnetClient:
                 )
             self._app = None
             raise
+
+    def _set_broadcast_address(self) -> None:
+        """Give an app bound to 0.0.0.0 the subnet broadcast of the interface.
+
+        BACpypes3 derives the broadcast from the bind address, so 0.0.0.0
+        has none and every Who-Is failed with "no broadcast". The socket
+        already allows broadcast and, bound to any address, also receives
+        the broadcast I-Am replies; only the destination was missing.
+        """
+        server = getattr(self._app, "server", None)
+        if server is None or server.broadcast_address or not self._interface:
+            return
+        network = ipaddress.ip_interface(self._interface).network
+        server.broadcast_address = (str(network.broadcast_address), self._local_port)
+        _LOGGER.debug(
+            "Who-Is broadcast address: %s",
+            _mask_address(f"{network.broadcast_address}:{self._local_port}"),
+        )
 
     def _bind_error(self) -> RuntimeError:
         """Log and build the error for a UDP port that could not be bound."""

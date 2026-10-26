@@ -1160,3 +1160,64 @@ def test_rpm_supported_defaults_true_and_follows_fallback():
     assert client.rpm_supported("10.0.0.5") is True
     client._rpm_supported["10.0.0.5"] = False
     assert client.rpm_supported("10.0.0.5") is False
+
+
+# ---------------------------------------------------------------------------
+# Auto-detect: Who-Is broadcast without a subnet prefix
+# ---------------------------------------------------------------------------
+
+
+class _FakeServer:
+    broadcast_address = None
+
+
+class _FakeNormalApp:
+    def __init__(self, device_object, local_addr):
+        self.local_addr = local_addr
+        self.server = _FakeServer()
+        if local_addr.addrBroadcastTuple != local_addr.addrTuple:
+            self.server.broadcast_address = local_addr.addrBroadcastTuple
+
+
+class TestBroadcastAutoDetect:
+    """An empty local IP bound 0.0.0.0 without a broadcast address, so every
+    Who-Is failed with "no broadcast" and setup found no devices."""
+
+    def _connect(self, monkeypatch, local_ip, interface):
+        import custom_components.bacnet.bacnet_client as bc
+
+        monkeypatch.setattr(bc, "NormalApplication", _FakeNormalApp)
+        client = BACnetClient(local_ip=local_ip, local_port=47808, interface=interface)
+
+        async def no_wait(*_a, **_k):
+            return None
+
+        monkeypatch.setattr(client, "_wait_for_free_port", no_wait)
+        monkeypatch.setattr(client, "_wait_for_transport", no_wait)
+        asyncio.run(client.connect())
+        return client._app
+
+    def test_empty_ip_keeps_any_address_and_gets_the_subnet_broadcast(
+        self, monkeypatch
+    ):
+        app = self._connect(monkeypatch, "", "10.13.37.11/24")
+        assert app.local_addr.addrTuple == ("0.0.0.0", 47808)
+        assert app.server.broadcast_address == ("10.13.37.255", 47808)
+
+    def test_ip_without_prefix_gets_the_interface_prefix(self, monkeypatch):
+        app = self._connect(monkeypatch, "10.13.37.11", "10.13.37.11/24")
+        assert app.local_addr.addrTuple == ("10.13.37.11", 47808)
+        assert app.server.broadcast_address == ("10.13.37.255", 47808)
+
+    def test_explicit_prefix_wins(self, monkeypatch):
+        app = self._connect(monkeypatch, "10.13.37.11/16", "10.13.37.11/24")
+        assert app.server.broadcast_address == ("10.13.255.255", 47808)
+
+    def test_unknown_interface_changes_nothing(self, monkeypatch):
+        app = self._connect(monkeypatch, "", None)
+        assert app.server.broadcast_address is None
+
+    def test_device_instance_does_not_depend_on_the_interface(self):
+        with_iface = BACnetClient(local_ip="", interface="10.13.37.11/24")
+        without = BACnetClient(local_ip="")
+        assert with_iface._device_instance == without._device_instance
