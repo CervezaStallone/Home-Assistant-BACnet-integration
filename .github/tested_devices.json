@@ -1,5 +1,19 @@
 [
   {
+    "vendor": "Bosch Building Automation GmbH",
+    "model": "ems5.CP05E",
+    "firmware": "ems5-BACnet 2.0",
+    "version": "1.0.51",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
     "vendor": "Control Solutions",
     "model": "Babel Buster BB2-7010-01",
     "firmware": "2.39.1",
@@ -204,5 +218,19 @@
     ],
     "notes": "128 COV subscriptions stable across renewals and reloads.",
     "issue": 28
+  },
+  {
+    "vendor": "Xiamen Milesight IoT Co., Ltd.",
+    "model": "UG65-868M-EA",
+    "firmware": "60.0.0.49-r2",
+    "version": "1.0.51",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
   }
 ]
