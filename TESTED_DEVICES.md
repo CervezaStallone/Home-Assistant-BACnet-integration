@@ -2,6 +2,8 @@
 
 BACnet devices that users have reported working with the [BACnet IP integration for Home Assistant](README.md). BACnet is a standard, so devices that aren't listed usually work too; this is what has actually been tried.
 
+Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-bacnet-integration/tested-devices/).
+
 <!-- tested-devices:start -->
 | Manufacturer | Model | Firmware |
 |---|---|---|

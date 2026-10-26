@@ -154,7 +154,7 @@ What this integration writes to your devices, so you know before trying it on a 
 
 ## Tested devices
 
-BACnet is a standard, so most devices work. The **[list of tested devices](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/blob/master/TESTED_DEVICES.md)** shows what users have actually tried, with manufacturer, model and firmware.
+BACnet is a standard, so most devices work. The **[list of tested devices](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/blob/master/TESTED_DEVICES.md)** shows what users have actually tried, with manufacturer, model and firmware. There is also a [searchable version](https://www.brdc.nl/en/home-assistant-bacnet-integration/tested-devices/).
 
 **Works on your device?** Please [send a device report](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/issues/new?template=device_report.yml): manufacturer, model and what you've used. Once checked, it's added to the list. The list also grows from installations that opted in to [usage statistics](#privacy-and-usage-statistics).
 
