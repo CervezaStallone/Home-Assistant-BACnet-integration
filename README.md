@@ -168,9 +168,11 @@ Devices that users have reported working with this integration. BACnet is a stan
 | HMS Industrial Networks SLU | PA-AC-BAC | 14.1.2.0 |
 | Kieback&Peter | DDC4000 | — |
 | Kieback&Peter | DDC420 | — |
+| LOYTEC electronics GmbH | LIOB-588 | 7.6 |
 | Microtrol | Black Pear 2 | 0.8.6 |
 | Siemens | PXC200-E.D + PXA40-W2 | V6.00.338 |
 | Signify | Interact BACnet gateway | — |
+| Trend Control Systems Ltd | IQ422 | IQ422-12 Iss4.38 Dec 12 2025 |
 | Tridium | Niagara JACE | — |
 <!-- tested-devices:end -->
 
