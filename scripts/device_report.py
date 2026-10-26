@@ -53,16 +53,24 @@ def _clean(text: str, limit: int = 60) -> str:
     return " ".join(text.split())[:limit].strip()
 
 
+def _device_key(d: dict) -> tuple[str, str]:
+    """Make and model, trimmed and lowercased: the same key the brdc.nl list uses."""
+    return (
+        str(d.get("vendor") or "").strip().lower(),
+        str(d.get("model") or "").strip().lower(),
+    )
+
+
 def render_table(devices: list[dict]) -> str:
     """Markdown table of the tested devices, sorted by manufacturer and model.
 
-    One row per make and model (case-insensitive); each firmware reported
+    One row per make and model (see _device_key); each firmware reported
     for it gets its own line in the firmware cell. Only what it works on;
     the report details stay in tested_devices.json.
     """
     groups: dict[tuple[str, str], list[dict]] = {}
-    for d in sorted(devices, key=lambda d: (d["vendor"].lower(), d["model"].lower())):
-        groups.setdefault((d["vendor"].lower(), d["model"].lower()), []).append(d)
+    for d in sorted(devices, key=_device_key):
+        groups.setdefault(_device_key(d), []).append(d)
     rows = [_HEADER]
     for same in groups.values():
         firmware = sorted({_clean(d.get("firmware", "")) for d in same} - {""})
