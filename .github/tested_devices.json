@@ -56,7 +56,24 @@
   {
     "vendor": "Distech Controls",
     "model": "ECY-TU203 Rev 1.0A",
-    "firmware": "1.22.22026.1 / 1.19.23041.871",
+    "firmware": "1.22.22026.1",
+    "version": "1.0.50-beta.9",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)",
+      "Writing values",
+      "Schedules",
+      "Alarms",
+      "Trend logs"
+    ],
+    "notes": "",
+    "issue": 78
+  },
+  {
+    "vendor": "Distech Controls",
+    "model": "ECY-TU203 Rev 1.0A",
+    "firmware": "1.19.23041.871",
     "version": "1.0.50-beta.9",
     "connection": "Same subnet",
     "works": [
