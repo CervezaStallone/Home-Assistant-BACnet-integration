@@ -2,7 +2,7 @@
 
 Run by .github/workflows/device-report.yml when the maintainer labels a
 report "verified": adds the entry to .github/tested_devices.json and regenerates the
-table in README.md. The issue text is untrusted; it only ever reaches this
+table in TESTED_DEVICES.md. The issue text is untrusted; it only ever reaches this
 script through an environment variable, never a shell command.
 """
 
@@ -71,8 +71,8 @@ _START = "<!-- tested-devices:start -->"
 _END = "<!-- tested-devices:end -->"
 
 
-def add_report(body: str, issue: int, devices_path: Path, readme_path: Path) -> None:
-    """Add (or replace) the report's entry and regenerate the README table."""
+def add_report(body: str, issue: int, devices_path: Path, table_path: Path) -> None:
+    """Add (or replace) the report's entry and regenerate the table."""
     devices = json.loads(devices_path.read_text(encoding="utf-8"))
     devices = [d for d in devices if d["issue"] != issue]
     devices.append(entry_from_issue(body, issue))
@@ -80,10 +80,10 @@ def add_report(body: str, issue: int, devices_path: Path, readme_path: Path) -> 
     devices_path.write_text(
         json.dumps(devices, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
-    readme = readme_path.read_text(encoding="utf-8")
-    before, rest = readme.split(_START, 1)
+    text = table_path.read_text(encoding="utf-8")
+    before, rest = text.split(_START, 1)
     _, after = rest.split(_END, 1)
-    readme_path.write_text(
+    table_path.write_text(
         f"{before}{_START}\n{render_table(devices)}\n{_END}{after}", encoding="utf-8"
     )
 
@@ -96,5 +96,5 @@ if __name__ == "__main__":
         os.environ["ISSUE_BODY"],
         int(os.environ["ISSUE_NUMBER"]),
         root / ".github" / "tested_devices.json",
-        root / "README.md",
+        root / "TESTED_DEVICES.md",
     )

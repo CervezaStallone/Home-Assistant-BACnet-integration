@@ -8,7 +8,7 @@ name: Device report
 #
 # The issue text is untrusted. It reaches scripts/device_report.py only
 # through environment variables, never through ${{ }} in a run: line, and
-# the script strips markdown, HTML and links before it lands in README.md.
+# the script strips markdown, HTML and links before it lands in TESTED_DEVICES.md.
 on:
   issues:
     types: [labeled]
@@ -50,7 +50,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -c "$branch"
-          git add README.md .github/tested_devices.json
+          git add TESTED_DEVICES.md .github/tested_devices.json
           git commit -m "docs: add tested device from #${ISSUE_NUMBER}"
           git push --force origin "$branch"
 
