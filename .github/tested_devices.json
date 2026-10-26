@@ -129,6 +129,20 @@
     "source": "telemetry"
   },
   {
+    "vendor": "IP Video Corp",
+    "model": "HALO-3C",
+    "firmware": "",
+    "version": "1.0.52-beta.3",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
     "vendor": "Kieback&Peter",
     "model": "DDC4000",
     "firmware": "",
