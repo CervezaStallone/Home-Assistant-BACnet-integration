@@ -362,6 +362,20 @@
   },
   {
     "vendor": "Siemens Building Technologies",
+    "model": "POS3.57",
+    "firmware": "FW=04.60.01.13:BL=00.01.07.0003;SVS-300.10:SBC=15.01;ISC=01.00;",
+    "version": "1.0.51",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "Siemens Building Technologies",
     "model": "PXA40-W2",
     "firmware": "",
     "version": "1.0.50-beta.8",
@@ -394,6 +408,20 @@
     "connection": "Same subnet",
     "works": [
       "Reading values"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "Siemens Building Technologies",
+    "model": "PXC7.E400L",
+    "firmware": "02.24.314.2",
+    "version": "1.0.52",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
     ],
     "notes": "",
     "issue": null,

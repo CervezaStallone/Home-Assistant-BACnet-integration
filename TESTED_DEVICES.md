@@ -29,9 +29,10 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | SAUTER | EY6AS80F021 | V4.0.0b7006 |
 | Schneider Electric | RP-C-16A-F-230V | 3.03.01.02101 |
 | Schneider Electric | SmartStruxure | 2.20.1.4 |
+| Siemens Building Technologies | POS3.57 | FW04.60.01.13:BL00.01.07.0003;SVS-300.10:SBC15.01;ISC01.00; |
 | Siemens Building Technologies | PXA40-W2 | — |
 | Siemens Building Technologies | PXC200-E.D | V6.00.338 |
-| Siemens Building Technologies | PXC7.E400L | 02.23.273.19 |
+| Siemens Building Technologies | PXC7.E400L | 02.23.273.19<br>02.24.314.2 |
 | Sierra Monitor Corporation | FPC-N54 | V2.23m |
 | Signify | Interact BACnet gateway | — |
 | Trend Control Systems Ltd | IQ422 | IQ422-12 Iss4.38 Dec 12 2025 |
