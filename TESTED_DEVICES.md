@@ -8,6 +8,8 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Manufacturer | Model | Firmware |
 |---|---|---|
 | Bosch Building Automation GmbH | ems5.CP05E | ems5-BACnet 2.0 |
+| Calorex | Delta | 0 |
+| Condair Group AG | OMEGA PRO | v1.02.00 |
 | Condair Group AG | RS | v14.1.35.1 |
 | Control Solutions | Babel Buster BB2-7010-01 | 2.39.1 |
 | Control Solutions | Babel Buster BB3-7101 | 3.15.18 |

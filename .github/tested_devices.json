@@ -14,6 +14,34 @@
     "source": "telemetry"
   },
   {
+    "vendor": "Calorex",
+    "model": "Delta",
+    "firmware": "0",
+    "version": "1.0.52",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "Condair Group AG",
+    "model": "OMEGA PRO",
+    "firmware": "v1.02.00",
+    "version": "1.0.51",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
     "vendor": "Condair Group AG",
     "model": "RS",
     "firmware": "v14.1.35.1",
