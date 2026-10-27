@@ -14,6 +14,19 @@
     "source": "telemetry"
   },
   {
+    "vendor": "Condair Group AG",
+    "model": "RS",
+    "firmware": "v14.1.35.1",
+    "version": "1.0.51",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
     "vendor": "Control Solutions",
     "model": "Babel Buster BB2-7010-01",
     "firmware": "2.39.1",
@@ -223,6 +236,34 @@
     ],
     "notes": "1092 objects; no segmentation (max APDU 480), indexed object list reads. COV on about a quarter of the objects. Only the group master unit accepts writes.",
     "issue": 52
+  },
+  {
+    "vendor": "SAUTER",
+    "model": "EY-AS525F001",
+    "firmware": "V3.1.2b802",
+    "version": "1.0.51",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "SAUTER",
+    "model": "EY-RC504F001",
+    "firmware": "V3.2.0b964",
+    "version": "1.0.51",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
   },
   {
     "vendor": "SAUTER",
