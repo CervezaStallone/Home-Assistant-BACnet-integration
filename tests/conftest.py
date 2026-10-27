@@ -199,12 +199,28 @@ class _SelectEntity:
 # Build mock modules
 # ---------------------------------------------------------------------------
 
-_ha_core = MagicMock()
+
+class _ModuleStub(MagicMock):
+    """MagicMock for a stubbed module that tests may monkeypatch.
+
+    pytest >= 9.2 takes the value to restore from the instance ``__dict__``,
+    where a MagicMock never keeps its auto-created attributes, so undo()
+    deletes them, and a MagicMock remembers a deleted attribute: every later
+    test then got AttributeError for e.g. ``vol.Optional``. Deleting here
+    only drops the override, so the attribute is auto-created again.
+    """
+
+    def __delattr__(self, name):
+        self.__dict__.pop(name, None)
+        self._mock_children.pop(name, None)
+
+
+_ha_core = _ModuleStub()
 _ha_core.callback = _noop_callback
 _ha_core.HomeAssistant = MagicMock
 _ha_core.CALLBACK_TYPE = MagicMock
 
-_ha_config_entries = MagicMock()
+_ha_config_entries = _ModuleStub()
 _ha_config_entries.ConfigEntry = MagicMock
 _ha_config_entries.OptionsFlow = object  # options_flow inherits from this
 
@@ -218,7 +234,7 @@ class _ConfigFlow:
 
 _ha_config_entries.ConfigFlow = _ConfigFlow
 
-_ha_const = MagicMock()
+_ha_const = _ModuleStub()
 _ha_const.Platform = _Platform
 _ha_const.ATTR_TEMPERATURE = "temperature"
 _ha_const.__version__ = "2026.10.1"
@@ -241,7 +257,7 @@ class _HomeAssistantError(Exception):
         self.translation_placeholders = translation_placeholders
 
 
-_ha_exceptions = MagicMock()
+_ha_exceptions = _ModuleStub()
 _ha_exceptions.ConfigEntryNotReady = Exception
 _ha_exceptions.HomeAssistantError = _HomeAssistantError
 
@@ -257,7 +273,7 @@ class _Unauthorized(_HomeAssistantError):
 
 _ha_exceptions.Unauthorized = _Unauthorized
 
-_ha_coordinator_mod = MagicMock()
+_ha_coordinator_mod = _ModuleStub()
 _ha_coordinator_mod.CoordinatorEntity = _CoordinatorEntity
 _ha_coordinator_mod.DataUpdateCoordinator = _DataUpdateCoordinator
 _ha_coordinator_mod.UpdateFailed = Exception
@@ -282,57 +298,57 @@ def _async_redact_data(data, to_redact):
     return {k: ("**REDACTED**" if k in to_redact else v) for k, v in data.items()}
 
 
-_ha_diagnostics_mod = MagicMock()
+_ha_diagnostics_mod = _ModuleStub()
 _ha_diagnostics_mod.async_redact_data = _async_redact_data
 
-_ha_repairs_mod = MagicMock()
+_ha_repairs_mod = _ModuleStub()
 _ha_repairs_mod.RepairsFlow = _RepairsFlow
 
-_ha_restore_state = MagicMock()
+_ha_restore_state = _ModuleStub()
 _ha_restore_state.RestoreEntity = _RestoreEntity
 
-_ha_device_registry = MagicMock()
+_ha_device_registry = _ModuleStub()
 _ha_device_registry.DeviceInfo = _DeviceInfo
 
-_ha_sensor_mod = MagicMock()
+_ha_sensor_mod = _ModuleStub()
 _ha_sensor_mod.SensorEntity = _SensorEntity
 _ha_sensor_mod.SensorDeviceClass = _SensorDeviceClass
 _ha_sensor_mod.SensorStateClass = _SensorStateClass
 
-_ha_binary_sensor_mod = MagicMock()
+_ha_binary_sensor_mod = _ModuleStub()
 _ha_binary_sensor_mod.BinarySensorEntity = _BinarySensorEntity
 
-_ha_switch_mod = MagicMock()
+_ha_switch_mod = _ModuleStub()
 _ha_switch_mod.SwitchEntity = _SwitchEntity
 
-_ha_number_mod = MagicMock()
+_ha_number_mod = _ModuleStub()
 _ha_number_mod.NumberEntity = _NumberEntity
 _ha_number_mod.NumberMode = _NumberMode
 
-_ha_climate_mod = MagicMock()
+_ha_climate_mod = _ModuleStub()
 _ha_climate_mod.ClimateEntity = _ClimateEntity
 _ha_climate_mod.ClimateEntityFeature = _ClimateEntityFeature
 _ha_climate_mod.HVACMode = _HVACMode
 
-_ha_button_mod = MagicMock()
+_ha_button_mod = _ModuleStub()
 _ha_button_mod.ButtonEntity = _ButtonEntity
 
-_ha_select_mod = MagicMock()
+_ha_select_mod = _ModuleStub()
 _ha_select_mod.SelectEntity = _SelectEntity
 
-_voluptuous = MagicMock()
+_voluptuous = _ModuleStub()
 _voluptuous.Schema = dict  # vol.Schema({…}) → just a dict for stub purposes
 _voluptuous.Invalid = type("Invalid", (Exception,), {})
 
-_ha_flow = MagicMock()
+_ha_flow = _ModuleStub()
 
-_ha_selector = MagicMock()
+_ha_selector = _ModuleStub()
 _ha_selector.SelectSelector = lambda config: ("select", config)
 _ha_selector.SelectSelectorConfig = dict
 _ha_selector.SelectOptionDict = dict
 _ha_selector.SelectSelectorMode = MagicMock(DROPDOWN="dropdown")
 
-_homeassistant = MagicMock()
+_homeassistant = _ModuleStub()
 # `from homeassistant import config_entries` resolves via attribute access,
 # not sys.modules — point it at the same stub.
 _homeassistant.config_entries = _ha_config_entries
@@ -344,10 +360,10 @@ sys.modules.update(
         "homeassistant.config_entries": _ha_config_entries,
         "homeassistant.const": _ha_const,
         "homeassistant.exceptions": _ha_exceptions,
-        "homeassistant.auth": MagicMock(),
-        "homeassistant.auth.permissions": MagicMock(),
-        "homeassistant.auth.permissions.const": MagicMock(),
-        "homeassistant.components": MagicMock(),
+        "homeassistant.auth": _ModuleStub(),
+        "homeassistant.auth.permissions": _ModuleStub(),
+        "homeassistant.auth.permissions.const": _ModuleStub(),
+        "homeassistant.components": _ModuleStub(),
         "homeassistant.components.sensor": _ha_sensor_mod,
         "homeassistant.components.binary_sensor": _ha_binary_sensor_mod,
         "homeassistant.components.switch": _ha_switch_mod,
@@ -357,19 +373,19 @@ sys.modules.update(
         "homeassistant.components.select": _ha_select_mod,
         "homeassistant.components.repairs": _ha_repairs_mod,
         "homeassistant.components.diagnostics": _ha_diagnostics_mod,
-        "homeassistant.helpers": MagicMock(),
+        "homeassistant.helpers": _ModuleStub(),
         "homeassistant.helpers.update_coordinator": _ha_coordinator_mod,
         "homeassistant.helpers.device_registry": _ha_device_registry,
         "homeassistant.helpers.restore_state": _ha_restore_state,
-        "homeassistant.helpers.entity_platform": MagicMock(),
-        "homeassistant.helpers.config_validation": MagicMock(),
+        "homeassistant.helpers.entity_platform": _ModuleStub(),
+        "homeassistant.helpers.config_validation": _ModuleStub(),
         "homeassistant.helpers.selector": _ha_selector,
-        "homeassistant.helpers.service": MagicMock(),
-        "homeassistant.helpers.target": MagicMock(),
-        "homeassistant.helpers.storage": MagicMock(),
-        "homeassistant.helpers.aiohttp_client": MagicMock(),
-        "homeassistant.helpers.event": MagicMock(),
-        "homeassistant.loader": MagicMock(),
+        "homeassistant.helpers.service": _ModuleStub(),
+        "homeassistant.helpers.target": _ModuleStub(),
+        "homeassistant.helpers.storage": _ModuleStub(),
+        "homeassistant.helpers.aiohttp_client": _ModuleStub(),
+        "homeassistant.helpers.event": _ModuleStub(),
+        "homeassistant.loader": _ModuleStub(),
         "homeassistant.data_entry_flow": _ha_flow,
         "voluptuous": _voluptuous,
     }
