@@ -252,6 +252,19 @@
     "issue": 62
   },
   {
+    "vendor": "Siemens Building Technologies",
+    "model": "PXC7.E400L",
+    "firmware": "02.23.273.19",
+    "version": "1.0.51",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
     "vendor": "Signify",
     "model": "Interact BACnet gateway",
     "firmware": "",
