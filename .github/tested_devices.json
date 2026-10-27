@@ -223,6 +223,32 @@
     "source": "telemetry"
   },
   {
+    "vendor": "Komfovent",
+    "model": "C6",
+    "firmware": "2",
+    "version": "1.0.51",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "Komfovent",
+    "model": "C8",
+    "firmware": "2",
+    "version": "1.0.51",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
     "vendor": "LOYTEC electronics GmbH",
     "model": "LIOB-588",
     "firmware": "7.6",
