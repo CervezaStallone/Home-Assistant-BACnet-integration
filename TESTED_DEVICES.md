@@ -20,6 +20,8 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | IP Video Corp | HALO-3C | — |
 | Kieback&Peter | DDC4000 | B1.20#0 |
 | Kieback&Peter | DDC420 | 1.2 |
+| Komfovent | C6 | 2 |
+| Komfovent | C8 | 2 |
 | LOYTEC electronics GmbH | LIOB-588 | 7.6 |
 | Microtrol | Black Pear 2 | 0.8.6 |
 | SAUTER | EY-AS525F001 | V3.1.2b802<br>V3.1.6b1058 |
