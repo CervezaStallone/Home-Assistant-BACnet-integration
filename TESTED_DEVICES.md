@@ -22,7 +22,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Kieback&Peter | DDC420 | 1.2 |
 | LOYTEC electronics GmbH | LIOB-588 | 7.6 |
 | Microtrol | Black Pear 2 | 0.8.6 |
-| SAUTER | EY-AS525F001 | V3.1.2b802 |
+| SAUTER | EY-AS525F001 | V3.1.2b802<br>V3.1.6b1058 |
 | SAUTER | EY-RC504F001 | V3.2.0b964 |
 | SAUTER | EY6AS80F021 | V4.0.0b7006 |
 | Schneider Electric | RP-C-16A-F-230V | 3.03.01.02101 |
