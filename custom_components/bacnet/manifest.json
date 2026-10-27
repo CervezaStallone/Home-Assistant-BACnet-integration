@@ -1,7 +1,8 @@
 {
   "domain": "bacnet",
   "name": "BACnet IP",
-  "codeowners": [],
+  "categories": ["hubs_protocols", "climate"],
+  "codeowners": ["@CervezaStallone"],
   "config_flow": true,
   "dependencies": ["network"],
   "documentation": "https://github.com/CervezaStallone/Home-Assistant-BACnet-integration",
