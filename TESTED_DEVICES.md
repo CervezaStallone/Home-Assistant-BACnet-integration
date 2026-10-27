@@ -21,7 +21,8 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | LOYTEC electronics GmbH | LIOB-588 | 7.6 |
 | Microtrol | Black Pear 2 | 0.8.6 |
 | Schneider Electric | RP-C-16A-F-230V | 3.03.01.02101 |
-| Siemens | PXC200-E.D + PXA40-W2 | V6.00.338 |
+| Siemens Building Technologies | PXA40-W2 | — |
+| Siemens Building Technologies | PXC200-E.D | V6.00.338 |
 | Siemens Building Technologies | PXC7.E400L | 02.23.273.19 |
 | Signify | Interact BACnet gateway | — |
 | Trend Control Systems Ltd | IQ422 | IQ422-12 Iss4.38 Dec 12 2025 |
