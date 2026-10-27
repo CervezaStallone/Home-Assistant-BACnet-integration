@@ -1,0 +1,29 @@
+name: Only the tested devices list changed?
+description: >
+  Sets only=true when a pull request (or a device-report branch started with
+  workflow_dispatch) changes nothing but the tested devices list. The required
+  checks then pass without running: nothing they test has changed. Needs a
+  checkout with fetch-depth 0.
+outputs:
+  only:
+    description: "true when only the tested devices list changed"
+    value: ${{ steps.check.outputs.only }}
+runs:
+  using: composite
+  steps:
+    - id: check
+      shell: bash
+      env:
+        EVENT: ${{ github.event_name }}
+      run: |
+        case "$EVENT" in
+          # The pull request checkout is a merge commit: parent 1 is the base.
+          pull_request) changed=$(git diff --name-only HEAD^1 HEAD) ;;
+          workflow_dispatch) changed=$(git diff --name-only origin/master...HEAD) ;;
+          *) changed="" ;;
+        esac
+        printf 'Changed files:\n%s\n' "$changed"
+        if [ -n "$changed" ] && ! grep -qvxE '\.github/tested_devices\.json|TESTED_DEVICES\.md' <<< "$changed"; then
+          echo "Only the tested devices list changed: skipping."
+          echo "only=true" >> "$GITHUB_OUTPUT"
+        fi
