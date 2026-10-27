@@ -1,7 +1,6 @@
 {
   "domain": "bacnet",
   "name": "BACnet IP",
-  "categories": ["hubs_protocols", "climate"],
   "codeowners": ["@CervezaStallone"],
   "config_flow": true,
   "dependencies": ["network"],
