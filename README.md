@@ -28,8 +28,6 @@
 
 ---
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=CervezaStallone&repository=Home-Assistant-BACnet-integration&category=integration)
-
 > **This integration is free and stays free.** It is built and maintained in spare time: new features, support for more devices, answering issues and testing against real controllers. How much time goes into it depends on support from the people who use it. If it saves you time or money, please consider sponsoring or buying me a coffee.
 >
 > **No budget? A star helps too.** It costs nothing, takes one click on the ★ Star button of the [GitHub repository](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration) and helps other Home Assistant users find the integration.
@@ -169,7 +167,9 @@ BACnet is a standard, so a device that isn't listed will most likely work too. T
 
 ### Via HACS (recommended)
 
-1. Click the **HACS badge** at the top of this page, or:
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=CervezaStallone&repository=Home-Assistant-BACnet-integration&category=integration)
+
+1. Click the button above, or:
    - Open **HACS** → **Integrations** → **⋮** → **Custom repositories**
    - Paste this repository URL and select category **Integration**
 2. Click **Download**
