@@ -11,6 +11,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Condair Group AG | RS | v14.1.35.1 |
 | Control Solutions | Babel Buster BB2-7010-01 | 2.39.1 |
 | Control Solutions | Babel Buster BB3-7101 | 3.15.18 |
+| DAMATEX | N/A | N/A |
 | Delta Controls | eZNT-Wi-T304CHM | 510082 |
 | Distech Controls | ECY-TU203 Rev 1.0A | 1.19.23041.871<br>1.22.22026.1 |
 | Distech Controls | ECY-VAV Gen 1 NON BI | 1.19.26161 |
@@ -29,6 +30,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Siemens Building Technologies | PXA40-W2 | — |
 | Siemens Building Technologies | PXC200-E.D | V6.00.338 |
 | Siemens Building Technologies | PXC7.E400L | 02.23.273.19 |
+| Sierra Monitor Corporation | FPC-N54 | V2.23m |
 | Signify | Interact BACnet gateway | — |
 | Trend Control Systems Ltd | IQ422 | IQ422-12 Iss4.38 Dec 12 2025 |
 | Tridium | Niagara JACE | — |
