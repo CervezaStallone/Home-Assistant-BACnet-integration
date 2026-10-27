@@ -32,6 +32,9 @@
 
 > **This integration is free and stays free.** It is built and maintained in spare time: new features, support for more devices, answering issues and testing against real controllers. How much time goes into it depends on support from the people who use it. If it saves you time or money, please consider sponsoring or buying me a coffee.
 >
+> **No budget? A star helps too.** It costs nothing, takes one click on the ★ Star button of the [GitHub repository](https://github.com/CervezaStallone/Home-Assistant-BACnet-integration) and helps other Home Assistant users find the integration.
+>
+> <a href="https://github.com/CervezaStallone/Home-Assistant-BACnet-integration"><img src="https://img.shields.io/github/stars/CervezaStallone/Home-Assistant-BACnet-integration?style=for-the-badge&logo=github&label=Star&color=f5c518" alt="Star on GitHub" height="32"></a>
 > <a href="https://github.com/sponsors/CervezaStallone"><img src="https://img.shields.io/badge/Sponsor-GitHub-ea4aaa?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="Sponsor on GitHub" height="32"></a>
 > <a href="https://buymeacoffee.com/cervezastalone"><img src="https://img.shields.io/badge/Buy_me_a-Coffee-FFDD00?style=for-the-badge&logo=buymeacoffee&logoColor=black" alt="Buy Me A Coffee" height="32"></a>
 
