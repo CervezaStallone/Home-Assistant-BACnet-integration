@@ -8,6 +8,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Manufacturer | Model | Firmware |
 |---|---|---|
 | Bosch Building Automation GmbH | ems5.CP05E | ems5-BACnet 2.0 |
+| Condair Group AG | RS | v14.1.35.1 |
 | Control Solutions | Babel Buster BB2-7010-01 | 2.39.1 |
 | Control Solutions | Babel Buster BB3-7101 | 3.15.18 |
 | Delta Controls | eZNT-Wi-T304CHM | 510082 |
@@ -20,6 +21,8 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Kieback&Peter | DDC420 | 1.2 |
 | LOYTEC electronics GmbH | LIOB-588 | 7.6 |
 | Microtrol | Black Pear 2 | 0.8.6 |
+| SAUTER | EY-AS525F001 | V3.1.2b802 |
+| SAUTER | EY-RC504F001 | V3.2.0b964 |
 | SAUTER | EY6AS80F021 | V4.0.0b7006 |
 | Schneider Electric | RP-C-16A-F-230V | 3.03.01.02101 |
 | Schneider Electric | SmartStruxure | 2.20.1.4 |
