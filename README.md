@@ -36,7 +36,7 @@
 >
 > <a href="https://github.com/CervezaStallone/Home-Assistant-BACnet-integration"><img src="https://img.shields.io/github/stars/CervezaStallone/Home-Assistant-BACnet-integration?style=for-the-badge&logo=github&label=Star&color=f5c518" alt="Star on GitHub" height="32"></a>
 > <a href="https://github.com/sponsors/CervezaStallone"><img src="https://img.shields.io/badge/Sponsor-GitHub-ea4aaa?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="Sponsor on GitHub" height="32"></a>
-> <a href="https://buymeacoffee.com/cervezastalone"><img src="https://img.shields.io/badge/Buy_me_a-Coffee-FFDD00?style=for-the-badge&logo=buymeacoffee&logoColor=black" alt="Buy Me A Coffee" height="32"></a>
+> <a href="https://buymeacoffee.com/cervezastallone"><img src="https://img.shields.io/badge/Buy_me_a-Coffee-FFDD00?style=for-the-badge&logo=buymeacoffee&logoColor=black" alt="Buy Me A Coffee" height="32"></a>
 
 **Contents:** [What it does](#what-does-this-integration-do) · [Features](#features-at-a-glance) · [Safety](#safety-on-a-live-site) · [Screenshots](#screenshots) · [Object types](#supported-object-types) · [Tested devices](#tested-devices) · [Installation](#installation) · [Getting started](#getting-started) · [Configuration](#configuration-options) · [Entity attributes](#entity-attributes) · [Device information](#device-information) · [How writes work](#how-writes-work) · [Examples](#examples) · [Troubleshooting](#troubleshooting) · [Privacy](#privacy-and-usage-statistics) · [Requirements](#requirements) · [Contributing](#contributing) · [License](#license)
 
