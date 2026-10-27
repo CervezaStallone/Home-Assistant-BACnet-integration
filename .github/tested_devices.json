@@ -239,8 +239,21 @@
     "source": "telemetry"
   },
   {
-    "vendor": "Siemens",
-    "model": "PXC200-E.D + PXA40-W2",
+    "vendor": "Siemens Building Technologies",
+    "model": "PXA40-W2",
+    "firmware": "",
+    "version": "1.0.50-beta.8",
+    "connection": "",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": 62
+  },
+  {
+    "vendor": "Siemens Building Technologies",
+    "model": "PXC200-E.D",
     "firmware": "V6.00.338",
     "version": "1.0.50-beta.8",
     "connection": "",
