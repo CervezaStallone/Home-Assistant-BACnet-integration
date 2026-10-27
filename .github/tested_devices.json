@@ -266,6 +266,20 @@
   },
   {
     "vendor": "SAUTER",
+    "model": "EY-AS525F001",
+    "firmware": "V3.1.6b1058",
+    "version": "1.0.52",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "SAUTER",
     "model": "EY-RC504F001",
     "firmware": "V3.2.0b964",
     "version": "1.0.51",
