@@ -619,6 +619,20 @@
     "source": "telemetry"
   },
   {
+    "vendor": "Trend Control Systems Ltd",
+    "model": "IQ422",
+    "firmware": "IQ422-0 Iss4.37 Oct 24 2025",
+    "version": "1.0.52",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
     "vendor": "Tridium",
     "model": "Niagara JACE",
     "firmware": "",
