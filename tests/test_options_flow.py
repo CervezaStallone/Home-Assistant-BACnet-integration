@@ -410,15 +410,17 @@ def test_customize_unknown_property_shows_error(monkeypatch):
     assert errors == {"base": "unknown_property"}
 
 
-def test_options_init_shows_share_usage_with_current_value(monkeypatch):
+def test_options_settings_show_share_usage_with_current_value(monkeypatch):
     # Usage statistics stay off unless the user ticked them.
-    on = _run(_flow([], options={"share_usage": True}).async_step_init(), monkeypatch)
-    off = _run(_flow([]).async_step_init(), monkeypatch)
+    on = _run(
+        _flow([], options={"share_usage": True}).async_step_settings(), monkeypatch
+    )
+    off = _run(_flow([]).async_step_settings(), monkeypatch)
     assert on["fields"]["share_usage"] is True
     assert off["fields"]["share_usage"] is False
 
 
-def test_options_init_links_the_privacy_policy(monkeypatch):
+def test_options_settings_link_the_privacy_policy(monkeypatch):
     # The share_usage description links {privacy_url}; without the
     # placeholder the frontend shows the raw text.
     from pathlib import Path
@@ -428,6 +430,42 @@ def test_options_init_links_the_privacy_policy(monkeypatch):
     flow = _flow([])
     shown = {}
     flow.async_show_form = lambda **kw: shown.update(kw)
-    _run(flow.async_step_init(), monkeypatch)
+    _run(flow.async_step_settings(), monkeypatch)
     assert shown["description_placeholders"] == {"privacy_url": PRIVACY_URL}
     assert (Path(__file__).parents[1] / PRIVACY_URL.rsplit("/", 1)[1]).is_file()
+
+
+def test_options_open_with_a_menu(monkeypatch):
+    """Issue #137 feedback: each part of the options is one click away."""
+    flow = _flow([_AI])
+    flow.async_show_menu = lambda step_id, menu_options: {
+        "type": "menu",
+        "step_id": step_id,
+        "menu_options": menu_options,
+    }
+    result = _run(flow.async_step_init(), monkeypatch)
+    assert result["type"] == "menu"
+    assert result["menu_options"] == ["settings", "rescan_objects", "domain_mapping"]
+
+
+def test_settings_save_without_the_per_object_steps(monkeypatch):
+    flow = _flow([_AI], options={CONF_DOMAIN_MAPPING: {"0:3": "number"}})
+    form = _run(flow.async_step_settings(), monkeypatch)
+    assert "rescan_objects" not in form["fields"]
+    result = _run(flow.async_step_settings({"polling_interval": 60}), monkeypatch)
+    assert result["type"] == "create_entry"
+    assert result["data"]["polling_interval"] == 60
+    assert result["data"][CONF_DOMAIN_MAPPING] == {"0:3": "number"}
+
+
+def test_customize_from_the_menu_keeps_the_settings(monkeypatch):
+    entry = MagicMock()
+    entry.data = {CONF_SELECTED_OBJECTS: [_AI]}
+    entry.options = {"polling_interval": 60, CONF_ENABLE_COV: False}
+    flow = BACnetOptionsFlow(entry)
+    flow.async_create_entry = lambda title, data: {"type": "create_entry", "data": data}
+    result = _run(
+        flow.async_step_domain_mapping({CONF_CUSTOMIZE_OBJECTS: []}), monkeypatch
+    )
+    assert result["data"]["polling_interval"] == 60
+    assert result["data"][CONF_ENABLE_COV] is False

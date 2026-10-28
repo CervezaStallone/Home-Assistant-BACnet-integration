@@ -131,13 +131,21 @@
     "step": {
       "init": {
         "title": "BACnet Integration Options",
-        "description": "Configure update behaviour, entity naming and per-object settings for this device.",
+        "description": "What do you want to change for this device?",
+        "menu_options": {
+          "settings": "Settings: COV, polling, naming, usage statistics",
+          "rescan_objects": "Rescan device: add or remove BACnet objects",
+          "domain_mapping": "Customize objects: entity type, COV, state class and extra properties per object"
+        }
+      },
+      "settings": {
+        "title": "Settings",
+        "description": "Update behaviour and entity naming for this device.",
         "data": {
           "enable_cov": "Enable COV (Change of Value) subscriptions",
           "cov_increment": "COV increment for analog objects",
           "polling_interval": "Polling interval (seconds)",
           "use_description": "Use description (property id 28) instead of name",
-          "rescan_objects": "Rescan device and manage BACnet object selection",
           "live_metadata_properties": "Live metadata properties",
           "share_usage": "Share usage statistics"
         },
@@ -146,7 +154,6 @@
           "cov_increment": "Minimum value change on the device before a COV notification is sent (applies to analog objects only). Set to 0 to use the device's default. Example: 0.5 means a notification is sent when the value changes by at least 0.5.",
           "polling_interval": "How often all objects are polled, in seconds (minimum 10). Polling always runs; COV only adds faster updates in between.",
           "use_description": "When checked, entities will be named using the BACnet 'description' property (ID 28) instead of 'objectName' (ID 77).",
-          "rescan_objects": "Rereads the device's current Object_List so you can add objects that weren't selected during setup, or pick up objects added to the device since. Currently imported objects stay selected by default.",
           "live_metadata_properties": "Properties that get their own live COV-Property subscription instead of the periodic re-read. Each one is an extra subscription on the device, and not every device supports it.",
           "share_usage": "Ticked by default; untick to send nothing. Once a day, sends this device's manufacturer, model and firmware, whether COV and ReadPropertyMultiple work, the number of objects per type and how it is connected (direct or BBMD), plus the integration and Home Assistant version and a random installation ID. Never addresses, names or values. Used to grow the tested devices list. [Privacy policy]({privacy_url})"
         }
@@ -167,14 +174,14 @@
       },
       "domain_mapping": {
         "title": "Customize objects",
-        "description": "Pick the BACnet objects whose entity type, COV setting or climate temperature sensor you want to change. Type to search. Objects that already have a custom setting are already picked; objects not picked use the defaults.",
+        "description": "Pick the BACnet objects whose entity type, COV setting, state class or extra properties you want to change. Type to search. Objects that already have a custom setting are already picked; objects not picked use the defaults.",
         "data": {
           "customize_objects": "Objects to customize"
         }
       },
       "customize_objects": {
         "title": "Customize objects",
-        "description": "Per object: the Home Assistant entity type, whether COV is used, and — for objects that are already a climate entity — which object provides the room temperature. Changed an object to climate just now? Save, then open the options again to pick its temperature sensor. Extra properties: pick properties (for example Minimum On Time or High Limit) to show as their own entity; type any other property by name or number under other properties."
+        "description": "Per object: the Home Assistant entity type, whether COV is used, for analog sensors the state class (auto, or measurement for a value that isn't a meter, such as a tank level or last month's total), and — for objects that are already a climate entity — which object provides the room temperature. Changed an object to climate just now? Save, then open the options again to pick its temperature sensor. Extra properties: pick properties (for example Minimum On Time or High Limit) to show as their own entity; type any other property by name or number under other properties."
       }
     },
     "error": {

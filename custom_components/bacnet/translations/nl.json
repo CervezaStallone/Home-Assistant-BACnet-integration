@@ -131,13 +131,21 @@
     "step": {
       "init": {
         "title": "Opties BACnet-integratie",
-        "description": "Stel het updategedrag, de naamgeving van entiteiten en de objectinstellingen van dit apparaat in.",
+        "description": "Wat wil je voor dit apparaat wijzigen?",
+        "menu_options": {
+          "settings": "Instellingen: COV, pollen, naamgeving, gebruiksstatistieken",
+          "rescan_objects": "Apparaat opnieuw scannen: BACnet-objecten toevoegen of verwijderen",
+          "domain_mapping": "Objecten aanpassen: entiteittype, COV, state class en extra properties per object"
+        }
+      },
+      "settings": {
+        "title": "Instellingen",
+        "description": "Updategedrag en naamgeving van entiteiten voor dit apparaat.",
         "data": {
           "enable_cov": "COV-abonnementen (Change of Value) inschakelen",
           "cov_increment": "COV-drempel voor analoge objecten",
           "polling_interval": "Poll-interval (seconden)",
           "use_description": "Description (property-id 28) gebruiken in plaats van de naam",
-          "rescan_objects": "Apparaat opnieuw scannen en objectselectie beheren",
           "live_metadata_properties": "Live metadata-properties",
           "share_usage": "Gebruiksstatistieken delen"
         },
@@ -146,7 +154,6 @@
           "cov_increment": "Minimale waardeverandering op het apparaat voordat een COV-melding wordt verstuurd (alleen voor analoge objecten). Zet op 0 voor de standaardwaarde van het apparaat. Voorbeeld: 0,5 betekent een melding zodra de waarde minstens 0,5 verandert.",
           "polling_interval": "Hoe vaak alle objecten worden gepolld, in seconden (minimaal 10). Pollen gebeurt altijd; COV voegt daartussen alleen snellere updates toe.",
           "use_description": "Indien aangevinkt krijgen entiteiten hun naam uit de BACnet-property 'description' (ID 28) in plaats van 'objectName' (ID 77).",
-          "rescan_objects": "Leest de huidige Object_List van het apparaat opnieuw in, zodat je objecten kunt toevoegen die bij het instellen niet gekozen waren, of objecten die sindsdien aan het apparaat zijn toegevoegd. Al geïmporteerde objecten blijven standaard geselecteerd.",
           "live_metadata_properties": "Properties die een eigen live COV-Property-abonnement krijgen in plaats van het periodiek opnieuw uitlezen. Elke property is een extra abonnement op het apparaat, en niet elk apparaat ondersteunt dit.",
           "share_usage": "Standaard aangevinkt; vink uit om niets te versturen. Stuurt één keer per dag fabrikant, model en firmware van dit apparaat, of COV en ReadPropertyMultiple werken, het aantal objecten per type en hoe het verbonden is (direct of via BBMD), plus de versie van de integratie en van Home Assistant en een willekeurige installatie-ID. Nooit adressen, namen of waarden. Gebruikt om de lijst met geteste apparaten aan te vullen. [Privacyverklaring]({privacy_url}#nederlands)"
         }
@@ -167,14 +174,14 @@
       },
       "domain_mapping": {
         "title": "Objecten aanpassen",
-        "description": "Kies de BACnet-objecten waarvan je het entiteittype, de COV-instelling of de temperatuursensor (bij climate) wilt wijzigen. Typ om te zoeken. Objecten met een eigen instelling zijn al gekozen; niet-gekozen objecten gebruiken de standaardinstellingen.",
+        "description": "Kies de BACnet-objecten waarvan je het entiteittype, de COV-instelling, de state class of de extra properties wilt wijzigen. Typ om te zoeken. Objecten met een eigen instelling zijn al gekozen; niet-gekozen objecten gebruiken de standaardinstellingen.",
         "data": {
           "customize_objects": "Aan te passen objecten"
         }
       },
       "customize_objects": {
         "title": "Objecten aanpassen",
-        "description": "Per object: het entiteittype in Home Assistant, of COV wordt gebruikt en — voor objecten die al een climate-entiteit zijn — welk object de ruimtetemperatuur levert. Heb je een object net naar climate omgezet? Sla op en open de opties opnieuw om de temperatuursensor te kiezen. Extra properties: kies properties (bijvoorbeeld Minimum On Time of High Limit) om als eigen entiteit te tonen; typ andere properties op naam of nummer bij other properties."
+        "description": "Per object: het entiteittype in Home Assistant, of COV wordt gebruikt, bij analoge sensoren de state class (auto, of measurement voor een waarde die geen meterstand is, zoals een tankniveau of het totaal van vorige maand) en — voor objecten die al een climate-entiteit zijn — welk object de ruimtetemperatuur levert. Heb je een object net naar climate omgezet? Sla op en open de opties opnieuw om de temperatuursensor te kiezen. Extra properties: kies properties (bijvoorbeeld Minimum On Time of High Limit) om als eigen entiteit te tonen; typ andere properties op naam of nummer bij other properties."
       }
     },
     "error": {

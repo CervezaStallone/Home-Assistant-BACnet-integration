@@ -2,11 +2,12 @@
 Options flow for BACnet IP integration.
 
 Steps behind the integration's "Configure" button:
-  init              – COV toggle, polling interval, naming, live metadata
-  rescan_objects    – (optional) re-read the device's object list
+  init              – menu: settings, rescan_objects or domain_mapping
+  settings          – COV toggle, polling interval, naming, live metadata
+  rescan_objects    – re-read the device's object list, then domain_mapping
   domain_mapping    – pick which objects to customise (unpicked = defaults)
-  customize_objects – per picked object: HA type, COV on/off and, for
-                      climate objects, the object providing the temperature
+  customize_objects – per picked object: HA type, COV on/off, state class
+                      and, for climate objects, the temperature object
 """
 
 from __future__ import annotations
@@ -35,7 +36,6 @@ from .const import (
     CONF_LIVE_METADATA_PROPERTIES,
     CONF_POLLING_INTERVAL,
     CONF_REMOVE_OBJECTS,
-    CONF_RESCAN_OBJECTS,
     CONF_SELECT_TYPES,
     CONF_SELECTED_OBJECTS,
     CONF_SHARE_USAGE,
@@ -80,18 +80,27 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         """Store the config entry so we can read current data + options."""
         self._config_entry = config_entry
-        self._options_so_far: dict[str, Any] = {}
+        self._options_so_far: dict[str, Any] = dict(config_entry.options)
         self._rescanned_objects: list[dict[str, Any]] = []
         self._customize: list[dict[str, Any]] = []
-
-    # ------------------------------------------------------------------
-    # Step 1: General options (COV, polling, naming)
-    # ------------------------------------------------------------------
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """First options step — COV, polling interval, naming toggle."""
+        """Menu: general settings, rescan the device, or customise objects."""
+        return self.async_show_menu(
+            step_id="init",
+            menu_options=["settings", "rescan_objects", "domain_mapping"],
+        )
+
+    # ------------------------------------------------------------------
+    # General options (COV, polling, naming)
+    # ------------------------------------------------------------------
+
+    async def async_step_settings(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """COV, polling interval, naming, live metadata, usage statistics."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -100,15 +109,11 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
             if not isinstance(polling, int) or polling < MIN_POLLING_INTERVAL:
                 errors["base"] = "invalid_polling_interval"
 
-            rescan = user_input.pop(CONF_RESCAN_OBJECTS, False)
-
             if not errors:
-                # Merge with existing options so domain mapping is preserved
-                new_options = {**self._config_entry.options, **user_input}
-                self._options_so_far = new_options
-                if rescan:
-                    return await self.async_step_rescan_objects()
-                return await self.async_step_domain_mapping()
+                # Merge with existing options so per-object settings stay
+                return self.async_create_entry(
+                    title="", data={**self._config_entry.options, **user_input}
+                )
 
         # --- Current values (fallback to defaults) ---
         current_cov = self._config_entry.options.get(
@@ -147,12 +152,11 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
                     }
                 ),
                 vol.Optional(CONF_SHARE_USAGE, default=current_share): bool,
-                vol.Optional(CONF_RESCAN_OBJECTS, default=False): bool,
             }
         )
 
         return self.async_show_form(
-            step_id="init",
+            step_id="settings",
             data_schema=schema,
             errors=errors,
             description_placeholders={"privacy_url": PRIVACY_URL},

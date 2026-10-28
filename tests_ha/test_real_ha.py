@@ -474,7 +474,11 @@ async def test_diagnostics(hass: HomeAssistant) -> None:
 async def test_options_flow_roundtrip(hass: HomeAssistant) -> None:
     entry = await _setup(hass)
     result = await hass.config_entries.options.async_init(entry.entry_id)
-    assert result["step_id"] == "init"
+    assert result["type"] == "menu"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "settings"}
+    )
+    assert result["step_id"] == "settings"
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
         {
@@ -483,8 +487,15 @@ async def test_options_flow_roundtrip(hass: HomeAssistant) -> None:
             "polling_interval": 60,
             "use_description": False,
             "live_metadata_properties": [],
-            "rescan_objects": False,
         },
+    )
+    assert result["type"] == "create_entry"
+    await hass.async_block_till_done()
+
+    # Customize objects straight from the menu keeps the settings above
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "domain_mapping"}
     )
     assert result["step_id"] == "domain_mapping"
     result = await hass.config_entries.options.async_configure(
@@ -517,6 +528,9 @@ async def test_options_flow_roundtrip(hass: HomeAssistant) -> None:
 async def test_polling_floor_in_options(hass: HomeAssistant) -> None:
     entry = await _setup(hass)
     result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "settings"}
+    )
     with pytest.raises(vol.Invalid):  # vol.Range rejects before the step runs
         await hass.config_entries.options.async_configure(
             result["flow_id"], {"polling_interval": 5}
