@@ -2,7 +2,7 @@
 
 **[English](#english)** · **[Nederlands](#nederlands)**
 
-Last updated: 25 October 2026. Applies to the opt-in usage statistics, available from version 1.0.51.
+Last updated: 28 October 2026. Applies to the opt-in usage statistics, available from version 1.0.51.
 
 ---
 
@@ -10,7 +10,7 @@ Last updated: 25 October 2026. Applies to the opt-in usage statistics, available
 
 ### In short
 
-The integration only sends data while **Share usage statistics** is ticked. It is ticked by default when you add a device, and you can untick it on that same page or later in the device's options. Installations that existed before 1.0.51 are asked once, in Repairs. When it is on, Home Assistant sends one small report a day about your BACnet devices: manufacturer, model, firmware and a few counts. It never sends addresses, names or values. The reports help decide which devices to test and support.
+The integration only sends data while **Share usage statistics** is ticked. It is ticked by default when you add a device, and you can untick it on that same page or later in the device's options. Installations that existed before 1.0.51 are asked once, in Repairs. When it is on, Home Assistant sends a small report every 6 hours about your BACnet devices: manufacturer, model, firmware and a few counts. It never sends addresses, names or values. The reports help decide which devices to test and support.
 
 ### Who is responsible
 
@@ -18,7 +18,7 @@ BRDC ([brdc.nl](https://brdc.nl)), the maintainer of this integration, is the co
 
 ### What is sent
 
-While at least one device has the option ticked, one report a day goes to `ha-bacnet.telemetry.brdc.nl`. Only ticked devices are included, and only once they have answered a poll.
+While at least one device has the option ticked, one report every 6 hours goes to `ha-bacnet.telemetry.brdc.nl`. Only ticked devices are included, and only once they have answered a poll.
 
 | Field | Example | Meaning |
 |---|---|---|
@@ -40,6 +40,7 @@ While at least one device has the option ticked, one report a day goes to `ha-ba
 
 - The **country** your report came from (a two-letter code). It is looked up in a local database on our own server; no third party is contacted.
 - The **date** the report arrived (no time of day), and the dates an installation and a device model were first and last seen.
+- A **marker** that your installation is currently active, used only to count how many installations are active right now. It is stored securely and separately from your installation ID, holds no time history, and is deleted automatically 7 hours after your latest report (25 hours for versions that report once a day).
 
 ### Your IP address
 
@@ -64,7 +65,7 @@ On servers in the EU, run by a hosting provider that processes the data on our b
 ### Stopping, access and deletion
 
 - **Stop:** untick the option in each device's options (**Settings → Devices & services → BACnet IP → Configure**). No further reports are sent.
-- **Access or deletion:** we do not know which installation ID is yours, so we cannot find your data on our own. Send us your installation ID and we will send you the stored reports or delete all of them. Deletion removes everything stored under that ID, which is what the maintainer's statistics are built from. A manufacturer, model and firmware that is already in the public [tested devices](README.md#tested-devices) list stays there, as does the server's list of known models (when a model was first and last seen): neither contains your installation ID. You find the ID in your Home Assistant configuration folder, in the file `.storage/bacnet.telemetry`, under `install_id`. Do not post it in a public GitHub issue.
+- **Access or deletion:** we do not know which installation ID is yours, so we cannot find your data on our own. Send us your installation ID and we will send you the stored reports or delete all of them. Deletion removes everything stored under that ID, which is what the maintainer's statistics are built from. A manufacturer, model and firmware that is already in the public [tested devices](README.md#tested-devices) list stays there, as does the server's list of known models (when a model was first and last seen): neither contains your installation ID. You find the ID in your Home Assistant configuration folder, in the file `.storage/bacnet.telemetry`, under `install_id`. Do not post it in a public GitHub issue. The active marker is not part of a deletion; it expires on its own.
 - **Complaints:** you can contact the data protection authority in your country. In the Netherlands that is the Autoriteit Persoonsgegevens.
 
 ### Changes
@@ -77,7 +78,7 @@ Changes to this policy are made in this file and are visible in its history on G
 
 ### In het kort
 
-De integratie stuurt alleen gegevens zolang **Gebruiksstatistieken delen** is aangevinkt. Bij het toevoegen van een apparaat staat het standaard aan; je kunt het op die pagina uitvinken, of later in de opties van het apparaat. Installaties van vóór 1.0.51 krijgen één keer de vraag, in Reparaties. Staat het aan, dan stuurt Home Assistant één keer per dag een klein rapport over je BACnet-apparaten: fabrikant, model, firmware en een paar aantallen. Nooit adressen, namen of waarden. De rapporten helpen bepalen welke apparaten getest en ondersteund worden.
+De integratie stuurt alleen gegevens zolang **Gebruiksstatistieken delen** is aangevinkt. Bij het toevoegen van een apparaat staat het standaard aan; je kunt het op die pagina uitvinken, of later in de opties van het apparaat. Installaties van vóór 1.0.51 krijgen één keer de vraag, in Reparaties. Staat het aan, dan stuurt Home Assistant elke 6 uur een klein rapport over je BACnet-apparaten: fabrikant, model, firmware en een paar aantallen. Nooit adressen, namen of waarden. De rapporten helpen bepalen welke apparaten getest en ondersteund worden.
 
 ### Wie is verantwoordelijk
 
@@ -85,7 +86,7 @@ BRDC ([brdc.nl](https://brdc.nl)), de maker van deze integratie, is verwerkingsv
 
 ### Wat er verstuurd wordt
 
-Zolang bij minstens één apparaat de optie aan staat, gaat er één rapport per dag naar `ha-bacnet.telemetry.brdc.nl`. Alleen aangevinkte apparaten gaan mee, en pas als ze op een poll hebben geantwoord.
+Zolang bij minstens één apparaat de optie aan staat, gaat er elke 6 uur één rapport naar `ha-bacnet.telemetry.brdc.nl`. Alleen aangevinkte apparaten gaan mee, en pas als ze op een poll hebben geantwoord.
 
 | Veld | Voorbeeld | Betekenis |
 |---|---|---|
@@ -107,10 +108,11 @@ Zolang bij minstens één apparaat de optie aan staat, gaat er één rapport per
 
 - Het **land** waar je rapport vandaan kwam (een code van twee letters). Dat wordt opgezocht in een lokale database op onze eigen server; er wordt geen derde partij benaderd.
 - De **datum** waarop het rapport binnenkwam (zonder tijdstip), en de datums waarop een installatie en een apparaatmodel voor het eerst en het laatst gezien zijn.
+- Een **marker** dat je installatie nu actief is, alleen gebruikt om te tellen hoeveel installaties op dit moment actief zijn. Die wordt veilig en los van je installatie-ID opgeslagen, bevat geen tijdgeschiedenis en wordt automatisch verwijderd 7 uur na je laatste rapport (25 uur voor versies die één keer per dag rapporteren).
 
 ### Je IP-adres
 
-Je IP-adres wordt alleen gebruikt tijdens het ontvangen van je rapport: om je land op te zoeken (in een lokale database, geen derde partij) en voor rate limiting. Het wordt nooit opgeslagen. Voor rate limiting gebruiken we een versleutelde hash van je IP-adres, niet het adres zelf, die binnen een uur automatisch wordt verwijderd. De webserver voor dit adres houdt geen toegangslogs bij.
+Je IP-adres wordt alleen gebruikt tijdens het ontvangen van je rapport: om je land op te zoeken (in een lokale database, geen derde partij) en voor rate limiting. Het wordt nooit opgeslagen. Voor rate limiting gebruiken we een beveiligde hash van je IP-adres, niet het adres zelf, die binnen een uur automatisch wordt verwijderd. De webserver voor dit adres houdt geen toegangslogs bij.
 
 ### Waarom, en op welke grond
 
@@ -131,7 +133,7 @@ Op servers in de EU, beheerd door een hostingpartij die de gegevens in onze opdr
 ### Stoppen, inzage en verwijderen
 
 - **Stoppen:** vink de optie uit in de opties van elk apparaat (**Instellingen → Apparaten en diensten → BACnet IP → Configureren**). Er worden dan geen rapporten meer verstuurd.
-- **Inzage of verwijderen:** we weten niet welke installatie-ID van jou is, dus we kunnen je gegevens niet zelf vinden. Stuur ons je installatie-ID en we sturen je de opgeslagen rapporten of verwijderen ze allemaal. Verwijderen wist alles wat onder die ID is opgeslagen, en daarop zijn de statistieken van de maker gebaseerd. Een fabrikant, model en firmware die al in de openbare lijst met [geteste apparaten](README.md#tested-devices) staan, blijven daar staan, net als de lijst met bekende modellen op de server (wanneer een model voor het eerst en het laatst gezien is): geen van beide bevat je installatie-ID. Je vindt de ID in je Home Assistant-configuratiemap, in het bestand `.storage/bacnet.telemetry`, onder `install_id`. Zet hem niet in een openbaar GitHub-issue.
+- **Inzage of verwijderen:** we weten niet welke installatie-ID van jou is, dus we kunnen je gegevens niet zelf vinden. Stuur ons je installatie-ID en we sturen je de opgeslagen rapporten of verwijderen ze allemaal. Verwijderen wist alles wat onder die ID is opgeslagen, en daarop zijn de statistieken van de maker gebaseerd. Een fabrikant, model en firmware die al in de openbare lijst met [geteste apparaten](README.md#tested-devices) staan, blijven daar staan, net als de lijst met bekende modellen op de server (wanneer een model voor het eerst en het laatst gezien is): geen van beide bevat je installatie-ID. Je vindt de ID in je Home Assistant-configuratiemap, in het bestand `.storage/bacnet.telemetry`, onder `install_id`. Zet hem niet in een openbaar GitHub-issue. De actief-marker valt niet onder verwijderen; die verloopt vanzelf.
 - **Klachten:** je kunt terecht bij de privacytoezichthouder in je land. In Nederland is dat de Autoriteit Persoonsgegevens.
 
 ### Wijzigingen
