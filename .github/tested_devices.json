@@ -95,6 +95,20 @@
   },
   {
     "vendor": "Delta Controls",
+    "model": "DSM_RTR",
+    "firmware": "189697",
+    "version": "1.0.52",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "Delta Controls",
     "model": "eZNT-Wi-T304CHM",
     "firmware": "510082",
     "version": "1.0.51-beta.5",
