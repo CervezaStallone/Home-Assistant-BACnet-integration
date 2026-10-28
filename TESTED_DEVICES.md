@@ -24,6 +24,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Global Control 5 | iSMA-B-MIX18-IP | 6.5.3 |
 | HMS Industrial Networks SLU | PA-AC-BAC | 14.1.2.0 |
 | IP Video Corp | HALO-3C | — |
+| JCI | MS-NAE3511-1 | 2.2.0.5100 |
 | Kieback&Peter | DDC4000 | B1.20#0 |
 | Kieback&Peter | DDC420 | 1.2 |
 | Komfovent | C6 | 2 |
