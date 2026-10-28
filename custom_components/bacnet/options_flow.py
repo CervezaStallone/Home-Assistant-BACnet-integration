@@ -39,6 +39,7 @@ from .const import (
     CONF_SELECT_TYPES,
     CONF_SELECTED_OBJECTS,
     CONF_SHARE_USAGE,
+    CONF_STATE_CLASSES,
     CONF_USE_DESCRIPTION,
     DEFAULT_COV_INCREMENT,
     DEFAULT_ENABLE_COV,
@@ -52,6 +53,8 @@ from .const import (
     OBJECT_TYPE_ANALOG_OUTPUT,
     OBJECT_TYPE_ANALOG_VALUE,
     PRIVACY_URL,
+    STATE_CLASS_AUTO,
+    STATE_CLASS_CHOICES,
     SUPPORTED_DOMAINS,
 )
 from .helpers import default_domain_for, property_label
@@ -293,6 +296,7 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
             | set(self._current(CONF_COV_OVERRIDES))
             | set(self._current(CONF_CLIMATE_TEMPERATURE_SOURCES))
             | set(self._current(CONF_EXTRA_PROPERTIES))
+            | set(self._current(CONF_STATE_CLASSES))
         )
         options = {_object_key(o): _object_label(o) for o in objects}
         schema = vol.Schema(
@@ -308,7 +312,7 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
     async def async_step_customize_objects(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """HA type, COV and climate temperature source for the picked objects.
+        """HA type, COV, climate temperature source and state class.
 
         Field names are the objects' own labels (a translation can't name a
         per-device object), so the form reads e.g. "Analog Value (4) — SP — type".
@@ -324,6 +328,7 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
                         "temperature sensor",
                         "extra properties",
                         "other properties",
+                        "state class",
                     )
                 }
                 for obj in self._customize
@@ -344,6 +349,7 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
         covs = self._current(CONF_COV_OVERRIDES)
         sources = self._current(CONF_CLIMATE_TEMPERATURE_SOURCES)
         extras = self._current(CONF_EXTRA_PROPERTIES)
+        state_classes = self._current(CONF_STATE_CLASSES)
         temperature_choices = {"": "—"} | {
             _object_key(o): _object_label(o)
             for o in self._selected_objects
@@ -368,6 +374,13 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
                         default=sources.get(key, ""),
                     )
                 ] = vol.In({k: v for k, v in temperature_choices.items() if k != key})
+            if domain == "sensor" and obj["object_type"] in _ANALOG_TYPES:
+                fields[
+                    vol.Optional(
+                        self._field(obj, "state class"),
+                        default=state_classes.get(key, STATE_CLASS_AUTO),
+                    )
+                ] = vol.In(STATE_CLASS_CHOICES)
             offered = {
                 prop: f"{property_label(prop)} ({prop})"
                 for prop, (_, types, _) in EXTRA_PROPERTY_SPECS.items()
@@ -408,6 +421,7 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
         covs = dict(self._current(CONF_COV_OVERRIDES))
         sources = dict(self._current(CONF_CLIMATE_TEMPERATURE_SOURCES))
         extras = dict(self._current(CONF_EXTRA_PROPERTIES))
+        states = dict(self._current(CONF_STATE_CLASSES))
         selected = {_object_key(o) for o in self._selected_objects}
         kept = [
             k
@@ -416,7 +430,7 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
         ]
         for obj in self._selected_objects:
             key = _object_key(obj)
-            for store in (domains, covs, sources, extras):
+            for store in (domains, covs, sources, extras, states):
                 store.pop(key, None)
             edit = edits.get(key)
             if edit is None:
@@ -437,6 +451,8 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
             )
             if picked:
                 extras[key] = picked
+            if edit.get("state class") not in (None, STATE_CLASS_AUTO):
+                states[key] = edit["state class"]
 
         return self.async_create_entry(
             title="",
@@ -446,6 +462,7 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
                 CONF_COV_OVERRIDES: covs,
                 CONF_CLIMATE_TEMPERATURE_SOURCES: sources,
                 CONF_EXTRA_PROPERTIES: extras,
+                CONF_STATE_CLASSES: states,
                 CONF_KEPT_DOMAIN_OVERRIDES: kept,
             },
         )

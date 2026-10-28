@@ -108,11 +108,13 @@ class _SensorDeviceClass(str, Enum):
     POWER = "power"
     APPARENT_POWER = "apparent_power"
     ENERGY = "energy"
+    ENERGY_STORAGE = "energy_storage"
     CURRENT = "current"
     VOLTAGE = "voltage"
     FREQUENCY = "frequency"
     VOLUME_FLOW_RATE = "volume_flow_rate"
     VOLUME = "volume"
+    VOLUME_STORAGE = "volume_storage"
     SPEED = "speed"
     ILLUMINANCE = "illuminance"
     WEIGHT = "weight"
@@ -122,6 +124,24 @@ class _SensorDeviceClass(str, Enum):
 
 class _SensorStateClass:
     MEASUREMENT = "measurement"
+    TOTAL = "total"
+    TOTAL_INCREASING = "total_increasing"
+
+
+# The part of HA's map the tests need; missing classes allow everything.
+_DEVICE_CLASS_STATE_CLASSES = {
+    _SensorDeviceClass.TEMPERATURE: {_SensorStateClass.MEASUREMENT},
+    _SensorDeviceClass.ENERGY: {
+        _SensorStateClass.TOTAL,
+        _SensorStateClass.TOTAL_INCREASING,
+    },
+    _SensorDeviceClass.ENERGY_STORAGE: {_SensorStateClass.MEASUREMENT},
+    _SensorDeviceClass.VOLUME: {
+        _SensorStateClass.TOTAL,
+        _SensorStateClass.TOTAL_INCREASING,
+    },
+    _SensorDeviceClass.VOLUME_STORAGE: {_SensorStateClass.MEASUREMENT},
+}
 
 
 class _BinarySensorEntity:
@@ -314,6 +334,7 @@ _ha_sensor_mod = _ModuleStub()
 _ha_sensor_mod.SensorEntity = _SensorEntity
 _ha_sensor_mod.SensorDeviceClass = _SensorDeviceClass
 _ha_sensor_mod.SensorStateClass = _SensorStateClass
+_ha_sensor_mod.DEVICE_CLASS_STATE_CLASSES = _DEVICE_CLASS_STATE_CLASSES
 
 _ha_binary_sensor_mod = _ModuleStub()
 _ha_binary_sensor_mod.BinarySensorEntity = _BinarySensorEntity
@@ -403,6 +424,7 @@ def _make_coordinator(data: dict | None = None) -> MagicMock:
     coord.device_address = "192.168.1.100"
     coord.last_update_success = True
     coord.climate_temperature_sources = {}
+    coord.state_classes = {}
     coord.get_object_value.side_effect = lambda key, prop="presentValue": (
         coord.data.get(key, {}).get(prop)
     )

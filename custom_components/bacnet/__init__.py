@@ -41,6 +41,7 @@ from .const import (
     CONF_LOCAL_PORT,
     CONF_POLLING_INTERVAL,
     CONF_SELECTED_OBJECTS,
+    CONF_STATE_CLASSES,
     CONF_USE_BBMD,
     CONF_USE_DESCRIPTION,
     DEFAULT_COV_INCREMENT,
@@ -343,6 +344,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     extra_properties: dict[str, list[str]] = entry.options.get(
         CONF_EXTRA_PROPERTIES, {}
     )
+    state_classes: dict[str, str] = entry.options.get(CONF_STATE_CLASSES, {})
 
     # ---- 2. Get or create a shared BACnet client for this port ----
     # A single UDP socket (one BACnetClient) can communicate with any number
@@ -398,6 +400,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         live_metadata_properties=live_metadata_properties,
         climate_temperature_sources=climate_temperature_sources,
         extra_properties=extra_properties,
+        state_classes=state_classes,
     )
 
     # Perform the first data refresh so entities have initial state. On

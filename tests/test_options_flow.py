@@ -24,6 +24,7 @@ from custom_components.bacnet.const import (
     CONF_ENABLE_COV,
     CONF_KEPT_DOMAIN_OVERRIDES,
     CONF_SELECTED_OBJECTS,
+    CONF_STATE_CLASSES,
 )
 from custom_components.bacnet.helpers import object_label
 from custom_components.bacnet.options_flow import BACnetOptionsFlow
@@ -226,6 +227,49 @@ class TestClimateTemperatureSource:
             monkeypatch,
         )
         assert result["data"][CONF_CLIMATE_TEMPERATURE_SOURCES] == {}
+
+
+class TestStateClass:
+    """Issue #137: tank levels and snapshot totals aren't meters."""
+
+    def test_field_only_for_analog_sensors(self, monkeypatch):
+        flow = _flow([_AI, _AV_SP, _BV_NON_COMMANDABLE])
+        form = _run(
+            flow.async_step_domain_mapping(
+                {CONF_CUSTOMIZE_OBJECTS: ["0:3", "2:4", "5:1"]}
+            ),
+            monkeypatch,
+        )
+        assert form["fields"][_field(_AI, "state class")] == "auto"
+        assert _field(_AV_SP, "state class") not in form["fields"]  # number
+        assert _field(_BV_NON_COMMANDABLE, "state class") not in form["fields"]
+
+    def test_choice_is_stored_and_auto_clears_it(self, monkeypatch):
+        flow = _flow([_AI])
+        _run(
+            flow.async_step_domain_mapping({CONF_CUSTOMIZE_OBJECTS: ["0:3"]}),
+            monkeypatch,
+        )
+        result = _run(
+            flow.async_step_customize_objects(
+                {_field(_AI, "state class"): "measurement"}
+            ),
+            monkeypatch,
+        )
+        assert result["data"][CONF_STATE_CLASSES] == {"0:3": "measurement"}
+
+        flow = _flow([_AI], options=result["data"])
+        form = _run(flow.async_step_domain_mapping(), monkeypatch)
+        assert form["fields"][CONF_CUSTOMIZE_OBJECTS] == ["0:3"]
+        _run(
+            flow.async_step_domain_mapping({CONF_CUSTOMIZE_OBJECTS: ["0:3"]}),
+            monkeypatch,
+        )
+        result = _run(
+            flow.async_step_customize_objects({_field(_AI, "state class"): "auto"}),
+            monkeypatch,
+        )
+        assert result["data"][CONF_STATE_CLASSES] == {}
 
 
 _NEW_AI = {"object_type": 0, "instance": 9, "object_name": "New"}

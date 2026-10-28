@@ -508,6 +508,50 @@ class TestSensorPrecision:
         assert self._value(123456.7) == 123456.7
 
 
+class TestSensorStateClass:
+    """Issue #137: HA rejects state class measurement for energy and volume."""
+
+    def _sensor(self, units, override=None):
+        from custom_components.bacnet.sensor import BACnetSensor
+
+        obj = {"object_type": 0, "instance": 1, "object_name": "E", "units": units}
+        coord = _make_coordinator({})
+        if override:
+            coord.state_classes = {"0:1": override}
+        return BACnetSensor(coord, _make_entry(), obj)
+
+    @pytest.mark.parametrize("units", ["kilowatt-hours", "cubic-meters"])
+    def test_meters_are_total_increasing(self, units):
+        assert self._sensor(units)._attr_state_class == "total_increasing"
+
+    @pytest.mark.parametrize("units", ["degrees-celsius", "percent", None])
+    def test_other_analog_values_stay_measurement(self, units):
+        assert self._sensor(units)._attr_state_class == "measurement"
+
+    @pytest.mark.parametrize(
+        ("units", "device_class"),
+        [("cubic-meters", "volume_storage"), ("kilowatt-hours", "energy_storage")],
+    )
+    def test_measurement_override_makes_a_meter_a_stored_amount(
+        self, units, device_class
+    ):
+        # A tank level in m³ or a "last month" kWh snapshot isn't a counter
+        sensor = self._sensor(units, "measurement")
+        assert sensor._attr_state_class == "measurement"
+        assert sensor._attr_device_class == device_class
+
+    def test_none_override_drops_statistics_but_keeps_device_class(self):
+        sensor = self._sensor("kilowatt-hours", "none")
+        assert sensor._attr_state_class is None
+        assert sensor._attr_device_class == "energy"
+
+    def test_override_the_device_class_rejects_drops_the_device_class(self):
+        sensor = self._sensor("degrees-celsius", "total")
+        assert sensor._attr_state_class == "total"
+        assert sensor._attr_device_class is None
+        assert sensor._attr_native_unit_of_measurement == "°C"
+
+
 class TestUnrecordedAttributes:
     def test_static_bacnet_attributes_are_not_recorded(self):
         from custom_components.bacnet.entity import BACnetEntity
