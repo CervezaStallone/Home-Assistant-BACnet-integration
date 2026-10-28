@@ -47,7 +47,7 @@
           "device_name": "Name for this device in Home Assistant. Pre-filled with the BACnet objectName.",
           "select_types": "Every object of a ticked type is imported, together with the objects you pick below.",
           "selected_objects": "Type to search by object type (for example AI or BO), instance or name, and pick the objects you want in Home Assistant. Nothing is selected yet.",
-          "share_usage": "Ticked by default; untick to send nothing. Once a day, sends this device's manufacturer, model and firmware, whether COV and ReadPropertyMultiple work, the number of objects per type and how it is connected (direct or BBMD), plus the integration and Home Assistant version and a random installation ID. Never addresses, names or values. Used to grow the tested devices list. [Privacy policy]({privacy_url})"
+          "share_usage": "Ticked by default; untick to send nothing. Every 6 hours, sends this device's manufacturer, model and firmware, whether COV and ReadPropertyMultiple work, the number of objects per type and how it is connected (direct or BBMD), plus the integration and Home Assistant version and a random installation ID. Never addresses, names or values. Used to grow the tested devices list. [Privacy policy]({privacy_url})"
         }
       },
       "reconfigure": {
@@ -155,7 +155,7 @@
           "polling_interval": "How often all objects are polled, in seconds (minimum 10). Polling always runs; COV only adds faster updates in between.",
           "use_description": "When checked, entities will be named using the BACnet 'description' property (ID 28) instead of 'objectName' (ID 77).",
           "live_metadata_properties": "Properties that get their own live COV-Property subscription instead of the periodic re-read. Each one is an extra subscription on the device, and not every device supports it.",
-          "share_usage": "Ticked by default; untick to send nothing. Once a day, sends this device's manufacturer, model and firmware, whether COV and ReadPropertyMultiple work, the number of objects per type and how it is connected (direct or BBMD), plus the integration and Home Assistant version and a random installation ID. Never addresses, names or values. Used to grow the tested devices list. [Privacy policy]({privacy_url})"
+          "share_usage": "Ticked by default; untick to send nothing. Every 6 hours, sends this device's manufacturer, model and firmware, whether COV and ReadPropertyMultiple work, the number of objects per type and how it is connected (direct or BBMD), plus the integration and Home Assistant version and a random installation ID. Never addresses, names or values. Used to grow the tested devices list. [Privacy policy]({privacy_url})"
         }
       },
       "rescan_objects": {
@@ -221,7 +221,7 @@
         "step": {
           "confirm": {
             "title": "Share usage statistics?",
-            "description": "This integration can send a small report once a day about your BACnet devices: manufacturer, model and firmware, whether COV and ReadPropertyMultiple work, and the number of objects per type. Never addresses, names or values. It helps decide which devices get tested and supported.\n\nTick to share for all your BACnet devices, untick to keep it off. You are only asked once and can change it per device in its options. [Privacy policy]({privacy_url})",
+            "description": "This integration can send a small report every 6 hours about your BACnet devices: manufacturer, model and firmware, whether COV and ReadPropertyMultiple work, and the number of objects per type. Never addresses, names or values. It helps decide which devices get tested and supported.\n\nTick to share for all your BACnet devices, untick to keep it off. You are only asked once and can change it per device in its options. [Privacy policy]({privacy_url})",
             "data": {
               "share_usage": "Share usage statistics"
             }
