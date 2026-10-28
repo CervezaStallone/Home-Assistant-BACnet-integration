@@ -14,6 +14,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Control Solutions | Babel Buster BB2-7010-01 | 2.39.1 |
 | Control Solutions | Babel Buster BB3-7101 | 3.15.18 |
 | DAMATEX | N/A | N/A |
+| Delta Controls | DSM_RTR | 189697 |
 | Delta Controls | eZNT-Wi-T304CHM | 510082 |
 | Delta Controls | O3-DIN-SRC | 8.0.0.O3-DIN.1.387 |
 | Distech Controls | ECY-TU203 Rev 1.0A | 1.19.23041.871<br>1.22.22026.1 |
@@ -32,6 +33,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | SAUTER | EY6AS80F021 | V4.0.0b7006 |
 | Schneider Electric | RP-C-16A-F-230V | 3.03.01.02101 |
 | Schneider Electric | SmartStruxure | 2.20.1.4 |
+| Siemens Building Technologies | DXR2.E18-1 | 01.22.273.16 |
 | Siemens Building Technologies | POS3.57 | FW04.60.01.13:BL00.01.07.0003;SVS-300.10:SBC15.01;ISC01.00; |
 | Siemens Building Technologies | PXA40-W2 | — |
 | Siemens Building Technologies | PXC200-E.D | V6.00.338 |
@@ -41,6 +43,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Signify | Interact BACnet gateway | — |
 | Trend Control Systems Ltd | IQ422 | IQ422-12 Iss4.38 Dec 12 2025 |
 | Tridium | Niagara JACE | — |
+| Tridium | Niagara4 Station | 4.12.0.156 |
 | Xiamen Milesight IoT Co., Ltd. | UG65-868M-EA | 60.0.0.49-r2 |
 <!-- tested-devices:end -->
 

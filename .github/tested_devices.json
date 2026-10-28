@@ -95,6 +95,20 @@
   },
   {
     "vendor": "Delta Controls",
+    "model": "DSM_RTR",
+    "firmware": "189697",
+    "version": "1.0.52",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "Delta Controls",
     "model": "eZNT-Wi-T304CHM",
     "firmware": "510082",
     "version": "1.0.51-beta.5",
@@ -404,6 +418,20 @@
   },
   {
     "vendor": "Siemens Building Technologies",
+    "model": "DXR2.E18-1",
+    "firmware": "01.22.273.16",
+    "version": "1.0.52",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "Siemens Building Technologies",
     "model": "POS3.57",
     "firmware": "FW=04.60.01.13:BL=00.01.07.0003;SVS-300.10:SBC=15.01;ISC=01.00;",
     "version": "1.0.51",
@@ -536,6 +564,20 @@
     ],
     "notes": "128 COV subscriptions stable across renewals and reloads.",
     "issue": 28
+  },
+  {
+    "vendor": "Tridium",
+    "model": "Niagara4 Station",
+    "firmware": "4.12.0.156",
+    "version": "1.0.51",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
   },
   {
     "vendor": "Xiamen Milesight IoT Co., Ltd.",
