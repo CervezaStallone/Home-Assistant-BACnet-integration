@@ -404,6 +404,20 @@
   },
   {
     "vendor": "Siemens Building Technologies",
+    "model": "DXR2.E18-1",
+    "firmware": "01.22.273.16",
+    "version": "1.0.52",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "Siemens Building Technologies",
     "model": "POS3.57",
     "firmware": "FW=04.60.01.13:BL=00.01.07.0003;SVS-300.10:SBC=15.01;ISC=01.00;",
     "version": "1.0.51",
