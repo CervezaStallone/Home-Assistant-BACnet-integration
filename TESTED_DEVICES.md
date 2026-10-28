@@ -45,7 +45,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Siemens Building Technologies | PXC7.E400L | 02.23.273.19<br>02.24.314.2 |
 | Sierra Monitor Corporation | FPC-N54 | V2.23m |
 | Signify | Interact BACnet gateway | — |
-| Trend Control Systems Ltd | IQ422 | IQ422-12 Iss4.38 Dec 12 2025 |
+| Trend Control Systems Ltd | IQ422 | IQ422-0 Iss4.37 Oct 24 2025<br>IQ422-12 Iss4.38 Dec 12 2025 |
 | Tridium | Niagara JACE | — |
 | Tridium | Niagara4 Station | 4.12.0.156 |
 | Xiamen Milesight IoT Co., Ltd. | UG65-868M-EA | 60.0.0.49-r2 |
