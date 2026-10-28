@@ -40,7 +40,7 @@ While at least one device has the option ticked, one report every 6 hours goes t
 
 - The **country** your report came from (a two-letter code). It is looked up in a local database on our own server; no third party is contacted.
 - The **date** the report arrived (no time of day), and the dates an installation and a device model were first and last seen.
-- A **marker** that your installation is currently active, used only to count how many installations are active right now. It is stored securely and separately from your installation ID, holds no time history, and is deleted automatically 7 hours after your latest report (25 hours for versions that report once a day).
+- A **marker** that your installation is currently active, used only to count how many installations are active right now. It is stored securely and separately from your installation ID, holds no time history, and is deleted automatically within 8 hours of your latest report (26 hours for versions that report once a day).
 
 ### Your IP address
 
@@ -108,7 +108,7 @@ Zolang bij minstens één apparaat de optie aan staat, gaat er elke 6 uur één 
 
 - Het **land** waar je rapport vandaan kwam (een code van twee letters). Dat wordt opgezocht in een lokale database op onze eigen server; er wordt geen derde partij benaderd.
 - De **datum** waarop het rapport binnenkwam (zonder tijdstip), en de datums waarop een installatie en een apparaatmodel voor het eerst en het laatst gezien zijn.
-- Een **marker** dat je installatie nu actief is, alleen gebruikt om te tellen hoeveel installaties op dit moment actief zijn. Die wordt veilig en los van je installatie-ID opgeslagen, bevat geen tijdgeschiedenis en wordt automatisch verwijderd 7 uur na je laatste rapport (25 uur voor versies die één keer per dag rapporteren).
+- Een **marker** dat je installatie nu actief is, alleen gebruikt om te tellen hoeveel installaties op dit moment actief zijn. Die wordt veilig en los van je installatie-ID opgeslagen, bevat geen tijdgeschiedenis en wordt automatisch verwijderd binnen 8 uur na je laatste rapport (26 uur voor versies die één keer per dag rapporteren).
 
 ### Je IP-adres
 
