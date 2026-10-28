@@ -8,7 +8,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Manufacturer | Model | Firmware |
 |---|---|---|
 | AB Regin | E283WEB | 3.4.0.8 |
-| ALERTON TECHNOLOGIES | VLC-16160 | RL Z.01e VLC<br>RL Z.01e VLC |
+| ALERTON TECHNOLOGIES | VLC-16160 | RL Z.01e VLC |
 | Bosch Building Automation GmbH | ems5.CP05E | ems5-BACnet 2.0 |
 | Calorex | Delta | 0 |
 | Condair Group AG | OMEGA PRO | v1.02.00 |
