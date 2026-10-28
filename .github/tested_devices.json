@@ -264,6 +264,19 @@
     "source": "telemetry"
   },
   {
+    "vendor": "JCI",
+    "model": "MS-NAE3511-1",
+    "firmware": "2.2.0.5100",
+    "version": "1.0.52",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
     "vendor": "Kieback&Peter",
     "model": "DDC4000",
     "firmware": "",
