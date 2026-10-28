@@ -40,6 +40,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Siemens Building Technologies | POS3.57 | FW04.60.01.13:BL00.01.07.0003;SVS-300.10:SBC15.01;ISC01.00; |
 | Siemens Building Technologies | PXA40-W2 | — |
 | Siemens Building Technologies | PXC200-E.D | V6.00.338 |
+| Siemens Building Technologies | PXC5.E24 | 02.23.273.19 |
 | Siemens Building Technologies | PXC64-U + PXA30-W2 / HWV2.00 | FWV6.00.314 / SBC11.01 / FLI06.00 / BBI13.06 / PMC01.30 |
 | Siemens Building Technologies | PXC7.E400L | 02.23.273.19<br>02.24.314.2 |
 | Sierra Monitor Corporation | FPC-N54 | V2.23m |
