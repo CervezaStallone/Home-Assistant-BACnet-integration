@@ -251,7 +251,7 @@ def test_start_registers_and_stop_cancels_timers():
         for p in patches:
             p.stop()
     assert later.call_args.args[1] == 600
-    assert interval.call_args.args[2] == timedelta(hours=24)
+    assert interval.call_args.args[2] == timedelta(hours=6)
     reporter._hass.bus.async_listen_once.assert_called_once()
     reporter.async_stop()
     first.assert_called_once()

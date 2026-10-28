@@ -1,6 +1,6 @@
-"""Daily usage report.
+"""Usage report, every 6 hours.
 
-Once a day, while at least one config entry has "share usage" ticked, one
+Every 6 hours, while at least one config entry has "share usage" ticked, one
 report per Home Assistant installation goes to the telemetry server.
 Installations that existed before the option was ticked by default are
 asked once, in Repairs (repairs.py). The
@@ -131,7 +131,7 @@ def build_report(
 
 
 class TelemetryReporter:
-    """Sends the daily report while at least one entry has opted in."""
+    """Sends the report while at least one entry has opted in."""
 
     def __init__(self, hass: HomeAssistant) -> None:
         self._hass = hass
@@ -209,7 +209,7 @@ class TelemetryReporter:
 
     @callback
     def async_start(self) -> None:
-        """Schedule the first and the daily report."""
+        """Schedule the first and the recurring report."""
         self._unsubs = [
             async_call_later(self._hass, TELEMETRY_FIRST_DELAY, self.async_send),
             async_track_time_interval(self._hass, self.async_send, TELEMETRY_INTERVAL),

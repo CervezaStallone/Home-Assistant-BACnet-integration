@@ -297,7 +297,7 @@ TELEMETRY_URL = "https://ha-bacnet.telemetry.brdc.nl/v1/report"
 PRIVACY_URL = "https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/blob/master/PRIVACY.md"
 TELEMETRY_TIMEOUT = 10  # seconds; fire-and-forget, no retries
 TELEMETRY_FIRST_DELAY = 600  # seconds after start; unpolled devices are left out
-TELEMETRY_INTERVAL = timedelta(hours=24)
+TELEMETRY_INTERVAL = timedelta(hours=6)
 
 # ---------------------------------------------------------------------------
 # Extra properties offered per object in the options flow
