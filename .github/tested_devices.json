@@ -26,6 +26,19 @@
     "source": "telemetry"
   },
   {
+    "vendor": "ALERTON TECHNOLOGIES",
+    "model": "VLC-16160",
+    "firmware": "RL Z.01e VLC",
+    "version": "1.0.52",
+    "connection": "Other subnet via BBMD",
+    "works": [
+      "Reading values"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
     "vendor": "Bosch Building Automation GmbH",
     "model": "ems5.CP05E",
     "firmware": "ems5-BACnet 2.0",
