@@ -151,6 +151,8 @@ What this integration writes to your devices, so you know before trying it on a 
 
 > Value objects may or may not support writes — the integration auto-detects this by checking for a Priority Array during discovery.
 >
+> Analog sensors keep long-term statistics: energy and volume objects as a meter (`total_increasing`, usable in the Energy dashboard), all others as a `measurement`. The **state class** setting in [Customize objects](#customize-objects) changes this per object. Before this was fixed, energy and volume sensors were a `measurement`; after updating, **Developer tools → Statistics** may list them with a changed state class. Click **Fix issue** there once per sensor. *(1.0.53 beta: enable* Show beta versions *in HACS.)*
+>
 > Any object type can be changed to another entity type per object (see [Customize objects](#customize-objects)). Multi-state objects can also become a **select** that shows their `stateText` labels (e.g. *Off / Heat / Cool*).
 
 ## Tested devices
@@ -239,6 +241,7 @@ The second options page has a searchable list of your objects. Pick the ones you
 - **temperature sensor** (climate objects only) — the object that provides the room temperature. Without one, the climate entity shows its setpoint as the current temperature. Just changed an object to climate? Save, then open the options again to pick its sensor.
 - **extra properties** — other BACnet properties of the object to show as their own entity, picked from a list that fits the object type. See [Extra properties as entities](#extra-properties-as-entities).
 - **other properties** — any other property, typed by name (`inactiveText`) or number, separated by commas. These become read-only sensors (unless the extra properties table lists them for that object type).
+- **state class** *(1.0.53 beta)* (analog objects shown as a sensor) — how Home Assistant keeps long-term statistics. `auto` gives `measurement`, or `total_increasing` for energy (Wh, kWh, MWh) and volume (L, m³) objects, so meters work in the Energy dashboard. Pick `measurement` for a value that isn't a counter, such as a tank level in m³ or a "last month" energy total; the sensor then becomes a stored energy or volume. `total` is for a meter that can also go down, `none` turns statistics off.
 
 Objects not picked use the defaults. Settings of objects you remove with a rescan are remembered and come back if you add the object again.
 

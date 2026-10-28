@@ -67,6 +67,20 @@ CONF_EXTRA_PROPERTIES = "extra_properties"
 # to the device-wide CONF_ENABLE_COV value.
 CONF_COV_OVERRIDES = "cov_overrides"
 
+# Per-object state class of analog sensors (obj_key -> "measurement",
+# "total", "total_increasing" or STATE_CLASS_NONE). Objects with no entry
+# get measurement, or total_increasing for meters (issue #137).
+CONF_STATE_CLASSES = "state_classes"
+STATE_CLASS_NONE = "none"  # no state class: no long-term statistics
+STATE_CLASS_AUTO = "auto"  # options-flow only: the default, never stored
+STATE_CLASS_CHOICES = [
+    STATE_CLASS_AUTO,
+    "measurement",
+    "total_increasing",
+    "total",
+    STATE_CLASS_NONE,
+]
+
 # ---------------------------------------------------------------------------
 # Defaults
 # ---------------------------------------------------------------------------

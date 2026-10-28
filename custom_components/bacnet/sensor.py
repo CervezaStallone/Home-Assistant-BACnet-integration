@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from homeassistant.components.sensor import (
+    DEVICE_CLASS_STATE_CLASSES,
     SensorDeviceClass,
     SensorEntity,
     SensorStateClass,
@@ -34,12 +35,20 @@ from .const import (
     OBJECT_TYPE_ANALOG_VALUE,
     OBJECT_TYPE_SCHEDULE,
     OBJECT_TYPE_TREND_LOG,
+    STATE_CLASS_NONE,
 )
 from .coordinator import BACnetCoordinator
 from .entity import BACnetEntity, bacnet_device_info
 from .property_entity import property_entities
 
 _LOGGER = logging.getLogger(__name__)
+
+# Meter device classes and their variant for a stored amount, the one HA
+# allows state class measurement for.
+_STORED_AMOUNT = {
+    SensorDeviceClass.ENERGY: SensorDeviceClass.ENERGY_STORAGE,
+    SensorDeviceClass.VOLUME: SensorDeviceClass.VOLUME_STORAGE,
+}
 
 # Alarms listed in the Active alarms attribute (recorder limit: 16 KB).
 MAX_ALARMS_ATTRIBUTE = 50
@@ -111,13 +120,30 @@ class BACnetSensor(BACnetEntity, SensorEntity):
             SensorDeviceClass(device_class) if device_class else None
         )
 
-        # Analog types get measurement state class for statistics support
+        # Analog types get a state class for statistics support: measurement,
+        # or total_increasing for meters (energy, volume), where HA doesn't
+        # allow measurement (issue #137). The options can override it.
         if obj["object_type"] in {
             OBJECT_TYPE_ANALOG_INPUT,
             OBJECT_TYPE_ANALOG_OUTPUT,
             OBJECT_TYPE_ANALOG_VALUE,
         }:
-            self._attr_state_class = SensorStateClass.MEASUREMENT
+            allowed = DEVICE_CLASS_STATE_CLASSES.get(self._attr_device_class)
+            state_class = coordinator.state_classes.get(self._obj_key)
+            if state_class is None:
+                state_class = (
+                    SensorStateClass.MEASUREMENT
+                    if allowed is None or SensorStateClass.MEASUREMENT in allowed
+                    else SensorStateClass.TOTAL_INCREASING
+                )
+            elif state_class == STATE_CLASS_NONE:
+                state_class = None
+            elif allowed is not None and state_class not in allowed:
+                # A meter set to measurement is a stored amount (tank level,
+                # last month's total). Other combinations HA rejects lose
+                # the device class; the unit stays.
+                self._attr_device_class = _STORED_AMOUNT.get(self._attr_device_class)
+            self._attr_state_class = state_class
             # Display hint only — the state keeps full precision (user can
             # change it per entity in the UI).
             self._attr_suggested_display_precision = 2
