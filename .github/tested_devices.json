@@ -566,6 +566,20 @@
     "issue": 28
   },
   {
+    "vendor": "Tridium",
+    "model": "Niagara4 Station",
+    "firmware": "4.12.0.156",
+    "version": "1.0.51",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
     "vendor": "Xiamen Milesight IoT Co., Ltd.",
     "model": "UG65-868M-EA",
     "firmware": "60.0.0.49-r2",
