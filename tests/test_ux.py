@@ -108,7 +108,7 @@ class TestPollingIntervalFloor:
         flow = BACnetOptionsFlow(entry)
         flow.async_show_form = lambda **kw: kw
         result = asyncio.run(
-            flow.async_step_init({"polling_interval": MIN_POLLING_INTERVAL - 1})
+            flow.async_step_settings({"polling_interval": MIN_POLLING_INTERVAL - 1})
         )
         assert result["errors"] == {"base": "invalid_polling_interval"}
 

@@ -218,7 +218,15 @@ The integration discovers BACnet devices on the network and shows them in a drop
 
 ## Configuration options
 
-After setup, click **Configure** on the integration card to adjust:
+After setup, click **Configure** on the integration card. *(1.0.53 beta)* A menu opens with three entries:
+
+- **Settings** — the options in the table below
+- **Rescan device** — add or remove objects; see [Rescan device](#rescan-device)
+- **Customize objects** — settings per object; see [Customize objects](#customize-objects)
+
+> **Beta:** the menu is new in 1.0.53-beta.2. Earlier versions show the settings first, with a **Rescan device** checkbox; Customize objects follows after you submit them.
+
+Changes take effect immediately — the integration reloads automatically.
 
 | Option | What it does | Default |
 |---|---|---|
@@ -228,13 +236,14 @@ After setup, click **Configure** on the integration card to adjust:
 | **Use description** | Show BACnet `description` (property 28) instead of `objectName` as entity name | Off |
 | **Live metadata properties** | Opt-in per property (`object_name`, `description`, `units`) for a *live* push update via BACnet's SubscribeCOVProperty service, instead of periodic re-reads. Each one is a separate COV subscription on the device — leave off unless you need instant updates and know your device supports it. | None |
 | **Share usage statistics** | Once a day, send this device's manufacturer, model, firmware and a few counts. See [Privacy and usage statistics](#privacy-and-usage-statistics) for every field. Also on the last setup page, ticked there by default. | On for new devices |
-| **Rescan device** | Re-read the device's object list to add or remove objects. The next page has three fields, all empty: **Objects to add** (objects not imported yet, marked **NEW**), **Add all objects of these types** (with how many), and **Objects to remove**. Both object fields are searchable by abbreviation (`AI`, `BO 3`), instance or name. Submitting without changes keeps the selection; objects the device no longer has are dropped. | — |
 
-After this page comes [Customize objects](#customize-objects). Changes take effect immediately — the integration reloads automatically.
+### Rescan device
+
+Re-reads the device's object list to add or remove objects. The page has three fields, all empty: **Objects to add** (objects not imported yet, marked **NEW**), **Add all objects of these types** (with how many), and **Objects to remove**. Both object fields are searchable by abbreviation (`AI`, `BO 3`), instance or name. Submitting without changes keeps the selection; objects the device no longer has are dropped. Next comes [Customize objects](#customize-objects), so new objects can be set up right away.
 
 ### Customize objects
 
-The second options page has a searchable list of your objects. Pick the ones you want to change; objects that already have a custom setting are already picked. The next page shows, for just those objects:
+This page has a searchable list of your objects. Pick the ones you want to change; objects that already have a custom setting are already picked. The next page shows, for just those objects:
 
 - **type** — the Home Assistant entity type (`sensor`, `binary_sensor`, `switch`, `number`, `climate`, or `select` for multi-state objects)
 - **COV** — use COV for this object, overriding the device-wide **Enable COV** setting
