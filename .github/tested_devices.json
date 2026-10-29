@@ -210,6 +210,19 @@
     "issue": 83
   },
   {
+    "vendor": "Exhausto A/S",
+    "model": "ABC 1.0",
+    "firmware": "FW1.0",
+    "version": "1.0.52",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
     "vendor": "Global Control 5",
     "model": "iSMA-B-MIX18-IP",
     "firmware": "6.5.3",
