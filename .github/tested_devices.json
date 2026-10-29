@@ -386,6 +386,19 @@
     "issue": 52
   },
   {
+    "vendor": "OJ Electronics A/S",
+    "model": "OJ-Air2",
+    "firmware": "1.2",
+    "version": "1.0.52",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
     "vendor": "Philips Dynalite",
     "model": "PDDEG-S",
     "firmware": "1.46.23156",
