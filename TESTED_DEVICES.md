@@ -7,6 +7,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 <!-- tested-devices:start -->
 | Manufacturer | Model | Firmware |
 |---|---|---|
+| 75F | CCU50 | Android 7.0 - CCU50_20220517 |
 | AB Regin | E283WEB | 3.4.0.8 |
 | ALERTON TECHNOLOGIES | VLC-16160 | RL Z.01e VLC |
 | Bosch Building Automation GmbH | ems5.CP05E | ems5-BACnet 2.0 |
