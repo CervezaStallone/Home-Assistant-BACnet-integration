@@ -22,6 +22,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Delta Controls | O3-DIN-SRC | 8.0.0.O3-DIN.1.387 |
 | Distech Controls | ECY-TU203 Rev 1.0A | 1.19.23041.871<br>1.22.22026.1 |
 | Distech Controls | ECY-VAV Gen 1 NON BI | 1.19.26161 |
+| Distech-Controls, Inc. | ECY-S1000-BI | 1.22.23149.1 |
 | Exhausto A/S | ABC 1.0 | FW1.0 |
 | Global Control 5 | iSMA-B-MIX18-IP | 6.5.3 |
 | HMS Industrial Networks SLU | PA-AC-BAC | 14.1.2.0 |
@@ -50,6 +51,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Siemens Building Technologies | PXC7.E400L | 02.23.273.19<br>02.24.314.2 |
 | Sierra Monitor Corporation | FPC-N54 | V2.23m |
 | Signify | Interact BACnet gateway | — |
+| The Watt Stopper, Inc. | LMCP48 | 07.62 |
 | Trend Control Systems Ltd | IQ422 | IQ422-0 Iss4.37 Oct 24 2025<br>IQ422-12 Iss4.38 Dec 12 2025 |
 | Tridium | Niagara JACE | — |
 | Tridium | Niagara4 Station | 4.12.0.156 |
