@@ -894,6 +894,34 @@ class TestDiscoveryUnansweredRead:
         ]
 
 
+class TestDiscoverySkipsOwnNode:
+    """The Who-Is broadcast reaches Home Assistant's own BACnet node too, so
+    discovery listed "HomeAssistant-BACnet" first and pre-selected it."""
+
+    def test_own_i_am_is_not_listed(self):
+        from bacpypes3.apdu import IAmRequest
+        from bacpypes3.pdu import Address
+
+        client = BACnetClient(local_ip="127.0.0.1", local_port=47833)
+        own = IAmRequest(iAmDeviceIdentifier=("device", client._device_instance))
+        own.pduSource = Address("127.0.0.1")
+        other = IAmRequest(iAmDeviceIdentifier=("device", 37171))
+        other.pduSource = Address("10.0.5.20")
+
+        class _App:
+            async def who_is(self, **kwargs):
+                return [own, other]
+
+            async def read_property(self, addr, oid, prop_name, array_index=None):
+                return None
+
+        client._app = _App()
+
+        devices = asyncio.run(client.discover_devices(timeout=1))
+
+        assert [d["device_id"] for d in devices] == [37171]
+
+
 class TestDisconnectStopsForeignRegistration:
     """ForeignApplication.close() leaves the BBMD re-registration timer
     running, which then sends on the closed socket every 5 s forever."""

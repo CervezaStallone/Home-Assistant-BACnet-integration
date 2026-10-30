@@ -25,6 +25,7 @@ from custom_components.bacnet.const import (
     CONF_KEPT_DOMAIN_OVERRIDES,
     CONF_SELECTED_OBJECTS,
     CONF_STATE_CLASSES,
+    STATE_CLASS_CHOICES,
 )
 from custom_components.bacnet.helpers import object_label
 from custom_components.bacnet.options_flow import BACnetOptionsFlow
@@ -56,6 +57,7 @@ def _flow(objects, options=None, enable_cov=True):
         "type": "form",
         "step_id": step_id,
         "fields": {k.key: k.default for k in data_schema},
+        "validators": {k.key: v for k, v in data_schema.items()},
     }
     return flow
 
@@ -243,6 +245,17 @@ class TestStateClass:
         assert form["fields"][_field(_AI, "state class")] == "auto"
         assert _field(_AV_SP, "state class") not in form["fields"]  # number
         assert _field(_BV_NON_COMMANDABLE, "state class") not in form["fields"]
+
+    def test_choices_are_translated_labels(self, monkeypatch):
+        flow = _flow([_AI])
+        form = _run(
+            flow.async_step_domain_mapping({CONF_CUSTOMIZE_OBJECTS: ["0:3"]}),
+            monkeypatch,
+        )
+        kind, config = form["validators"][_field(_AI, "state class")]
+        assert kind == "select"
+        assert config["translation_key"] == "state_class"
+        assert config["options"] == STATE_CLASS_CHOICES
 
     def test_choice_is_stored_and_auto_clears_it(self, monkeypatch):
         flow = _flow([_AI])

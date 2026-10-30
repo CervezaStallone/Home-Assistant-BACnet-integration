@@ -46,7 +46,7 @@
         "data_description": {
           "device_name": "Naam van dit apparaat in Home Assistant. Vooraf ingevuld met de BACnet-objectName.",
           "select_types": "Elk object van een aangevinkt type wordt geïmporteerd, samen met de objecten die je hieronder kiest.",
-          "selected_objects": "Typ om te zoeken op objecttype (bijvoorbeeld AI of BO), instance of naam, en kies de objecten die je in Home Assistant wilt. Er is nog niets geselecteerd.",
+          "selected_objects": "Typ om te zoeken op objecttype (bijvoorbeeld AI of BO), instance of naam, en kies de objecten die je in Home Assistant wilt.",
           "share_usage": "Standaard aangevinkt; vink uit om niets te versturen. Stuurt elke 6 uur fabrikant, model en firmware van dit apparaat, of COV en ReadPropertyMultiple werken, het aantal objecten per type en hoe het verbonden is (direct of via BBMD), plus de versie van de integratie en van Home Assistant en een willekeurige installatie-ID. Nooit adressen, namen of waarden. Gebruikt om de lijst met geteste apparaten aan te vullen. [Privacyverklaring]({privacy_url}#nederlands)"
         }
       },
@@ -134,8 +134,8 @@
         "description": "Wat wil je voor dit apparaat wijzigen?",
         "menu_options": {
           "settings": "Instellingen: COV, pollen, naamgeving, gebruiksstatistieken",
-          "rescan_objects": "Apparaat opnieuw scannen: BACnet-objecten toevoegen of verwijderen",
-          "domain_mapping": "Objecten aanpassen: entiteittype, COV, state class en extra properties per object"
+          "rescan_objects": "Opnieuw scannen: objecten toevoegen of verwijderen",
+          "domain_mapping": "Objecten aanpassen: type, COV, state class, properties"
         }
       },
       "settings": {
@@ -379,6 +379,17 @@
           "name": "Aantal",
           "description": "Maximaal aantal records (1-1000)."
         }
+      }
+    }
+  },
+  "selector": {
+    "state_class": {
+      "options": {
+        "auto": "Automatisch (aanbevolen)",
+        "measurement": "Meting: een actuele waarde, zoals een temperatuur of tankinhoud",
+        "total_increasing": "Oplopend totaal: een meter die alleen stijgt",
+        "total": "Totaal: een totaal dat ook kan dalen",
+        "none": "Geen: geen langetermijnstatistieken"
       }
     }
   }

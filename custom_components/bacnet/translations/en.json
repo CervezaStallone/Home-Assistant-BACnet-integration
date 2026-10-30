@@ -46,7 +46,7 @@
         "data_description": {
           "device_name": "Name for this device in Home Assistant. Pre-filled with the BACnet objectName.",
           "select_types": "Every object of a ticked type is imported, together with the objects you pick below.",
-          "selected_objects": "Type to search by object type (for example AI or BO), instance or name, and pick the objects you want in Home Assistant. Nothing is selected yet.",
+          "selected_objects": "Type to search by object type (for example AI or BO), instance or name, and pick the objects you want in Home Assistant.",
           "share_usage": "Ticked by default; untick to send nothing. Every 6 hours, sends this device's manufacturer, model and firmware, whether COV and ReadPropertyMultiple work, the number of objects per type and how it is connected (direct or BBMD), plus the integration and Home Assistant version and a random installation ID. Never addresses, names or values. Used to grow the tested devices list. [Privacy policy]({privacy_url})"
         }
       },
@@ -135,7 +135,7 @@
         "menu_options": {
           "settings": "Settings: COV, polling, naming, usage statistics",
           "rescan_objects": "Rescan device: add or remove BACnet objects",
-          "domain_mapping": "Customize objects: entity type, COV, state class and extra properties per object"
+          "domain_mapping": "Customize objects: type, COV, state class, properties"
         }
       },
       "settings": {
@@ -379,6 +379,17 @@
           "name": "Count",
           "description": "Maximum number of records (1-1000)."
         }
+      }
+    }
+  },
+  "selector": {
+    "state_class": {
+      "options": {
+        "auto": "Automatic (recommended)",
+        "measurement": "Measurement: a current value, such as a temperature or tank level",
+        "total_increasing": "Total increasing: a meter that only goes up",
+        "total": "Total: a total that can also go down",
+        "none": "None: no long-term statistics"
       }
     }
   }
