@@ -725,7 +725,7 @@ The defaults suit most controllers. For unusual devices they can be changed in `
 
 The integration can send usage statistics. **Share usage statistics** is ticked by default on the last setup page; untick it there, or later in a device's options, to send nothing. Installations from before 1.0.51 are asked once, in **Settings → Repairs**: tick to share for all devices, untick to keep it off. That question never comes back.
 
-While at least one device has it ticked, Home Assistant sends one report every 6 hours (the first about 10 minutes after start) to a server run by the maintainer, on servers in the EU. The full [privacy policy](PRIVACY.md) (English and Nederlands) explains what is collected, why, how long it is kept and how to have it deleted; it is also linked under the checkbox. Only ticked devices are included, and only once they have answered a poll.
+While at least one device has it ticked, Home Assistant sends one report every 6 hours (the first about 10 minutes after start) to a server I run, on servers in the EU. The full [privacy policy](PRIVACY.md) (English and Nederlands) explains what is collected, why, how long it is kept and how to have it deleted; it is also linked under the checkbox. Only ticked devices are included, and only once they have answered a poll.
 
 What a report contains — everything, nothing else:
 
@@ -745,7 +745,7 @@ What a report contains — everything, nothing else:
 
 **Never sent:** IP or BACnet addresses, device instance numbers, object or device names, descriptions, values, or anything about your Home Assistant setup. The server does not store your IP address with the data; it adds only the country the report came from and the date it arrived.
 
-The reports are kept for statistics (how many installations, which devices and object types are in use). The only thing that ever becomes public is a device's manufacturer, model and firmware, in the [tested devices](#tested-devices) list, after the maintainer has checked it.
+The reports are kept for statistics (how many installations, which devices and object types are in use). The only thing that ever becomes public is a device's manufacturer, model and firmware, in the [tested devices](#tested-devices) list, after I have checked it.
 
 To stop: untick the option in each device's options. A failed report is never retried and never shows up in your log (only at debug level).
 
