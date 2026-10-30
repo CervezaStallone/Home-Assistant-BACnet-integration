@@ -2,7 +2,7 @@
 
 **[English](#english)** · **[Nederlands](#nederlands)**
 
-Last updated: 28 October 2026. Applies to the opt-in usage statistics, available from version 1.0.51.
+Last updated: 30 October 2026. Applies to the opt-in usage statistics, available from version 1.0.51.
 
 ---
 
@@ -14,7 +14,7 @@ The integration only sends data while **Share usage statistics** is ticked. It i
 
 ### Who is responsible
 
-BRDC ([brdc.nl](https://brdc.nl)), the maintainer of this integration, is the controller. Questions and requests: [support-ha-bacnet@brianrodriguez.nl](mailto:support-ha-bacnet@brianrodriguez.nl).
+I develop this integration as BRDC ([brdc.nl](https://brdc.nl)), which is the controller. Questions and requests: [support-ha-bacnet@brianrodriguez.nl](mailto:support-ha-bacnet@brianrodriguez.nl).
 
 ### What is sent
 
@@ -38,7 +38,7 @@ While at least one device has the option ticked, one report every 6 hours goes t
 
 ### What the server adds
 
-- The **country** your report came from (a two-letter code). It is looked up in a local database on our own server; no third party is contacted.
+- The **country** your report came from (a two-letter code). It is looked up in a local database on my own server; no third party is contacted.
 - The **date** the report arrived (no time of day), and the dates an installation and a device model were first and last seen.
 - A **marker** that your installation is currently active, used only to count how many installations are active right now. It is stored securely and separately from your installation ID, holds no time history, and is deleted automatically within 8 hours of your latest report (26 hours for versions that report once a day).
 
@@ -48,11 +48,11 @@ Your IP address is used only while your report is received: to look up your coun
 
 ### Why, and on what basis
 
-To learn which BACnet devices and object types are in use, so testing and support go where they matter. The only thing that ever becomes public is a device's manufacturer, model and firmware in the [tested devices](README.md#tested-devices) list, after the maintainer has checked it. The legal basis is our legitimate interest in knowing which devices to support (GDPR art. 6(1)(f)): the data is minimal, contains no names, addresses or values, and you can object at any time by unticking the option.
+To learn which BACnet devices and object types are in use, so testing and support go where they matter. The only thing that ever becomes public is a device's manufacturer, model and firmware in the [tested devices](README.md#tested-devices) list, after I have checked it. The legal basis is my legitimate interest in knowing which devices to support (GDPR art. 6(1)(f)): the data is minimal, contains no names, addresses or values, and you can object at any time by unticking the option.
 
 ### Pseudonymous, not anonymous
 
-We cannot see who you are. But the installation ID stays the same, so a report could in theory be linked to a site, for example through a rare combination of device and country. That is why we treat the reports as personal data.
+I cannot see who you are. But the installation ID stays the same, so a report could in theory be linked to a site, for example through a rare combination of device and country. That is why I treat the reports as personal data.
 
 ### How long
 
@@ -60,12 +60,12 @@ Reports are kept indefinitely, to follow device support over time.
 
 ### Where
 
-On servers in the EU, run by a hosting provider that processes the data on our behalf. No other parties receive it.
+On servers in the EU, run by a hosting provider that processes the data on my behalf. No other parties receive it.
 
 ### Stopping, access and deletion
 
 - **Stop:** untick the option in each device's options (**Settings → Devices & services → BACnet IP → Configure**). No further reports are sent.
-- **Access or deletion:** we do not know which installation ID is yours, so we cannot find your data on our own. Send us your installation ID and we will send you the stored reports or delete all of them. Deletion removes everything stored under that ID, which is what the maintainer's statistics are built from. A manufacturer, model and firmware that is already in the public [tested devices](README.md#tested-devices) list stays there, as does the server's list of known models (when a model was first and last seen): neither contains your installation ID. You find the ID in your Home Assistant configuration folder, in the file `.storage/bacnet.telemetry`, under `install_id`. Do not post it in a public GitHub issue. The active marker is not part of a deletion; it expires on its own.
+- **Access or deletion:** I do not know which installation ID is yours, so I cannot find your data on my own. Send me your installation ID and I will send you the stored reports or delete all of them. Deletion removes everything stored under that ID, which is what my statistics are built from. A manufacturer, model and firmware that is already in the public [tested devices](README.md#tested-devices) list stays there, as does the server's list of known models (when a model was first and last seen): neither contains your installation ID. You find the ID in your Home Assistant configuration folder, in the file `.storage/bacnet.telemetry`, under `install_id`. Do not post it in a public GitHub issue. The active marker is not part of a deletion; it expires on its own.
 - **Complaints:** you can contact the data protection authority in your country. In the Netherlands that is the Autoriteit Persoonsgegevens.
 
 ### Changes
@@ -82,7 +82,7 @@ De integratie stuurt alleen gegevens zolang **Gebruiksstatistieken delen** is aa
 
 ### Wie is verantwoordelijk
 
-BRDC ([brdc.nl](https://brdc.nl)), de maker van deze integratie, is verwerkingsverantwoordelijke. Vragen en verzoeken: [support-ha-bacnet@brianrodriguez.nl](mailto:support-ha-bacnet@brianrodriguez.nl).
+Ik ontwikkel deze integratie als BRDC ([brdc.nl](https://brdc.nl)), en BRDC is verwerkingsverantwoordelijke. Vragen en verzoeken: [support-ha-bacnet@brianrodriguez.nl](mailto:support-ha-bacnet@brianrodriguez.nl).
 
 ### Wat er verstuurd wordt
 
@@ -106,21 +106,21 @@ Zolang bij minstens één apparaat de optie aan staat, gaat er elke 6 uur één 
 
 ### Wat de server toevoegt
 
-- Het **land** waar je rapport vandaan kwam (een code van twee letters). Dat wordt opgezocht in een lokale database op onze eigen server; er wordt geen derde partij benaderd.
+- Het **land** waar je rapport vandaan kwam (een code van twee letters). Dat wordt opgezocht in een lokale database op mijn eigen server; er wordt geen derde partij benaderd.
 - De **datum** waarop het rapport binnenkwam (zonder tijdstip), en de datums waarop een installatie en een apparaatmodel voor het eerst en het laatst gezien zijn.
 - Een **marker** dat je installatie nu actief is, alleen gebruikt om te tellen hoeveel installaties op dit moment actief zijn. Die wordt veilig en los van je installatie-ID opgeslagen, bevat geen tijdgeschiedenis en wordt automatisch verwijderd binnen 8 uur na je laatste rapport (26 uur voor versies die één keer per dag rapporteren).
 
 ### Je IP-adres
 
-Je IP-adres wordt alleen gebruikt tijdens het ontvangen van je rapport: om je land op te zoeken (in een lokale database, geen derde partij) en voor rate limiting. Het wordt nooit opgeslagen. Voor rate limiting gebruiken we een beveiligde hash van je IP-adres, niet het adres zelf, die binnen een uur automatisch wordt verwijderd. De webserver voor dit adres houdt geen toegangslogs bij.
+Je IP-adres wordt alleen gebruikt tijdens het ontvangen van je rapport: om je land op te zoeken (in een lokale database, geen derde partij) en voor rate limiting. Het wordt nooit opgeslagen. Voor rate limiting gebruik ik een beveiligde hash van je IP-adres, niet het adres zelf, die binnen een uur automatisch wordt verwijderd. De webserver voor dit adres houdt geen toegangslogs bij.
 
 ### Waarom, en op welke grond
 
-Om te weten welke BACnet-apparaten en objecttypes in gebruik zijn, zodat testen en ondersteuning gaan naar waar het telt. Het enige dat ooit openbaar wordt, is de fabrikant, het model en de firmware van een apparaat in de lijst met [geteste apparaten](README.md#tested-devices), nadat de maker die heeft gecontroleerd. De grondslag is ons gerechtvaardigd belang om te weten welke apparaten we moeten ondersteunen (AVG art. 6 lid 1 onder f): de gegevens zijn minimaal, bevatten geen namen, adressen of waarden, en je kunt op elk moment bezwaar maken door de optie uit te vinken.
+Om te weten welke BACnet-apparaten en objecttypes in gebruik zijn, zodat testen en ondersteuning gaan naar waar het telt. Het enige dat ooit openbaar wordt, is de fabrikant, het model en de firmware van een apparaat in de lijst met [geteste apparaten](README.md#tested-devices), nadat ik die heb gecontroleerd. De grondslag is mijn gerechtvaardigd belang om te weten welke apparaten ik moet ondersteunen (AVG art. 6 lid 1 onder f): de gegevens zijn minimaal, bevatten geen namen, adressen of waarden, en je kunt op elk moment bezwaar maken door de optie uit te vinken.
 
 ### Pseudoniem, niet anoniem
 
-We kunnen niet zien wie je bent. Maar de installatie-ID blijft hetzelfde, dus een rapport zou in theorie aan een locatie gekoppeld kunnen worden, bijvoorbeeld via een zeldzame combinatie van apparaat en land. Daarom behandelen we de rapporten als persoonsgegevens.
+Ik kan niet zien wie je bent. Maar de installatie-ID blijft hetzelfde, dus een rapport zou in theorie aan een locatie gekoppeld kunnen worden, bijvoorbeeld via een zeldzame combinatie van apparaat en land. Daarom behandel ik de rapporten als persoonsgegevens.
 
 ### Hoe lang
 
@@ -128,12 +128,12 @@ Rapporten worden onbeperkt bewaard, om de ondersteuning van apparaten door de ti
 
 ### Waar
 
-Op servers in de EU, beheerd door een hostingpartij die de gegevens in onze opdracht verwerkt. Geen andere partijen ontvangen ze.
+Op servers in de EU, beheerd door een hostingpartij die de gegevens in mijn opdracht verwerkt. Geen andere partijen ontvangen ze.
 
 ### Stoppen, inzage en verwijderen
 
 - **Stoppen:** vink de optie uit in de opties van elk apparaat (**Instellingen → Apparaten en diensten → BACnet IP → Configureren**). Er worden dan geen rapporten meer verstuurd.
-- **Inzage of verwijderen:** we weten niet welke installatie-ID van jou is, dus we kunnen je gegevens niet zelf vinden. Stuur ons je installatie-ID en we sturen je de opgeslagen rapporten of verwijderen ze allemaal. Verwijderen wist alles wat onder die ID is opgeslagen, en daarop zijn de statistieken van de maker gebaseerd. Een fabrikant, model en firmware die al in de openbare lijst met [geteste apparaten](README.md#tested-devices) staan, blijven daar staan, net als de lijst met bekende modellen op de server (wanneer een model voor het eerst en het laatst gezien is): geen van beide bevat je installatie-ID. Je vindt de ID in je Home Assistant-configuratiemap, in het bestand `.storage/bacnet.telemetry`, onder `install_id`. Zet hem niet in een openbaar GitHub-issue. De actief-marker valt niet onder verwijderen; die verloopt vanzelf.
+- **Inzage of verwijderen:** ik weet niet welke installatie-ID van jou is, dus ik kan je gegevens niet zelf vinden. Stuur me je installatie-ID en ik stuur je de opgeslagen rapporten of verwijder ze allemaal. Verwijderen wist alles wat onder die ID is opgeslagen, en daarop zijn mijn statistieken gebaseerd. Een fabrikant, model en firmware die al in de openbare lijst met [geteste apparaten](README.md#tested-devices) staan, blijven daar staan, net als de lijst met bekende modellen op de server (wanneer een model voor het eerst en het laatst gezien is): geen van beide bevat je installatie-ID. Je vindt de ID in je Home Assistant-configuratiemap, in het bestand `.storage/bacnet.telemetry`, onder `install_id`. Zet hem niet in een openbaar GitHub-issue. De actief-marker valt niet onder verwijderen; die verloopt vanzelf.
 - **Klachten:** je kunt terecht bij de privacytoezichthouder in je land. In Nederland is dat de Autoriteit Persoonsgegevens.
 
 ### Wijzigingen

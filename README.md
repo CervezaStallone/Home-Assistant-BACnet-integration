@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <strong>HACS Compatible</strong> · GUI-only setup · Real-time COV updates · ASHRAE 135 compliant
+  <strong>HACS Compatible</strong> · GUI-only setup · Real-time COV updates · BACnet/IP (ASHRAE 135)
 </p>
 
 <p align="center">
@@ -89,6 +89,8 @@ What this integration writes to your devices, so you know before trying it on a 
 - **Turning off is a command** — switching off writes `inactive` at the same priority; it does not release the output. Use `bacnet.relinquish` to hand control back.
 - **Schedules have no priority** — `bacnet.write_schedule` changes the Schedule object's configuration itself. It refuses to remove existing exceptions unless you set `allow_removal`, and reads the result back. See [Schedules](#schedules).
 - **No read-only mode yet** — to keep an object read-only, import it as a `sensor` or `binary_sensor` (see [Customize objects](#customize-objects)), or leave it out. Services can still write to any object on the device.
+
+The integration is provided as is, without warranty (GPL-3.0, sections 15–16). Do not use it to control life-safety systems such as fire alarm or smoke control. You are responsible for what you write to a running building; test on a single object first.
 
 ---
 
@@ -364,7 +366,7 @@ The priority level is controlled by the **Write Priority** select entity on the 
 
 If the device rejects a write, Home Assistant shows an error message instead of silently keeping the old state.
 
-Binary outputs use the `Enumerated` BACnet type (`0 = inactive`, `1 = active`), compliant with ASHRAE 135.
+Binary outputs use the `Enumerated` BACnet type (`0 = inactive`, `1 = active`), as defined in ASHRAE 135.
 
 ### Services
 
@@ -725,7 +727,7 @@ The defaults suit most controllers. For unusual devices they can be changed in `
 
 The integration can send usage statistics. **Share usage statistics** is ticked by default on the last setup page; untick it there, or later in a device's options, to send nothing. Installations from before 1.0.51 are asked once, in **Settings → Repairs**: tick to share for all devices, untick to keep it off. That question never comes back.
 
-While at least one device has it ticked, Home Assistant sends one report every 6 hours (the first about 10 minutes after start) to a server run by the maintainer, on servers in the EU. The full [privacy policy](PRIVACY.md) (English and Nederlands) explains what is collected, why, how long it is kept and how to have it deleted; it is also linked under the checkbox. Only ticked devices are included, and only once they have answered a poll.
+While at least one device has it ticked, Home Assistant sends one report every 6 hours (the first about 10 minutes after start) to a server I run, on servers in the EU. The full [privacy policy](PRIVACY.md) (English and Nederlands) explains what is collected, why, how long it is kept and how to have it deleted; it is also linked under the checkbox. Only ticked devices are included, and only once they have answered a poll.
 
 What a report contains — everything, nothing else:
 
@@ -745,7 +747,7 @@ What a report contains — everything, nothing else:
 
 **Never sent:** IP or BACnet addresses, device instance numbers, object or device names, descriptions, values, or anything about your Home Assistant setup. The server does not store your IP address with the data; it adds only the country the report came from and the date it arrived.
 
-The reports are kept for statistics (how many installations, which devices and object types are in use). The only thing that ever becomes public is a device's manufacturer, model and firmware, in the [tested devices](#tested-devices) list, after the maintainer has checked it.
+The reports are kept for statistics (how many installations, which devices and object types are in use). The only thing that ever becomes public is a device's manufacturer, model and firmware, in the [tested devices](#tested-devices) list, after I have checked it.
 
 To stop: untick the option in each device's options. A failed report is never retried and never shows up in your log (only at debug level).
 
@@ -768,7 +770,9 @@ To stop: untick the option in each device's options. A failed report is never re
 
 ## License
 
-GPL-3.0 — see [LICENSE](LICENSE) for details.
+GPL-3.0 — see [LICENSE](LICENSE) for details. BACpypes3, installed by Home Assistant from PyPI, is MIT-licensed.
+
+BACnet® is a registered trademark of ASHRAE. This is an independent open-source integration. It is not affiliated with, endorsed by or certified by ASHRAE, BACnet International or the BACnet Testing Laboratories (BTL). It is not an official Home Assistant integration. It implements a selection of BACnet/IP services with BACpypes3 and is tested on real controllers (see [tested devices](#tested-devices)), not through formal BTL conformance testing.
 
 ---
 
