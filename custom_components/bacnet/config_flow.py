@@ -162,6 +162,7 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._borrowed_client: bool = (
             False  # True when reusing an existing entry's client
         )
+        self._removed = False  # set by async_remove()
 
     async def async_step_unignore(
         self, user_input: dict[str, Any] | None = None
@@ -187,6 +188,7 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         schedule the async cleanup as a background task.
         """
         _LOGGER.debug("Config flow removed — scheduling BACnet client cleanup")
+        self._removed = True
         self.hass.async_create_task(self._cleanup_client())
 
     async def _cleanup_client(self) -> None:
@@ -403,7 +405,10 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             finally:
                 self._client = client  # keep for object reads (may be None)
                 self._borrowed_client = borrowed
-                # Client stays open until flow ends or we close it
+                # Client stays open until flow ends or we close it. Closed
+                # during discovery, async_remove() found no client to clean up.
+                if self._removed:
+                    await self._cleanup_client()
 
         if not errors and not self._discovered_devices:
             errors["base"] = "no_devices_found"

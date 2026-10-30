@@ -193,3 +193,55 @@ def test_ticked_types_are_imported_with_the_picked_objects(monkeypatch):
         (o["object_type"], o["instance"]) for o in result["data"]["selected_objects"]
     ]
     assert picked == [(0, 1), (0, 2), (4, 2)]
+
+
+def test_flow_closed_during_discovery_releases_the_port(monkeypatch):
+    # Closing the dialog while discovery runs used to leave the flow's client
+    # bound to the port for good: async_remove() found no client yet, and the
+    # step stored it afterwards. Every later setup then failed to bind.
+    import asyncio
+    from unittest.mock import AsyncMock, MagicMock
+
+    import custom_components.bacnet.bacnet_client as bc
+    import custom_components.bacnet.config_flow as cf
+
+    class _Client:
+        def __init__(self, **_):
+            self.connected = False
+
+        async def connect(self, **_):
+            self.connected = True
+
+        async def discover_devices(self, **_):
+            flow.async_remove()  # the user closes the dialog meanwhile
+            await asyncio.sleep(0)
+            return [
+                {"device_id": 1, "device_name": "A", "address": "10.0.0.5"},
+                {"device_id": 2, "device_name": "B", "address": "10.0.0.6"},
+            ]
+
+        async def disconnect(self):
+            self.connected = False
+
+    clients = []
+    monkeypatch.setattr(
+        bc, "BACnetClient", lambda **kw: clients.append(_Client()) or clients[-1]
+    )
+    monkeypatch.setattr(cf, "async_local_interface", AsyncMock(return_value=None))
+
+    async def run():
+        flow.hass = MagicMock(data={})
+        flow.hass.async_create_task = asyncio.ensure_future
+        await flow.async_step_discovery()
+        await asyncio.sleep(0)
+
+    flow = cf.BACnetConfigFlow()
+    flow._network_config = {
+        "local_ip": "",
+        "local_port": 47808,
+        "use_bbmd": False,
+    }
+    flow.async_show_form = lambda **kw: kw
+    asyncio.run(run())
+
+    assert clients and not clients[0].connected
