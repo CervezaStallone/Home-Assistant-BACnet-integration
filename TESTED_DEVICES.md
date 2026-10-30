@@ -34,6 +34,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Komfovent | C8 | 2 |
 | LOYTEC electronics GmbH | LINX-210 | 6.0 |
 | LOYTEC electronics GmbH | LIOB-588 | 7.6 |
+| Mercato | Climate MCP46D | 2.15 |
 | Microtrol | Black Pear 2 | 0.8.6 |
 | OJ Electronics A/S | OJ-Air2 | 1.2 |
 | Philips Dynalite | PDDEG-S | 1.46.23156 |

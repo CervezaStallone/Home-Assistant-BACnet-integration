@@ -413,6 +413,19 @@
     "source": "telemetry"
   },
   {
+    "vendor": "Mercato",
+    "model": "Climate MCP46D",
+    "firmware": "2.15",
+    "version": "1.0.52",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
     "vendor": "Microtrol",
     "model": "Black Pear 2",
     "firmware": "0.8.6",
