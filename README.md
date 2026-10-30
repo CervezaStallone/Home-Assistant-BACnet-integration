@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <strong>HACS Compatible</strong> · GUI-only setup · Real-time COV updates · ASHRAE 135 compliant
+  <strong>HACS Compatible</strong> · GUI-only setup · Real-time COV updates · BACnet/IP (ASHRAE 135)
 </p>
 
 <p align="center">
@@ -364,7 +364,7 @@ The priority level is controlled by the **Write Priority** select entity on the 
 
 If the device rejects a write, Home Assistant shows an error message instead of silently keeping the old state.
 
-Binary outputs use the `Enumerated` BACnet type (`0 = inactive`, `1 = active`), compliant with ASHRAE 135.
+Binary outputs use the `Enumerated` BACnet type (`0 = inactive`, `1 = active`), as defined in ASHRAE 135.
 
 ### Services
 
@@ -768,7 +768,9 @@ To stop: untick the option in each device's options. A failed report is never re
 
 ## License
 
-GPL-3.0 — see [LICENSE](LICENSE) for details.
+GPL-3.0 — see [LICENSE](LICENSE) for details. BACpypes3, installed by Home Assistant from PyPI, is MIT-licensed.
+
+BACnet® is a registered trademark of ASHRAE. This is an independent open-source integration. It is not affiliated with, endorsed by or certified by ASHRAE, BACnet International or the BACnet Testing Laboratories (BTL). It implements a selection of BACnet/IP services with BACpypes3 and is tested on real controllers (see [tested devices](#tested-devices)), not through formal BTL conformance testing.
 
 ---
 
