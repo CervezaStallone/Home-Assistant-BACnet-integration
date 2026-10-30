@@ -47,6 +47,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Siemens Building Technologies | POS3.57 | FW04.60.01.13:BL00.01.07.0003;SVS-300.10:SBC15.01;ISC01.00; |
 | Siemens Building Technologies | PXA40-W2 | — |
 | Siemens Building Technologies | PXC200-E.D | V6.00.338 |
+| Siemens Building Technologies | PXC4.E16 | 02.22.233.30 |
 | Siemens Building Technologies | PXC5.E24 | 02.23.273.19 |
 | Siemens Building Technologies | PXC64-U + PXA30-W2 / HWV2.00 | FWV6.00.314 / SBC11.01 / FLI06.00 / BBI13.06 / PMC01.30 |
 | Siemens Building Technologies | PXC7.E400L | 02.23.273.19<br>02.24.314.2 |
@@ -54,6 +55,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Signify | Interact BACnet gateway | — |
 | The Watt Stopper, Inc. | LMCP48 | 07.62 |
 | Trend Control Systems Ltd | IQ422 | IQ422-0 Iss4.37 Oct 24 2025<br>IQ422-12 Iss4.38 Dec 12 2025 |
+| Trend Control Systems Ltd | IQ4E | IQ4E96 Iss3.45 Aug 29 2017 |
 | Tridium | Niagara JACE | — |
 | Tridium | Niagara4 Station | 4.12.0.156 |
 | Xiamen Milesight IoT Co., Ltd. | UG65-868M-EA | 60.0.0.49-r2 |
