@@ -90,6 +90,8 @@ What this integration writes to your devices, so you know before trying it on a 
 - **Schedules have no priority** — `bacnet.write_schedule` changes the Schedule object's configuration itself. It refuses to remove existing exceptions unless you set `allow_removal`, and reads the result back. See [Schedules](#schedules).
 - **No read-only mode yet** — to keep an object read-only, import it as a `sensor` or `binary_sensor` (see [Customize objects](#customize-objects)), or leave it out. Services can still write to any object on the device.
 
+The integration is provided as is, without warranty (GPL-3.0, sections 15–16). Do not use it to control life-safety systems such as fire alarm or smoke control. You are responsible for what you write to a running building; test on a single object first.
+
 ---
 
 ## Screenshots
@@ -770,7 +772,7 @@ To stop: untick the option in each device's options. A failed report is never re
 
 GPL-3.0 — see [LICENSE](LICENSE) for details. BACpypes3, installed by Home Assistant from PyPI, is MIT-licensed.
 
-BACnet® is a registered trademark of ASHRAE. This is an independent open-source integration. It is not affiliated with, endorsed by or certified by ASHRAE, BACnet International or the BACnet Testing Laboratories (BTL). It implements a selection of BACnet/IP services with BACpypes3 and is tested on real controllers (see [tested devices](#tested-devices)), not through formal BTL conformance testing.
+BACnet® is a registered trademark of ASHRAE. This is an independent open-source integration. It is not affiliated with, endorsed by or certified by ASHRAE, BACnet International or the BACnet Testing Laboratories (BTL). It is not an official Home Assistant integration. It implements a selection of BACnet/IP services with BACpypes3 and is tested on real controllers (see [tested devices](#tested-devices)), not through formal BTL conformance testing.
 
 ---
 
