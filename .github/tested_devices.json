@@ -648,6 +648,20 @@
   },
   {
     "vendor": "Siemens Building Technologies",
+    "model": "PXC100-E.D / HW=V3.00",
+    "firmware": "FW=V6.30.026 / SBC=15.01 / FLI=06.30 / BBI=13.06 / LWI=01.10 / PMC=01.30 / STF=01.20",
+    "version": "1.0.53",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "Siemens Building Technologies",
     "model": "PXC200-E.D",
     "firmware": "V6.00.338",
     "version": "1.0.50-beta.8",
@@ -658,6 +672,20 @@
     ],
     "notes": "Many objects; reload loop on 1.0.47–1.0.50-beta.6 fixed in beta.7.",
     "issue": 62
+  },
+  {
+    "vendor": "Siemens Building Technologies",
+    "model": "PXC3.E75A-1",
+    "firmware": "v01.21",
+    "version": "1.0.53",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
   },
   {
     "vendor": "Siemens Building Technologies",
@@ -678,6 +706,20 @@
     "model": "PXC5.E24",
     "firmware": "02.23.273.19",
     "version": "1.0.52",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "Siemens Building Technologies",
+    "model": "PXC50-E.D / HW=V3.00",
+    "firmware": "FW=V6.30.026 / SBC=15.01 / FLI=06.30 / BBI=13.06 / LWI=01.10 / PMC=01.30 / STF=01.20",
+    "version": "1.0.53",
     "connection": "Same subnet",
     "works": [
       "Reading values",
@@ -719,6 +761,20 @@
     "model": "PXC7.E400L",
     "firmware": "02.24.314.2",
     "version": "1.0.52",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "Siemens Building Technologies",
+    "model": "PXC7.E400M",
+    "firmware": "02.21.194.36",
+    "version": "1.0.53",
     "connection": "Same subnet",
     "works": [
       "Reading values",
