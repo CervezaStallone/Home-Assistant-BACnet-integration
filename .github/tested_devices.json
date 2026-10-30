@@ -176,6 +176,20 @@
     "source": "telemetry"
   },
   {
+    "vendor": "DIGICONTROL",
+    "model": "ems2.CP04X",
+    "firmware": "ems2-BACnet 2.02",
+    "version": "1.0.53",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
     "vendor": "Distech Controls",
     "model": "ECY-TU203 Rev 1.0A",
     "firmware": "1.22.22026.1",
@@ -262,6 +276,19 @@
     ],
     "notes": "COV on AI, AO, BI, BO and BV; AV and MSV fall back to polling.",
     "issue": 52
+  },
+  {
+    "vendor": "GOSSEN METRAWATT",
+    "model": "EM2289 Energy Meter",
+    "firmware": "1.18",
+    "version": "1.0.52",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
   },
   {
     "vendor": "HMS Industrial Networks SLU",
