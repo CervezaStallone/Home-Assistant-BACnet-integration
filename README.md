@@ -106,28 +106,36 @@ What this integration writes to your devices, so you know before trying it on a 
 
 <table>
   <tr>
-    <td><img src="img/screenshots/01-setup-network.png" alt="Setup step 1: network settings and target device address"></td>
-    <td><img src="img/screenshots/02-setup-select-objects.png" alt="Setup: choose which objects to import, labelled with their descriptions"></td>
+    <td><img src="img/screenshots/01-setup-network.png" alt="Setup step 1: network settings, with the local IP address left empty"></td>
+    <td><img src="img/screenshots/02-setup-select-objects.png" alt="Setup: pick the objects to import and share usage statistics"></td>
   </tr>
   <tr>
     <td align="center">Setup: network settings</td>
     <td align="center">Setup: pick the objects to import</td>
   </tr>
   <tr>
+    <td><img src="img/screenshots/09-options-menu.png" alt="The options menu with Settings, Rescan device and Customize objects"></td>
+    <td><img src="img/screenshots/06-customize-objects.png" alt="Customize objects with entity type, COV and state class for a sensor"></td>
+  </tr>
+  <tr>
+    <td align="center">Options: settings, rescan, customize</td>
+    <td align="center">Entity type, COV and state class per object</td>
+  </tr>
+  <tr>
     <td><img src="img/screenshots/04-entity-attributes.png" alt="Sensor details with the bacnet_* attributes"></td>
-    <td><img src="img/screenshots/06-customize-objects.png" alt="Customize objects with the list of extra properties"></td>
+    <td><img src="img/screenshots/07-climate.png" alt="Climate entity for a room setpoint with the return air temperature as current temperature"></td>
   </tr>
   <tr>
     <td align="center">BACnet attributes on every entity</td>
-    <td align="center">Extra properties per object</td>
-  </tr>
-  <tr>
-    <td><img src="img/screenshots/07-climate.png" alt="Climate entity for a room setpoint with the return air temperature as current temperature"></td>
-    <td><img src="img/screenshots/08-active-alarms.png" alt="Active alarms sensor listing a high-limit alarm"></td>
-  </tr>
-  <tr>
     <td align="center">Setpoint as a climate entity</td>
+  </tr>
+  <tr>
+    <td><img src="img/screenshots/08-active-alarms.png" alt="Active alarms sensor listing a high-limit alarm"></td>
+    <td></td>
+  </tr>
+  <tr>
     <td align="center">Active alarms from the controller</td>
+    <td></td>
   </tr>
 </table>
 
