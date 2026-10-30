@@ -960,7 +960,8 @@ class BACnetClient:
 
             for i_am in i_am_list:
                 device_id = i_am.iAmDeviceIdentifier[1]
-                if device_id in seen_ids:
+                # The broadcast also reaches our own node, which answers it.
+                if device_id in seen_ids or device_id == self._device_instance:
                     continue
                 seen_ids.add(device_id)
 

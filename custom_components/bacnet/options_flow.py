@@ -19,6 +19,11 @@ import homeassistant.helpers.config_validation as cv
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.data_entry_flow import FlowResult
+from homeassistant.helpers.selector import (
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
+)
 
 from .bacnet_client import BACnetClient
 from .const import (
@@ -384,7 +389,13 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
                         self._field(obj, "state class"),
                         default=state_classes.get(key, STATE_CLASS_AUTO),
                     )
-                ] = vol.In(STATE_CLASS_CHOICES)
+                ] = SelectSelector(
+                    SelectSelectorConfig(
+                        options=STATE_CLASS_CHOICES,
+                        mode=SelectSelectorMode.LIST,
+                        translation_key="state_class",
+                    )
+                )
             offered = {
                 prop: f"{property_label(prop)} ({prop})"
                 for prop, (_, types, _) in EXTRA_PROPERTY_SPECS.items()
