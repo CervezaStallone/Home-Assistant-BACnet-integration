@@ -27,6 +27,19 @@
     "source": "telemetry"
   },
   {
+    "vendor": "AB Regin",
+    "model": "HCA283DWM-4",
+    "firmware": "3.4.0.8",
+    "version": "1.0.53",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
     "vendor": "ALERTON TECHNOLOGIES",
     "model": "VLC-16160",
     "firmware": "RL Z.01e VLC",
