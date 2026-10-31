@@ -10,6 +10,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | 75F | CCU50 | Android 7.0 - CCU50_20220517 |
 | AB Regin | E283WEB | 3.4.0.8 |
 | AB Regin | HCA283DWM-4 | 3.4.0.8 |
+| Acuity Brands | FCS 7TS | 0.8.3 |
 | ALERTON TECHNOLOGIES | VLC-16160 | RL Z.01e VLC |
 | Bosch Building Automation GmbH | ems5.CP05E | ems5-BACnet 2.0 |
 | Calorex | Delta | 0 |
@@ -31,7 +32,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Global Control 5 | iSMA-B-MIX18-IP | 6.5.3 |
 | GOSSEN METRAWATT | EM2289 Energy Meter | 1.18 |
 | HMS Industrial Networks SLU | PA-AC-BAC | 14.1.2.0 |
-| IP Video Corp | HALO-3C | — |
+| IP Video Corp | HALO-3C | 2.20.2.5.558-3 |
 | JCI | MS-NAE3511-1 | 2.2.0.5100 |
 | Kieback&Peter | DDC4000 | B1.20#0<br>N/A |
 | Kieback&Peter | DDC420 | 1.2<br>N/A |
@@ -59,6 +60,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Siemens Building Technologies | PXC200-E.D | V6.00.338 |
 | Siemens Building Technologies | PXC3.E75A-1 | v01.21 |
 | Siemens Building Technologies | PXC4.E16 | 02.22.233.30 |
+| Siemens Building Technologies | PXC4.E16-2 | 02.23.273.19 |
 | Siemens Building Technologies | PXC5.E24 | 02.23.273.19 |
 | Siemens Building Technologies | PXC50-E.D / HWV3.00 | FWV6.30.026 / SBC15.01 / FLI06.30 / BBI13.06 / LWI01.10 / PM |
 | Siemens Building Technologies | PXC64-U + PXA30-W2 / HWV2.00 | FWV6.00.314 / SBC11.01 / FLI06.00 / BBI13.06 / PMC01.30 |
