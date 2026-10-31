@@ -481,6 +481,20 @@
     "issue": 52
   },
   {
+    "vendor": "Network Thermostat",
+    "model": "J5-IP",
+    "firmware": "16.17",
+    "version": "1.0.53",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
     "vendor": "OJ Electronics A/S",
     "model": "OJ-Air2",
     "firmware": "1.2",
@@ -838,6 +852,20 @@
     ],
     "notes": "Occupancy sensors and light level control, two gateways.",
     "issue": 50
+  },
+  {
+    "vendor": "TemcoControls",
+    "model": "Temco Product",
+    "firmware": "0.8.0",
+    "version": "1.0.53",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
   },
   {
     "vendor": "The Watt Stopper, Inc.",

@@ -39,6 +39,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | LOYTEC electronics GmbH | LIOB-588 | 7.6 |
 | Mercato | Climate MCP46D | 2.15 |
 | Microtrol | Black Pear 2 | 0.8.6 |
+| Network Thermostat | J5-IP | 16.17 |
 | OJ Electronics A/S | OJ-Air2 | 1.2 |
 | Philips Dynalite | PDDEG-S | 1.46.23156 |
 | Reliable Controls Corporation | MACH-ProSys | 8.31.501,1001,07 |
@@ -62,6 +63,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Siemens Building Technologies | PXC7.E400M | 02.21.194.36<br>02.23.273.16 |
 | Sierra Monitor Corporation | FPC-N54 | V2.23m |
 | Signify | Interact BACnet gateway | — |
+| TemcoControls | Temco Product | 0.8.0 |
 | The Watt Stopper, Inc. | LMCP48 | 07.62 |
 | Trend Control Systems Ltd | IQ422 | IQ422-0 Iss4.37 Oct 24 2025<br>IQ422-12 Iss4.38 Dec 12 2025 |
 | Trend Control Systems Ltd | IQ4E | IQ4E96 Iss3.45 Aug 29 2017 |
