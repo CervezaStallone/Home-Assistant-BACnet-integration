@@ -361,7 +361,7 @@
   {
     "vendor": "Kieback&Peter",
     "model": "DDC4000",
-    "firmware": "",
+    "firmware": "N/A",
     "version": "1.0.50-beta.2",
     "connection": "",
     "works": [
@@ -388,7 +388,7 @@
   {
     "vendor": "Kieback&Peter",
     "model": "DDC420",
-    "firmware": "",
+    "firmware": "N/A",
     "version": "1.0.50-beta.2",
     "connection": "",
     "works": [
@@ -677,7 +677,7 @@
   {
     "vendor": "Siemens Building Technologies",
     "model": "PXA40-W2",
-    "firmware": "",
+    "firmware": "N/A",
     "version": "1.0.50-beta.8",
     "connection": "",
     "works": [
@@ -855,7 +855,7 @@
   {
     "vendor": "Signify",
     "model": "Interact BACnet gateway",
-    "firmware": "",
+    "firmware": "N/A",
     "version": "1.0.49",
     "connection": "",
     "works": [
@@ -924,7 +924,7 @@
   {
     "vendor": "Tridium",
     "model": "Niagara JACE",
-    "firmware": "",
+    "firmware": "N/A",
     "version": "1.0.44",
     "connection": "",
     "works": [
