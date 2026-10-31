@@ -647,6 +647,20 @@
     "source": "telemetry"
   },
   {
+    "vendor": "SE-Elektronic",
+    "model": "E-DDC3.2",
+    "firmware": "03.07.19",
+    "version": "1.0.52",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
     "vendor": "Siemens Building Technologies",
     "model": "DXR2.E18-1",
     "firmware": "01.22.273.16",
