@@ -32,8 +32,8 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | HMS Industrial Networks SLU | PA-AC-BAC | 14.1.2.0 |
 | IP Video Corp | HALO-3C | — |
 | JCI | MS-NAE3511-1 | 2.2.0.5100 |
-| Kieback&Peter | DDC4000 | B1.20#0 |
-| Kieback&Peter | DDC420 | 1.2 |
+| Kieback&Peter | DDC4000 | B1.20#0<br>N/A |
+| Kieback&Peter | DDC420 | 1.2<br>N/A |
 | Komfovent | C6 | 2 |
 | Komfovent | C8 | 2 |
 | LOYTEC electronics GmbH | LINX-210 | 6.0 |
@@ -52,7 +52,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Schneider Electric | spaceLYnk | 0.6.0 |
 | Siemens Building Technologies | DXR2.E18-1 | 01.22.273.16 |
 | Siemens Building Technologies | POS3.57 | FW04.60.01.13:BL00.01.07.0003;SVS-300.10:SBC15.01;ISC01.00; |
-| Siemens Building Technologies | PXA40-W2 | — |
+| Siemens Building Technologies | PXA40-W2 | N/A |
 | Siemens Building Technologies | PXC100-E.D / HWV3.00 | FWV6.30.026 / SBC15.01 / FLI06.30 / BBI13.06 / LWI01.10 / PM |
 | Siemens Building Technologies | PXC200-E.D | V6.00.338 |
 | Siemens Building Technologies | PXC3.E75A-1 | v01.21 |
@@ -63,11 +63,11 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Siemens Building Technologies | PXC7.E400L | 02.23.273.19<br>02.24.314.2 |
 | Siemens Building Technologies | PXC7.E400M | 02.21.194.36<br>02.23.273.16 |
 | Sierra Monitor Corporation | FPC-N54 | V2.23m |
-| Signify | Interact BACnet gateway | — |
+| Signify | Interact BACnet gateway | N/A |
 | The Watt Stopper, Inc. | LMCP48 | 07.62 |
 | Trend Control Systems Ltd | IQ422 | IQ422-0 Iss4.37 Oct 24 2025<br>IQ422-12 Iss4.38 Dec 12 2025 |
 | Trend Control Systems Ltd | IQ4E | IQ4E96 Iss3.45 Aug 29 2017 |
-| Tridium | Niagara JACE | — |
+| Tridium | Niagara JACE | N/A |
 | Tridium | Niagara4 Station | 4.12.0.156 |
 | Xiamen Milesight IoT Co., Ltd. | UG65-868M-EA | 60.0.0.49-r2 |
 <!-- tested-devices:end -->
