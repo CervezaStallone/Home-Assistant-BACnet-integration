@@ -40,6 +40,20 @@
     "source": "telemetry"
   },
   {
+    "vendor": "Acuity Brands",
+    "model": "FCS 7TS",
+    "firmware": "0.8.3",
+    "version": "1.0.53",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
     "vendor": "ALERTON TECHNOLOGIES",
     "model": "VLC-16160",
     "firmware": "RL Z.01e VLC",
@@ -350,6 +364,20 @@
     "model": "HALO-3C",
     "firmware": "",
     "version": "1.0.52-beta.3",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "IP Video Corp",
+    "model": "HALO-3C",
+    "firmware": "2.20.2.5.558-3",
+    "version": "1.0.53",
     "connection": "Same subnet",
     "works": [
       "Reading values",
@@ -765,6 +793,19 @@
     "works": [
       "Reading values",
       "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "Siemens Building Technologies",
+    "model": "PXC4.E16-2",
+    "firmware": "02.23.273.19",
+    "version": "1.0.53",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values"
     ],
     "notes": "",
     "issue": null,
