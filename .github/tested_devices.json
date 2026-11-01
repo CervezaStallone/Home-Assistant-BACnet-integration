@@ -483,6 +483,20 @@
     "source": "telemetry"
   },
   {
+    "vendor": "KNXlogic",
+    "model": "ComfoWay V3",
+    "firmware": "0.6.0",
+    "version": "1.0.53",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
     "vendor": "Komfovent",
     "model": "C6",
     "firmware": "2",
