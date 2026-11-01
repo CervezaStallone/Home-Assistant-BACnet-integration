@@ -16,6 +16,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Bosch Building Automation GmbH | ems5.CP05E | ems5-BACnet 2.0 |
 | Calorex | Delta | 0 |
 | Carel S.p.A. | PCO1 | A2.1.2 - B2.1.2 |
+| Carel S.p.A. | pCOWeb | A1.4.2 - B1.2.1 |
 | Carlo Gavazzi Controls SPA | UWP30RSEXXX | Rev 1.1.2 |
 | Condair Group AG | OMEGA PRO | v1.02.00 |
 | Condair Group AG | RS | v14.1.35.1 |
