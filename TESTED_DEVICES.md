@@ -10,6 +10,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | 75F | CCU50 | Android 7.0 - CCU50_20220517 |
 | AB Regin | E283WEB | 3.4.0.8 |
 | AB Regin | HCA283DWM-4 | 3.4.0.8 |
+| AB Regin | XCA283W-4 | 3.4.0.8 |
 | Acuity Brands | FCS 7TS | 0.8.3 |
 | ALERTON TECHNOLOGIES | VLC-16160 | RL Z.01e VLC |
 | Bosch Building Automation GmbH | ems5.CP05E | ems5-BACnet 2.0 |
@@ -73,7 +74,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Trend Control Systems Ltd | IQ422 | IQ422-0 Iss4.37 Oct 24 2025<br>IQ422-12 Iss4.38 Dec 12 2025 |
 | Trend Control Systems Ltd | IQ4E | IQ4E96 Iss3.45 Aug 29 2017 |
 | Tridium | Niagara JACE | N/A |
-| Tridium | Niagara4 Station | 4.12.0.156 |
+| Tridium | Niagara4 Station | 4.12.0.156<br>4.15.3.28 |
 | Xiamen Milesight IoT Co., Ltd. | UG65-868M-EA | 60.0.0.49-r2 |
 <!-- tested-devices:end -->
 
