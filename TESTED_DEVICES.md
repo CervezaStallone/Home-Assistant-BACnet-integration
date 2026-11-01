@@ -24,11 +24,13 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Control Solutions | Babel Buster BB3-7101 | 3.15.18 |
 | DAMATEX | N/A | N/A |
 | Delta Controls | DSM_RTR | 189697 |
+| Delta Controls | eBMGR-TCH | 804872 |
 | Delta Controls | eZNT-Wi-T304CHM | 510082 |
 | Delta Controls | O3-DIN-SRC | 8.0.0.O3-DIN.1.387 |
 | DIGICONTROL | ems2.CP04X | ems2-BACnet 2.02 |
 | Distech Controls | ECY-TU203 Rev 1.0A | 1.19.23041.871<br>1.22.22026.1 |
 | Distech Controls | ECY-VAV Gen 1 NON BI | 1.19.26161 |
+| Distech Controls, Inc. | ECY-303 Rev 1.0A | 1.22.22026.1 |
 | Distech Controls, Inc. | ECY-S1000 Rev 1.0A | 1.22.22026.1 |
 | Distech-Controls, Inc. | ECY-S1000-BI | 1.22.23149.1 |
 | Exhausto A/S | ABC 1.0 | FW1.0 |
