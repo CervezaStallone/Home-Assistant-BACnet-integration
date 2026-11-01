@@ -38,6 +38,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | JCI | MS-NAE3511-1 | 2.2.0.5100 |
 | Kieback&Peter | DDC4000 | B1.20#0<br>N/A |
 | Kieback&Peter | DDC420 | 1.2<br>N/A |
+| KNXlogic | ComfoWay V3 | 0.6.0 |
 | Komfovent | C6 | 2 |
 | Komfovent | C8 | 2 |
 | LOYTEC electronics GmbH | LINX-210 | 6.0 |
