@@ -40,6 +40,20 @@
     "source": "telemetry"
   },
   {
+    "vendor": "AB Regin",
+    "model": "XCA283W-4",
+    "firmware": "3.4.0.8",
+    "version": "1.0.53",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
     "vendor": "Acuity Brands",
     "model": "FCS 7TS",
     "firmware": "0.8.3",
@@ -1022,6 +1036,20 @@
     "model": "Niagara4 Station",
     "firmware": "4.12.0.156",
     "version": "1.0.51",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "Tridium",
+    "model": "Niagara4 Station",
+    "firmware": "4.15.3.28",
+    "version": "1.0.53",
     "connection": "Same subnet",
     "works": [
       "Reading values",
