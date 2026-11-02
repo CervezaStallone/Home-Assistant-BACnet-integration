@@ -36,11 +36,12 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Distech-Controls, Inc. | ECY-S1000-BI | 1.22.23149.1 |
 | Exhausto A/S | ABC 1.0 | FW1.0 |
 | Global Control 5 | iSMA-B-MIX18-IP | 6.5.3 |
+| Global Control 5 S.A. | iSMA-B-MIX18-IP | 6.5.3 |
 | GOSSEN METRAWATT | EM2289 Energy Meter | 1.18 |
 | HMS Industrial Networks SLU | PA-AC-BAC | 14.1.2.0 |
 | IP Video Corp | HALO-3C | 2.20.2.5.558-3 |
 | JCI | MS-NAE3511-1 | 2.2.0.5100 |
-| Kieback&Peter | DDC4000 | B1.20#0<br>N/A |
+| Kieback&Peter | DDC4000 | B1.15#0<br>B1.16#0<br>B1.18#0<br>B1.20#0<br>N/A |
 | Kieback&Peter | DDC420 | 1.2<br>N/A |
 | KNXlogic | ComfoWay V3 | 0.6.0 |
 | Komfovent | C6 | 2 |
@@ -48,8 +49,10 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | LOYTEC electronics GmbH | LINX-202 | 7.6 |
 | LOYTEC electronics GmbH | LINX-210 | 6.0 |
 | LOYTEC electronics GmbH | LIOB-588 | 7.6 |
+| MBS GmbH, Krefeld | UGW | 1.22.1.1 |
 | Mercato | Climate MCP46D | 2.15 |
 | Microtrol | Black Pear 2 | 0.8.6 |
+| Microtrol Ltd | Black Pear 2 | 0.8.6 |
 | Network Thermostat | J5-IP | 16.17 |
 | OJ Electronics A/S | OJ-Air2 | 1.2 |
 | Philips Dynalite | PDDEG-S | 1.46.23156 |
