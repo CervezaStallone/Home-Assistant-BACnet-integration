@@ -44,7 +44,7 @@ from .const import (
     DEFAULT_BBMD_TTL,
     DEFAULT_PORT,
     DOMAIN,
-    PRIVACY_URL,
+    SITE_URL,
 )
 from .helpers import async_local_interface
 from .helpers import mask_address as _mask_address
@@ -627,7 +627,7 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     vol.Optional(CONF_SELECTED_OBJECTS, default=[]): _object_picker(
                         object_options
                     ),
-                    vol.Optional(CONF_SHARE_USAGE, default=True): bool,
+                    vol.Optional(CONF_SHARE_USAGE, default=False): bool,
                 }
             )
         except Exception as exc:
@@ -645,7 +645,7 @@ class BACnetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="select_objects",
             data_schema=schema,
             errors=errors,
-            description_placeholders={"privacy_url": PRIVACY_URL},
+            description_placeholders={"site_url": SITE_URL},
         )
 
     # ------------------------------------------------------------------

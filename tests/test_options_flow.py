@@ -434,18 +434,15 @@ def test_options_settings_show_share_usage_with_current_value(monkeypatch):
 
 
 def test_options_settings_link_the_privacy_policy(monkeypatch):
-    # The share_usage description links {privacy_url}; without the
+    # The share_usage description links {site_url}; without the
     # placeholder the frontend shows the raw text.
-    from pathlib import Path
-
-    from custom_components.bacnet.const import PRIVACY_URL
+    from custom_components.bacnet.const import SITE_URL
 
     flow = _flow([])
     shown = {}
     flow.async_show_form = lambda **kw: shown.update(kw)
     _run(flow.async_step_settings(), monkeypatch)
-    assert shown["description_placeholders"] == {"privacy_url": PRIVACY_URL}
-    assert (Path(__file__).parents[1] / PRIVACY_URL.rsplit("/", 1)[1]).is_file()
+    assert shown["description_placeholders"] == {"site_url": SITE_URL}
 
 
 def test_options_open_with_a_menu(monkeypatch):

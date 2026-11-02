@@ -47,7 +47,7 @@
           "device_name": "Naam van dit apparaat in Home Assistant. Vooraf ingevuld met de BACnet-objectName.",
           "select_types": "Elk object van een aangevinkt type wordt geïmporteerd, samen met de objecten die je hieronder kiest.",
           "selected_objects": "Typ om te zoeken op objecttype (bijvoorbeeld AI of BO), instance of naam, en kies de objecten die je in Home Assistant wilt.",
-          "share_usage": "Standaard aangevinkt; vink uit om niets te versturen. Stuurt elke 6 uur fabrikant, model en firmware van dit apparaat, of COV en ReadPropertyMultiple werken, het aantal objecten per type en hoe het verbonden is (direct of via BBMD), plus de versie van de integratie en van Home Assistant en een willekeurige installatie-ID. Nooit adressen, namen of waarden. Gebruikt om de lijst met geteste apparaten aan te vullen. [Privacyverklaring]({privacy_url}#nederlands)"
+          "share_usage": "Staat standaard uit; er wordt niets verstuurd tenzij je het aanvinkt. Vink dit alsjeblieft aan: deze rapporten vullen de lijst met geteste apparaten, zodat meer BACnet-apparaten getest en ondersteund worden. Aangevinkt stuurt elke 6 uur fabrikant, model en firmware van dit apparaat, of COV en ReadPropertyMultiple werken, het aantal objecten per type en hoe het verbonden is (direct of via BBMD), plus de versie van de integratie en van Home Assistant en een willekeurige installatie-ID. Nooit adressen, namen of waarden. [Privacyverklaring]({site_url}/nl/privacy/)"
         }
       },
       "reconfigure": {
@@ -155,7 +155,7 @@
           "polling_interval": "Hoe vaak alle objecten worden gepolld, in seconden (minimaal 10). Pollen gebeurt altijd; COV voegt daartussen alleen snellere updates toe.",
           "use_description": "Indien aangevinkt krijgen entiteiten hun naam uit de BACnet-property 'description' (ID 28) in plaats van 'objectName' (ID 77).",
           "live_metadata_properties": "Properties die een eigen live COV-Property-abonnement krijgen in plaats van het periodiek opnieuw uitlezen. Elke property is een extra abonnement op het apparaat, en niet elk apparaat ondersteunt dit.",
-          "share_usage": "Standaard aangevinkt; vink uit om niets te versturen. Stuurt elke 6 uur fabrikant, model en firmware van dit apparaat, of COV en ReadPropertyMultiple werken, het aantal objecten per type en hoe het verbonden is (direct of via BBMD), plus de versie van de integratie en van Home Assistant en een willekeurige installatie-ID. Nooit adressen, namen of waarden. Gebruikt om de lijst met geteste apparaten aan te vullen. [Privacyverklaring]({privacy_url}#nederlands)"
+          "share_usage": "Vink dit alsjeblieft aan: deze rapporten vullen de lijst met geteste apparaten, zodat meer BACnet-apparaten getest en ondersteund worden. Aangevinkt stuurt elke 6 uur fabrikant, model en firmware van dit apparaat, of COV en ReadPropertyMultiple werken, het aantal objecten per type en hoe het verbonden is (direct of via BBMD), plus de versie van de integratie en van Home Assistant en een willekeurige installatie-ID. Nooit adressen, namen of waarden. [Privacyverklaring]({site_url}/nl/privacy/)"
         }
       },
       "rescan_objects": {
@@ -221,7 +221,7 @@
         "step": {
           "confirm": {
             "title": "Gebruiksstatistieken delen?",
-            "description": "Deze integratie kan elke 6 uur een klein rapport sturen over je BACnet-apparaten: fabrikant, model en firmware, of COV en ReadPropertyMultiple werken, en het aantal objecten per type. Nooit adressen, namen of waarden. Het helpt bepalen welke apparaten getest en ondersteund worden.\n\nVink aan om te delen voor al je BACnet-apparaten, vink uit om het uit te laten. Je krijgt deze vraag maar één keer en kunt het per apparaat wijzigen in de opties. [Privacyverklaring]({privacy_url}#nederlands)",
+            "description": "Deze integratie kan elke 6 uur een klein rapport sturen over je BACnet-apparaten: fabrikant, model en firmware, of COV en ReadPropertyMultiple werken, en het aantal objecten per type. Nooit adressen, namen of waarden. Deze rapporten vullen de lijst met geteste apparaten, zodat meer BACnet-apparaten getest en ondersteund worden.\n\nVink alsjeblieft aan om te delen voor al je BACnet-apparaten. Laat je het uit, dan wordt er niets verstuurd. Je krijgt deze vraag maar één keer en kunt het per apparaat wijzigen in de opties. [Privacyverklaring]({site_url}/nl/privacy/)",
             "data": {
               "share_usage": "Gebruiksstatistieken delen"
             }

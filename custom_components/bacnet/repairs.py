@@ -25,7 +25,7 @@ from .const import (
     CONF_SHARE_USAGE,
     DOMAIN,
     ISSUE_SHARE_USAGE,
-    PRIVACY_URL,
+    SITE_URL,
 )
 from .helpers import stale_domain_overrides
 
@@ -96,9 +96,9 @@ class ShareUsageRepairFlow(RepairsFlow):
             return self.async_show_form(
                 step_id="confirm",
                 data_schema=vol.Schema(
-                    {vol.Optional(CONF_SHARE_USAGE, default=True): bool}
+                    {vol.Optional(CONF_SHARE_USAGE, default=False): bool}
                 ),
-                description_placeholders={"privacy_url": PRIVACY_URL},
+                description_placeholders={"site_url": SITE_URL},
             )
 
         await self.hass.data[DOMAIN]["_telemetry"].async_mark_asked()

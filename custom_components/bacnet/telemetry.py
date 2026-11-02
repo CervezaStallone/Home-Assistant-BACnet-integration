@@ -2,7 +2,7 @@
 
 Every 6 hours, while at least one config entry has "share usage" ticked, one
 report per Home Assistant installation goes to the telemetry server.
-Installations that existed before the option was ticked by default are
+Installations that existed before the option was added are
 asked once, in Repairs (repairs.py). The
 server rejects the whole report when anything is outside its contract, so
 every value is cleaned and cut here.
@@ -35,7 +35,7 @@ from .const import (
     CONF_VENDOR_NAME,
     DOMAIN,
     ISSUE_SHARE_USAGE,
-    PRIVACY_URL,
+    SITE_URL,
     TELEMETRY_FIRST_DELAY,
     TELEMETRY_INTERVAL,
     TELEMETRY_SCHEMA,
@@ -181,7 +181,7 @@ class TelemetryReporter:
             is_fixable=True,
             severity=ir.IssueSeverity.WARNING,
             translation_key=ISSUE_SHARE_USAGE,
-            translation_placeholders={"privacy_url": PRIVACY_URL},
+            translation_placeholders={"site_url": SITE_URL},
         )
 
     async def async_send(self, _now: Any = None) -> None:

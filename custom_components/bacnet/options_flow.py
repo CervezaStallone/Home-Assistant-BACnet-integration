@@ -57,7 +57,7 @@ from .const import (
     OBJECT_TYPE_ANALOG_INPUT,
     OBJECT_TYPE_ANALOG_OUTPUT,
     OBJECT_TYPE_ANALOG_VALUE,
-    PRIVACY_URL,
+    SITE_URL,
     STATE_CLASS_AUTO,
     STATE_CLASS_CHOICES,
     SUPPORTED_DOMAINS,
@@ -164,7 +164,7 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
             step_id="settings",
             data_schema=schema,
             errors=errors,
-            description_placeholders={"privacy_url": PRIVACY_URL},
+            description_placeholders={"site_url": SITE_URL},
         )
 
     # ------------------------------------------------------------------

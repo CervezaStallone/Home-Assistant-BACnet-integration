@@ -165,15 +165,15 @@ class TestShareUsageRepairFlow:
 
     def test_form_is_ticked_and_links_the_privacy_policy(self, monkeypatch):
         from custom_components.bacnet import repairs
-        from custom_components.bacnet.const import PRIVACY_URL
+        from custom_components.bacnet.const import SITE_URL
 
         monkeypatch.setattr(
             repairs.vol, "Optional", lambda key, default=None: (key, default)
         )
         flow, *_ = self._flow()
         form = asyncio.run(flow.async_step_init())
-        assert form["description_placeholders"] == {"privacy_url": PRIVACY_URL}
-        assert form["data_schema"] == {("share_usage", True): bool}
+        assert form["description_placeholders"] == {"site_url": SITE_URL}
+        assert form["data_schema"] == {("share_usage", False): bool}
 
     def test_yes_ticks_every_device(self):
         flow, hass, _, reporter = self._flow()
