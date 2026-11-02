@@ -82,17 +82,17 @@ def test_select_objects_links_the_privacy_policy():
     import asyncio
 
     from custom_components.bacnet.config_flow import BACnetConfigFlow
-    from custom_components.bacnet.const import PRIVACY_URL
+    from custom_components.bacnet.const import SITE_URL
 
     flow = BACnetConfigFlow()
     flow._selected_device = {"device_id": 1, "device_name": "Dev"}
     flow._discovered_objects = [{"object_type": 0, "instance": 1}]
     flow.async_show_form = lambda **kw: kw
     shown = asyncio.run(flow.async_step_select_objects())
-    assert shown["description_placeholders"] == {"privacy_url": PRIVACY_URL}
+    assert shown["description_placeholders"] == {"site_url": SITE_URL}
 
 
-def test_setup_ticks_share_usage_by_default(monkeypatch):
+def test_setup_leaves_share_usage_unticked(monkeypatch):
     import asyncio
 
     from custom_components.bacnet import config_flow as cf
@@ -110,7 +110,7 @@ def test_setup_ticks_share_usage_by_default(monkeypatch):
     flow._discovered_objects = [{"object_type": 0, "instance": 1}]
     flow.async_show_form = lambda **kw: kw
     asyncio.run(flow.async_step_select_objects())
-    assert defaults["share_usage"] is True
+    assert defaults["share_usage"] is False
 
 
 _TYPE_OPTIONS: dict = {}
