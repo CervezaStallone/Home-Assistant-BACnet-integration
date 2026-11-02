@@ -417,6 +417,20 @@
     "issue": 52
   },
   {
+    "vendor": "Global Control 5 S.A.",
+    "model": "iSMA-B-MIX18-IP",
+    "firmware": "6.5.3",
+    "version": "1.0.53",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
     "vendor": "GOSSEN METRAWATT",
     "model": "EM2289 Energy Meter",
     "firmware": "1.18",
@@ -502,6 +516,48 @@
     "model": "DDC4000",
     "firmware": "B1.20#0",
     "version": "1.0.51",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "Kieback&Peter",
+    "model": "DDC4000",
+    "firmware": "B1.15#0",
+    "version": "1.0.53",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "Kieback&Peter",
+    "model": "DDC4000",
+    "firmware": "B1.16#0",
+    "version": "1.0.53",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "Kieback&Peter",
+    "model": "DDC4000",
+    "firmware": "B1.18#0",
+    "version": "1.0.53",
     "connection": "Same subnet",
     "works": [
       "Reading values",
@@ -621,6 +677,20 @@
     "source": "telemetry"
   },
   {
+    "vendor": "MBS GmbH, Krefeld",
+    "model": "UGW",
+    "firmware": "1.22.1.1",
+    "version": "1.0.53",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
     "vendor": "Mercato",
     "model": "Climate MCP46D",
     "firmware": "2.15",
@@ -646,6 +716,20 @@
     ],
     "notes": "1092 objects; no segmentation (max APDU 480), indexed object list reads. COV on about a quarter of the objects. Only the group master unit accepts writes.",
     "issue": 52
+  },
+  {
+    "vendor": "Microtrol Ltd",
+    "model": "Black Pear 2",
+    "firmware": "0.8.6",
+    "version": "1.0.53",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
   },
   {
     "vendor": "Network Thermostat",
