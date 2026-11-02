@@ -13,6 +13,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | AB Regin | XCA283W-4 | 3.4.0.8 |
 | Acuity Brands | FCS 7TS | 0.8.3 |
 | ALERTON TECHNOLOGIES | VLC-16160 | RL Z.01e VLC |
+| Altra | DZK bacnet-gateway | 0.8.2 |
 | Bosch Building Automation GmbH | ems5.CP05E | ems5-BACnet 2.0 |
 | Calorex | Delta | 0 |
 | Carel S.p.A. | PCO1 | A2.1.2 - B2.1.2 |
@@ -44,6 +45,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | KNXlogic | ComfoWay V3 | 0.6.0 |
 | Komfovent | C6 | 2 |
 | Komfovent | C8 | 2 |
+| LOYTEC electronics GmbH | LINX-202 | 7.6 |
 | LOYTEC electronics GmbH | LINX-210 | 6.0 |
 | LOYTEC electronics GmbH | LIOB-588 | 7.6 |
 | Mercato | Climate MCP46D | 2.15 |
@@ -52,6 +54,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | OJ Electronics A/S | OJ-Air2 | 1.2 |
 | Philips Dynalite | PDDEG-S | 1.46.23156 |
 | Reliable Controls Corporation | MACH-ProSys | 8.31.501,1001,07 |
+| RESOL - Elektronische Regelungen GmbH | RESOL DL3 | 0.5.8 |
 | SAUTER | EY-AS525F001 | V3.1.2b802<br>V3.1.6b1058 |
 | SAUTER | EY-RC504F001 | V3.2.0b964 |
 | SAUTER | EY6AS80F021 | V4.0.0b7006 |
