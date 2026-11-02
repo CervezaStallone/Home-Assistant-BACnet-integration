@@ -45,6 +45,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Kieback&Peter | DDC4000 | B1.15#0<br>B1.16#0<br>B1.18#0<br>B1.20#0<br>N/A |
 | Kieback&Peter | DDC420 | 1.2<br>N/A |
 | KNXlogic | ComfoWay V3 | 0.6.0 |
+| Komfovent | C5 | 2.780 |
 | Komfovent | C6 | 2 |
 | Komfovent | C8 | 2 |
 | LOYTEC electronics GmbH | LINX-202 | 7.6 |
@@ -63,7 +64,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | SAUTER | EY-RC504F001 | V3.2.0b964 |
 | SAUTER | EY6AS80F021 | V4.0.0b7006 |
 | Schneider Electric | RP-C-16A-F-230V | 3.03.01.02101 |
-| Schneider Electric | SmartStruxure | 2.20.1.4 |
+| Schneider Electric | SmartStruxure | 2.20.1.4<br>2.22.1.7 |
 | Schneider Electric | spaceLYnk | 0.6.0 |
 | SE-Elektronic | E-DDC3.2 | 03.07.19 |
 | Siemens Building Technologies | DXR2.E18-1 | 01.22.273.16 |
@@ -73,7 +74,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Siemens Building Technologies | PXC200-E.D | V6.00.338 |
 | Siemens Building Technologies | PXC3.E75A-1 | v01.21 |
 | Siemens Building Technologies | PXC4.E16 | 02.22.233.30 |
-| Siemens Building Technologies | PXC4.E16-2 | 02.23.273.19 |
+| Siemens Building Technologies | PXC4.E16-2 | 02.22.233.30<br>02.23.273.19 |
 | Siemens Building Technologies | PXC5.E24 | 02.23.273.19 |
 | Siemens Building Technologies | PXC50-E.D / HWV3.00 | FWV6.30.026 / SBC15.01 / FLI06.30 / BBI13.06 / LWI01.10 / PM |
 | Siemens Building Technologies | PXC64-U + PXA30-W2 / HWV2.00 | FWV6.00.314 / SBC11.01 / FLI06.00 / BBI13.06 / PMC01.30 |
@@ -84,7 +85,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Signify | Interact BACnet gateway | N/A |
 | The Watt Stopper, Inc. | LMCP48 | 07.62 |
 | Trend Control Systems Ltd | IQ422 | IQ422-0 Iss4.37 Oct 24 2025<br>IQ422-12 Iss4.38 Dec 12 2025 |
-| Trend Control Systems Ltd | IQ4E | IQ4E96 Iss3.45 Aug 29 2017 |
+| Trend Control Systems Ltd | IQ4E | IQ4E16 Iss4.36 Oct 18 2024<br>IQ4E96 Iss3.45 Aug 29 2017<br>IQ4E96 Iss4.36 Oct 18 2024 |
 | Tridium | Niagara JACE | N/A |
 | Tridium | Niagara4 Station | 4.12.0.156<br>4.15.3.28 |
 | Xiamen Milesight IoT Co., Ltd. | UG65-868M-EA | 60.0.0.49-r2 |

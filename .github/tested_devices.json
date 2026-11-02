@@ -624,6 +624,19 @@
   },
   {
     "vendor": "Komfovent",
+    "model": "C5",
+    "firmware": "2.780",
+    "version": "1.0.53",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "Komfovent",
     "model": "C6",
     "firmware": "2",
     "version": "1.0.51",
@@ -899,6 +912,20 @@
   },
   {
     "vendor": "Schneider Electric",
+    "model": "SmartStruxure",
+    "firmware": "2.22.1.7",
+    "version": "1.0.53",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "Schneider Electric",
     "model": "spaceLYnk",
     "firmware": "0.6.0",
     "version": "1.0.53",
@@ -1029,6 +1056,20 @@
     "connection": "Same subnet",
     "works": [
       "Reading values"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "Siemens Building Technologies",
+    "model": "PXC4.E16-2",
+    "firmware": "02.22.233.30",
+    "version": "1.0.53",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
     ],
     "notes": "",
     "issue": null,
@@ -1218,6 +1259,34 @@
     "model": "IQ4E",
     "firmware": "IQ4E96 Iss3.45 Aug 29 2017",
     "version": "1.0.52",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "Trend Control Systems Ltd",
+    "model": "IQ4E",
+    "firmware": "IQ4E16 Iss4.36 Oct 18 2024",
+    "version": "1.0.54",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "Trend Control Systems Ltd",
+    "model": "IQ4E",
+    "firmware": "IQ4E96 Iss4.36 Oct 18 2024",
+    "version": "1.0.54",
     "connection": "Same subnet",
     "works": [
       "Reading values",
