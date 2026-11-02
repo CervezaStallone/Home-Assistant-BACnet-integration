@@ -6,7 +6,7 @@
 <p align="center">
   <a href="https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/releases/latest"><img src="https://img.shields.io/github/v/release/CervezaStallone/Home-Assistant-BACnet-integration?label=Version&color=gold" alt="Version"></a>
   <img src="https://img.shields.io/badge/Home%20Assistant-2024.4.0%2B-41BDF5" alt="Home Assistant 2024.4.0+">
-  <a href="https://hacs.xyz"><img src="https://img.shields.io/badge/HACS-Custom-orange" alt="HACS Custom"></a>
+  <a href="https://hacs.xyz"><img src="https://img.shields.io/badge/HACS-Default-41BDF5" alt="HACS Default"></a>
   <a href="https://github.com/CervezaStallone/Home-Assistant-BACnet-integration/actions/workflows/tests.yml"><img src="https://img.shields.io/github/actions/workflow/status/CervezaStallone/Home-Assistant-BACnet-integration/tests.yml?branch=master&label=Tests" alt="Tests"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/CervezaStallone/Home-Assistant-BACnet-integration?label=License" alt="License"></a>
 </p>
@@ -181,11 +181,13 @@ BACnet is a standard, so a device that isn't listed will most likely work too. T
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=CervezaStallone&repository=Home-Assistant-BACnet-integration&category=integration)
 
-1. Click the button above, or:
-   - Open **HACS** → **Integrations** → **⋮** → **Custom repositories**
-   - Paste this repository URL and select category **Integration**
+The integration is in the default HACS store.
+
+1. Open **HACS** and search for **BACnet IP Integration**, or click the button above
 2. Click **Download**
 3. **Restart** Home Assistant
+
+Added it earlier as a custom repository? Nothing to do; updates keep coming.
 
 ### Manual installation
 
