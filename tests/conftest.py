@@ -115,6 +115,8 @@ class _SensorDeviceClass(str, Enum):
     VOLUME_FLOW_RATE = "volume_flow_rate"
     VOLUME = "volume"
     VOLUME_STORAGE = "volume_storage"
+    WATER = "water"
+    GAS = "gas"
     SPEED = "speed"
     ILLUMINANCE = "illuminance"
     WEIGHT = "weight"
@@ -141,6 +143,19 @@ _DEVICE_CLASS_STATE_CLASSES = {
         _SensorStateClass.TOTAL_INCREASING,
     },
     _SensorDeviceClass.VOLUME_STORAGE: {_SensorStateClass.MEASUREMENT},
+    _SensorDeviceClass.WATER: {
+        _SensorStateClass.TOTAL,
+        _SensorStateClass.TOTAL_INCREASING,
+    },
+    _SensorDeviceClass.GAS: {
+        _SensorStateClass.TOTAL,
+        _SensorStateClass.TOTAL_INCREASING,
+    },
+}
+
+# Likewise for units: HA has no gallons for gas.
+_DEVICE_CLASS_UNITS = {
+    _SensorDeviceClass.GAS: {"m³", "ft³", "CCF", "MCF", "L"},
 }
 
 
@@ -335,6 +350,7 @@ _ha_sensor_mod.SensorEntity = _SensorEntity
 _ha_sensor_mod.SensorDeviceClass = _SensorDeviceClass
 _ha_sensor_mod.SensorStateClass = _SensorStateClass
 _ha_sensor_mod.DEVICE_CLASS_STATE_CLASSES = _DEVICE_CLASS_STATE_CLASSES
+_ha_sensor_mod.DEVICE_CLASS_UNITS = _DEVICE_CLASS_UNITS
 
 _ha_binary_sensor_mod = _ModuleStub()
 _ha_binary_sensor_mod.BinarySensorEntity = _BinarySensorEntity
@@ -425,6 +441,7 @@ def _make_coordinator(data: dict | None = None) -> MagicMock:
     coord.last_update_success = True
     coord.climate_temperature_sources = {}
     coord.state_classes = {}
+    coord.meter_types = {}
     coord.get_object_value.side_effect = lambda key, prop="presentValue": (
         coord.data.get(key, {}).get(prop)
     )

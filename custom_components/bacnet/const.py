@@ -80,6 +80,11 @@ STATE_CLASS_CHOICES = [
     STATE_CLASS_NONE,
 ]
 
+# Per-object meter type of volume sensors (obj_key -> "water" or "gas"): the
+# device class the energy dashboard needs. Objects with no entry stay volume.
+CONF_METER_TYPES = "meter_types"
+METER_TYPE_CHOICES = [STATE_CLASS_AUTO, "water", "gas"]
+
 # ---------------------------------------------------------------------------
 # Defaults
 # ---------------------------------------------------------------------------
@@ -219,9 +224,13 @@ BACNET_UNITS: dict[str, tuple[str, str | None]] = {
     "bars": ("bar", "pressure"),
     "pounds-force-per-square-inch": ("psi", "pressure"),
     "watts": ("W", "power"),
+    "milliwatts": ("mW", "power"),
     "kilowatts": ("kW", "power"),
     "megawatts": ("MW", "power"),
     "volt-amperes": ("VA", "apparent_power"),
+    "joules": ("J", "energy"),
+    "kilojoules": ("kJ", "energy"),
+    "megajoules": ("MJ", "energy"),
     "watt-hours": ("Wh", "energy"),
     "kilowatt-hours": ("kWh", "energy"),
     "megawatt-hours": ("MWh", "energy"),
@@ -233,9 +242,21 @@ BACNET_UNITS: dict[str, tuple[str, str | None]] = {
     "hertz": ("Hz", "frequency"),
     "liters-per-second": ("L/s", "volume_flow_rate"),
     "liters-per-minute": ("L/min", "volume_flow_rate"),
+    "liters-per-hour": ("L/h", "volume_flow_rate"),
+    "milliliters-per-second": ("mL/s", "volume_flow_rate"),
+    "cubic-meters-per-second": ("m³/s", "volume_flow_rate"),
+    "cubic-meters-per-minute": ("m³/min", "volume_flow_rate"),
     "cubic-meters-per-hour": ("m³/h", "volume_flow_rate"),
+    "cubic-feet-per-minute": ("ft³/min", "volume_flow_rate"),
+    "us-gallons-per-minute": ("gal/min", "volume_flow_rate"),
+    "us-gallons-per-hour": ("gal/h", "volume_flow_rate"),
+    # A volume meter is water or gas for the energy dashboard; the units
+    # can't tell, so that's CONF_METER_TYPES.
+    "milliliters": ("mL", "volume"),
     "liters": ("L", "volume"),
     "cubic-meters": ("m³", "volume"),
+    "cubic-feet": ("ft³", "volume"),
+    "us-gallons": ("gal", "volume"),
     "meters-per-second": ("m/s", "speed"),
     "luxes": ("lx", "illuminance"),
     "parts-per-million": ("ppm", None),

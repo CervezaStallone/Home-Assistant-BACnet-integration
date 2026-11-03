@@ -552,6 +552,62 @@ class TestSensorStateClass:
         assert sensor._attr_native_unit_of_measurement == "°C"
 
 
+class TestEnergyDashboardUnits:
+    """Units the energy dashboard accepts get the device class it needs."""
+
+    def _sensor(self, units, meter_type=None):
+        from custom_components.bacnet.sensor import BACnetSensor
+
+        obj = {"object_type": 0, "instance": 1, "object_name": "M", "units": units}
+        coord = _make_coordinator({})
+        if meter_type:
+            coord.meter_types = {"0:1": meter_type}
+        return BACnetSensor(coord, _make_entry(), obj)
+
+    @pytest.mark.parametrize(
+        ("units", "unit", "device_class"),
+        [
+            ("liters-per-hour", "L/h", "volume_flow_rate"),
+            ("cubic-meters-per-minute", "m³/min", "volume_flow_rate"),
+            ("cubic-meters-per-second", "m³/s", "volume_flow_rate"),
+            ("cubic-feet-per-minute", "ft³/min", "volume_flow_rate"),
+            ("us-gallons-per-minute", "gal/min", "volume_flow_rate"),
+            ("us-gallons-per-hour", "gal/h", "volume_flow_rate"),
+            ("milliliters-per-second", "mL/s", "volume_flow_rate"),
+            ("milliliters", "mL", "volume"),
+            ("us-gallons", "gal", "volume"),
+            ("cubic-feet", "ft³", "volume"),
+            ("joules", "J", "energy"),
+            ("kilojoules", "kJ", "energy"),
+            ("megajoules", "MJ", "energy"),
+            ("milliwatts", "mW", "power"),
+        ],
+    )
+    def test_unit_and_device_class(self, units, unit, device_class):
+        sensor = self._sensor(units)
+        assert sensor._attr_native_unit_of_measurement == unit
+        assert sensor._attr_device_class == device_class
+
+    def test_volume_meter_stays_volume_by_default(self):
+        # "liters" alone doesn't say water, gas or a tank: the user picks
+        assert self._sensor("liters")._attr_device_class == "volume"
+
+    @pytest.mark.parametrize("meter_type", ["water", "gas"])
+    @pytest.mark.parametrize("units", ["liters", "cubic-meters"])
+    def test_meter_type_sets_the_class_the_energy_dashboard_needs(
+        self, units, meter_type
+    ):
+        sensor = self._sensor(units, meter_type)
+        assert sensor._attr_device_class == meter_type
+        assert sensor._attr_state_class == "total_increasing"
+
+    def test_unit_the_device_class_rejects_drops_the_device_class(self):
+        # HA has no gallons for gas: keep the unit, lose the class
+        sensor = self._sensor("us-gallons", "gas")
+        assert sensor._attr_device_class is None
+        assert sensor._attr_native_unit_of_measurement == "gal"
+
+
 class TestUnrecordedAttributes:
     def test_static_bacnet_attributes_are_not_recorded(self):
         from custom_components.bacnet.entity import BACnetEntity

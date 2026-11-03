@@ -68,6 +68,7 @@ In plain terms: if your building has BACnet controllers, thermostats, sensors, o
 - **Trend logs** — read the records a controller logged with `bacnet.read_trend_log`
 - **Schedules** — BACnet Schedule objects as a sensor, with `bacnet.read_schedule` and `bacnet.write_schedule` services for the weekly schedule, exceptions and default
 - **Device limits & state texts** — number limits from `minPresValue`/`maxPresValue`/`resolution`, multi-state objects as a select with their `stateText` labels
+- **Energy dashboard** *(1.0.55 beta)* — energy, power, flow and volume units get the device class the Energy dashboard needs; mark a volume meter as a water or gas meter
 - **Climate with a real room temperature** — pair a setpoint with a separate temperature object
 - **Automatic outage recovery** — detects network outages, reconnects automatically and tells you in Repairs when a device stays unreachable
 - **Reconfigure** — change IP, port, BBMD or the device address without re-adding the integration
@@ -161,7 +162,9 @@ The integration is provided as is, without warranty (GPL-3.0, sections 15–16).
 
 > Value objects may or may not support writes — the integration auto-detects this by checking for a Priority Array during discovery.
 >
-> Analog sensors keep long-term statistics: energy and volume objects as a meter (`total_increasing`, usable in the Energy dashboard), all others as a `measurement`. The **state class** setting in [Customize objects](#customize-objects) changes this per object. Before 1.0.53, energy and volume sensors were a `measurement`; after updating, **Developer tools → Statistics** may list them with a changed state class. Click **Fix issue** there once per sensor.
+> Analog sensors keep long-term statistics: energy and volume objects as a meter (`total_increasing`, usable in the Energy dashboard), all others as a `measurement`. The **state class** setting in [Customize objects](#customize-objects) changes this per object. A water or gas meter in L or m³ also needs the **meter type** setting *(1.0.55 beta)* before the Energy dashboard lists it. Before 1.0.53, energy and volume sensors were a `measurement`; after updating, **Developer tools → Statistics** may list them with a changed state class. Click **Fix issue** there once per sensor.
+>
+> *(1.0.55 beta)* More BACnet units now get a Home Assistant unit, so the Energy dashboard can use them: L/h, mL/s, m³/s, m³/min, ft³/min, gal/min, gal/h, mL, ft³, gal, J, kJ, MJ and mW. Sensors in these units had no unit before. After updating, **Developer tools → Statistics** lists them with a changed unit and pauses their statistics until you click **Fix issue** once per sensor.
 >
 > Any object type can be changed to another entity type per object (see [Customize objects](#customize-objects)). Multi-state objects can also become a **select** that shows their `stateText` labels (e.g. *Off / Heat / Cool*).
 
@@ -260,7 +263,8 @@ This page has a searchable list of your objects. Pick the ones you want to chang
 - **temperature sensor** (climate objects only) — the object that provides the room temperature. Without one, the climate entity shows its setpoint as the current temperature. Just changed an object to climate? Save, then open the options again to pick its sensor.
 - **extra properties** — other BACnet properties of the object to show as their own entity, picked from a list that fits the object type. See [Extra properties as entities](#extra-properties-as-entities).
 - **other properties** — any other property, typed by name (`inactiveText`) or number, separated by commas. These become read-only sensors (unless the extra properties table lists them for that object type).
-- **state class** (analog objects shown as a sensor) — how Home Assistant keeps long-term statistics. **Automatic** gives *Measurement*, or *Total increasing* for energy (Wh, kWh, MWh) and volume (L, m³) objects, so meters work in the Energy dashboard. Pick **Measurement** for a value that isn't a counter, such as a tank level in m³ or a "last month" energy total; the sensor then becomes a stored energy or volume. **Total** is for a meter that can also go down, **None** turns statistics off.
+- **state class** (analog objects shown as a sensor) — how Home Assistant keeps long-term statistics. **Automatic** gives *Measurement*, or *Total increasing* for energy (J, kJ, MJ, Wh, kWh, MWh) and volume (mL, L, m³, ft³, gal) objects, so meters work in the Energy dashboard. Pick **Measurement** for a value that isn't a counter, such as a tank level in m³ or a "last month" energy total; the sensor then becomes a stored energy or volume. **Total** is for a meter that can also go down, **None** turns statistics off.
+- **meter type** *(1.0.55 beta)* (analog sensors in a volume unit: mL, L, m³, ft³, gal) — **Water meter** or **Gas meter** makes the sensor a water or gas sensor, which the Energy dashboard needs to offer it. BACnet units can't tell water from gas or a tank level, so the default stays a plain volume that the Energy dashboard doesn't list. Flow rates (L/h, m³/h, …) need no setting: they work as the water or gas flow in the Energy dashboard as they are.
 
 Objects not picked use the defaults. Settings of objects you remove with a rescan are remembered and come back if you add the object again.
 
