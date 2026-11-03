@@ -181,7 +181,7 @@
       },
       "customize_objects": {
         "title": "Customize objects",
-        "description": "Per object: the Home Assistant entity type, whether COV is used, for analog sensors the state class (auto, or measurement for a value that isn't a meter, such as a tank level or last month's total), for volume sensors the meter type (water or gas, needed for the Energy dashboard), and — for objects that are already a climate entity — which object provides the room temperature. Changed an object to climate just now? Save, then open the options again to pick its temperature sensor. Extra properties: pick properties (for example Minimum On Time or High Limit) to show as their own entity; type any other property by name or number under other properties."
+        "description": "Per object: the Home Assistant entity type, whether COV is used, for analog sensors the state class (auto, or measurement for a value that isn't a meter, such as a tank level or last month's total), for volume sensors the meter type (water or gas, needed for the Energy dashboard; a number can be switched to type sensor in the same save), and — for objects that are already a climate entity — which object provides the room temperature. Changed an object to climate just now? Save, then open the options again to pick its temperature sensor. Extra properties: pick properties (for example Minimum On Time or High Limit) to show as their own entity; type any other property by name or number under other properties."
       }
     },
     "error": {

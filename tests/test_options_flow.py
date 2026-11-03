@@ -236,7 +236,7 @@ class TestClimateTemperatureSource:
 class TestStateClass:
     """Issue #137: tank levels and snapshot totals aren't meters."""
 
-    def test_field_only_for_analog_sensors(self, monkeypatch):
+    def test_field_only_for_analog_sensors_and_numbers(self, monkeypatch):
         flow = _flow([_AI, _AV_SP, _BV_NON_COMMANDABLE])
         form = _run(
             flow.async_step_domain_mapping(
@@ -245,7 +245,8 @@ class TestStateClass:
             monkeypatch,
         )
         assert form["fields"][_field(_AI, "state class")] == "auto"
-        assert _field(_AV_SP, "state class") not in form["fields"]  # number
+        # A number can become a sensor in the same save
+        assert form["fields"][_field(_AV_SP, "state class")] == "auto"
         assert _field(_BV_NON_COMMANDABLE, "state class") not in form["fields"]
 
     def test_choices_are_translated_labels(self, monkeypatch):
@@ -305,6 +306,27 @@ class TestMeterType:
         assert kind == "select"
         assert config["translation_key"] == "meter_type"
         assert config["options"] == METER_TYPE_CHOICES
+
+    def test_number_becomes_a_water_meter_in_one_save(self, monkeypatch):
+        # A commandable AV is a number; type and meter type go in one form
+        meter = {**_METER, "object_type": 2, "commandable": True}
+        flow = _flow([meter])
+        form = _run(
+            flow.async_step_domain_mapping({CONF_CUSTOMIZE_OBJECTS: ["2:5"]}),
+            monkeypatch,
+        )
+        assert form["fields"][_field(meter, "meter type")] == "auto"
+        result = _run(
+            flow.async_step_customize_objects(
+                {
+                    _field(meter, "type"): "sensor",
+                    _field(meter, "meter type"): "water",
+                }
+            ),
+            monkeypatch,
+        )
+        assert result["data"][CONF_METER_TYPES] == {"2:5": "water"}
+        assert result["data"][CONF_DOMAIN_MAPPING] == {"2:5": "sensor"}
 
     def test_choice_is_stored_and_auto_clears_it(self, monkeypatch):
         flow = _flow([_METER])
