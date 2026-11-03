@@ -391,6 +391,19 @@
     "source": "telemetry"
   },
   {
+    "vendor": "Eco-Adapt",
+    "model": "Power-Elec-6 ng",
+    "firmware": "0.7.1",
+    "version": "1.0.54",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
     "vendor": "Exhausto A/S",
     "model": "ABC 1.0",
     "firmware": "FW1.0",
@@ -943,6 +956,20 @@
     "model": "E-DDC3.2",
     "firmware": "03.07.19",
     "version": "1.0.52",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "Siemens Building Technologies",
+    "model": "DXR2",
+    "firmware": "11.52",
+    "version": "1.0.54",
     "connection": "Same subnet",
     "works": [
       "Reading values",
