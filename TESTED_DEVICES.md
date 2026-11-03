@@ -61,6 +61,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Philips Dynalite | PDDEG-S | 1.46.23156 |
 | Reliable Controls Corporation | MACH-ProSys | 8.31.501,1001,07 |
 | RESOL - Elektronische Regelungen GmbH | RESOL DL3 | 0.5.8 |
+| SAUTER | AVM115SAF332 | V2.0.1b329 |
 | SAUTER | EY-AS525F001 | V3.1.2b802<br>V3.1.6b1058 |
 | SAUTER | EY-RC504F001 | V3.2.0b964 |
 | SAUTER | EY6AS80F021 | V4.0.0b7006 |
