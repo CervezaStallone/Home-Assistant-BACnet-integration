@@ -390,7 +390,8 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
                         default=sources.get(key, ""),
                     )
                 ] = vol.In({k: v for k, v in temperature_choices.items() if k != key})
-            if domain == "sensor" and obj["object_type"] in _ANALOG_TYPES:
+            # Also for a number, so it can become a sensor in the same save
+            if domain in ("sensor", "number") and obj["object_type"] in _ANALOG_TYPES:
                 fields[
                     vol.Optional(
                         self._field(obj, "state class"),

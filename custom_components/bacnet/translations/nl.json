@@ -181,7 +181,7 @@
       },
       "customize_objects": {
         "title": "Objecten aanpassen",
-        "description": "Per object: het entiteittype in Home Assistant, of COV wordt gebruikt, bij analoge sensoren de state class (auto, of measurement voor een waarde die geen meterstand is, zoals een tankniveau of het totaal van vorige maand), bij volumesensoren het metertype (water of gas, nodig voor het energiedashboard) en — voor objecten die al een climate-entiteit zijn — welk object de ruimtetemperatuur levert. Heb je een object net naar climate omgezet? Sla op en open de opties opnieuw om de temperatuursensor te kiezen. Extra properties: kies properties (bijvoorbeeld Minimum On Time of High Limit) om als eigen entiteit te tonen; typ andere properties op naam of nummer bij other properties."
+        "description": "Per object: het entiteittype in Home Assistant, of COV wordt gebruikt, bij analoge sensoren de state class (auto, of measurement voor een waarde die geen meterstand is, zoals een tankniveau of het totaal van vorige maand), bij volumesensoren het metertype (water of gas, nodig voor het energiedashboard; een number kun je in dezelfde keer naar type sensor zetten) en — voor objecten die al een climate-entiteit zijn — welk object de ruimtetemperatuur levert. Heb je een object net naar climate omgezet? Sla op en open de opties opnieuw om de temperatuursensor te kiezen. Extra properties: kies properties (bijvoorbeeld Minimum On Time of High Limit) om als eigen entiteit te tonen; typ andere properties op naam of nummer bij other properties."
       }
     },
     "error": {
