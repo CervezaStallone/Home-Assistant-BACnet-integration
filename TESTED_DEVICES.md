@@ -34,6 +34,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Distech Controls, Inc. | ECY-303 Rev 1.0A | 1.22.22026.1 |
 | Distech Controls, Inc. | ECY-S1000 Rev 1.0A | 1.22.22026.1 |
 | Distech-Controls, Inc. | ECY-S1000-BI | 1.22.23149.1 |
+| Eco-Adapt | Power-Elec-6 ng | 0.7.1 |
 | Exhausto A/S | ABC 1.0 | FW1.0 |
 | Global Control 5 | iSMA-B-MIX18-IP | 6.5.3 |
 | Global Control 5 S.A. | iSMA-B-MIX18-IP | 6.5.3 |
@@ -67,6 +68,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Schneider Electric | SmartStruxure | 2.20.1.4<br>2.22.1.7 |
 | Schneider Electric | spaceLYnk | 0.6.0 |
 | SE-Elektronic | E-DDC3.2 | 03.07.19 |
+| Siemens Building Technologies | DXR2 | 11.52 |
 | Siemens Building Technologies | DXR2.E18-1 | 01.22.273.16 |
 | Siemens Building Technologies | POS3.57 | FW04.60.01.13:BL00.01.07.0003;SVS-300.10:SBC15.01;ISC01.00; |
 | Siemens Building Technologies | PXA40-W2 | N/A |
