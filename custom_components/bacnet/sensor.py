@@ -17,6 +17,7 @@ from typing import Any
 
 from homeassistant.components.sensor import (
     DEVICE_CLASS_STATE_CLASSES,
+    DEVICE_CLASS_UNITS,
     SensorDeviceClass,
     SensorEntity,
     SensorStateClass,
@@ -115,6 +116,12 @@ class BACnetSensor(BACnetEntity, SensorEntity):
 
         # Determine device class and native unit from BACnet units
         unit, device_class = BACNET_UNITS.get(obj.get("units") or "", (None, None))
+        if device_class == SensorDeviceClass.VOLUME:
+            # Water or gas, so the energy dashboard offers it
+            device_class = coordinator.meter_types.get(self._obj_key, device_class)
+        if unit not in DEVICE_CLASS_UNITS.get(device_class, {unit}):
+            # Older HA, or no gallons for gas: keep the unit, drop the class
+            device_class = None
         self._attr_native_unit_of_measurement = unit
         self._attr_device_class = (
             SensorDeviceClass(device_class) if device_class else None

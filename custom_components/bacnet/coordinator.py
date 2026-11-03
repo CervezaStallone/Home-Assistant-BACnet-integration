@@ -121,6 +121,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         climate_temperature_sources: dict[str, str] | None = None,
         extra_properties: dict[str, list[str]] | None = None,
         state_classes: dict[str, str] | None = None,
+        meter_types: dict[str, str] | None = None,
     ) -> None:
         """Initialise the coordinator.
 
@@ -147,6 +148,8 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 polled with every poll and shown as their own entities.
             state_classes: obj_key → state class of an analog sensor
                 (options flow); objects with no entry use the default.
+            meter_types: obj_key → "water" or "gas" for a volume sensor
+                (options flow), the device class the energy dashboard needs.
         """
         self.client = client
         self.objects = objects
@@ -161,6 +164,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.climate_temperature_sources = climate_temperature_sources or {}
         self.extra_properties = extra_properties or {}
         self.state_classes = state_classes or {}
+        self.meter_types = meter_types or {}
         # Active alarms from GetEventInformation; None until the first fetch
         # (and for devices without the service).
         self.active_alarms: list[dict[str, Any]] | None = None

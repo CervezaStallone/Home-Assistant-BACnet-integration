@@ -23,8 +23,10 @@ from custom_components.bacnet.const import (
     CONF_DOMAIN_MAPPING,
     CONF_ENABLE_COV,
     CONF_KEPT_DOMAIN_OVERRIDES,
+    CONF_METER_TYPES,
     CONF_SELECTED_OBJECTS,
     CONF_STATE_CLASSES,
+    METER_TYPE_CHOICES,
     STATE_CLASS_CHOICES,
 )
 from custom_components.bacnet.helpers import object_label
@@ -283,6 +285,51 @@ class TestStateClass:
             monkeypatch,
         )
         assert result["data"][CONF_STATE_CLASSES] == {}
+
+
+_METER = {"object_type": 0, "instance": 5, "object_name": "Water", "units": "liters"}
+
+
+class TestMeterType:
+    """A volume meter must be water or gas for the energy dashboard."""
+
+    def test_field_only_for_volume_sensors(self, monkeypatch):
+        flow = _flow([_METER, _AI])
+        form = _run(
+            flow.async_step_domain_mapping({CONF_CUSTOMIZE_OBJECTS: ["0:5", "0:3"]}),
+            monkeypatch,
+        )
+        assert form["fields"][_field(_METER, "meter type")] == "auto"
+        assert _field(_AI, "meter type") not in form["fields"]
+        kind, config = form["validators"][_field(_METER, "meter type")]
+        assert kind == "select"
+        assert config["translation_key"] == "meter_type"
+        assert config["options"] == METER_TYPE_CHOICES
+
+    def test_choice_is_stored_and_auto_clears_it(self, monkeypatch):
+        flow = _flow([_METER])
+        _run(
+            flow.async_step_domain_mapping({CONF_CUSTOMIZE_OBJECTS: ["0:5"]}),
+            monkeypatch,
+        )
+        result = _run(
+            flow.async_step_customize_objects({_field(_METER, "meter type"): "water"}),
+            monkeypatch,
+        )
+        assert result["data"][CONF_METER_TYPES] == {"0:5": "water"}
+
+        flow = _flow([_METER], options=result["data"])
+        form = _run(flow.async_step_domain_mapping(), monkeypatch)
+        assert form["fields"][CONF_CUSTOMIZE_OBJECTS] == ["0:5"]
+        _run(
+            flow.async_step_domain_mapping({CONF_CUSTOMIZE_OBJECTS: ["0:5"]}),
+            monkeypatch,
+        )
+        result = _run(
+            flow.async_step_customize_objects({_field(_METER, "meter type"): "auto"}),
+            monkeypatch,
+        )
+        assert result["data"][CONF_METER_TYPES] == {}
 
 
 _NEW_AI = {"object_type": 0, "instance": 9, "object_name": "New"}

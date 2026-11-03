@@ -6,8 +6,9 @@ Steps behind the integration's "Configure" button:
   settings          – COV toggle, polling interval, naming, live metadata
   rescan_objects    – re-read the device's object list, then domain_mapping
   domain_mapping    – pick which objects to customise (unpicked = defaults)
-  customize_objects – per picked object: HA type, COV on/off, state class
-                      and, for climate objects, the temperature object
+  customize_objects – per picked object: HA type, COV on/off, state class,
+                      meter type (water/gas) and, for climate objects, the
+                      temperature object
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ from homeassistant.helpers.selector import (
 
 from .bacnet_client import BACnetClient
 from .const import (
+    BACNET_UNITS,
     CONF_ADD_OBJECTS,
     CONF_CLIMATE_TEMPERATURE_SOURCES,
     CONF_COV_INCREMENT,
@@ -39,6 +41,7 @@ from .const import (
     CONF_EXTRA_PROPERTIES,
     CONF_KEPT_DOMAIN_OVERRIDES,
     CONF_LIVE_METADATA_PROPERTIES,
+    CONF_METER_TYPES,
     CONF_POLLING_INTERVAL,
     CONF_REMOVE_OBJECTS,
     CONF_SELECT_TYPES,
@@ -53,6 +56,7 @@ from .const import (
     DEFAULT_USE_DESCRIPTION,
     EXTRA_PROPERTY_SPECS,
     LIVE_METADATA_PROPERTY_CHOICES,
+    METER_TYPE_CHOICES,
     MIN_POLLING_INTERVAL,
     OBJECT_TYPE_ANALOG_INPUT,
     OBJECT_TYPE_ANALOG_OUTPUT,
@@ -306,6 +310,7 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
             | set(self._current(CONF_CLIMATE_TEMPERATURE_SOURCES))
             | set(self._current(CONF_EXTRA_PROPERTIES))
             | set(self._current(CONF_STATE_CLASSES))
+            | set(self._current(CONF_METER_TYPES))
         )
         options = {_object_key(o): _object_label(o) for o in objects}
         schema = vol.Schema(
@@ -321,7 +326,7 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
     async def async_step_customize_objects(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """HA type, COV, climate temperature source and state class.
+        """HA type, COV, climate temperature source, state class and meter type.
 
         Field names are the objects' own labels (a translation can't name a
         per-device object), so the form reads e.g. "Analog Value (4) — SP — type".
@@ -338,6 +343,7 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
                         "extra properties",
                         "other properties",
                         "state class",
+                        "meter type",
                     )
                 }
                 for obj in self._customize
@@ -359,6 +365,7 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
         sources = self._current(CONF_CLIMATE_TEMPERATURE_SOURCES)
         extras = self._current(CONF_EXTRA_PROPERTIES)
         state_classes = self._current(CONF_STATE_CLASSES)
+        meter_types = self._current(CONF_METER_TYPES)
         temperature_choices = {"": "—"} | {
             _object_key(o): _object_label(o)
             for o in self._selected_objects
@@ -396,6 +403,21 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
                         translation_key="state_class",
                     )
                 )
+                if BACNET_UNITS.get(obj.get("units") or "", (None, None))[1] == (
+                    "volume"
+                ):
+                    fields[
+                        vol.Optional(
+                            self._field(obj, "meter type"),
+                            default=meter_types.get(key, STATE_CLASS_AUTO),
+                        )
+                    ] = SelectSelector(
+                        SelectSelectorConfig(
+                            options=METER_TYPE_CHOICES,
+                            mode=SelectSelectorMode.LIST,
+                            translation_key="meter_type",
+                        )
+                    )
             offered = {
                 prop: f"{property_label(prop)} ({prop})"
                 for prop, (_, types, _) in EXTRA_PROPERTY_SPECS.items()
@@ -437,6 +459,7 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
         sources = dict(self._current(CONF_CLIMATE_TEMPERATURE_SOURCES))
         extras = dict(self._current(CONF_EXTRA_PROPERTIES))
         states = dict(self._current(CONF_STATE_CLASSES))
+        meters = dict(self._current(CONF_METER_TYPES))
         selected = {_object_key(o) for o in self._selected_objects}
         kept = [
             k
@@ -445,7 +468,7 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
         ]
         for obj in self._selected_objects:
             key = _object_key(obj)
-            for store in (domains, covs, sources, extras, states):
+            for store in (domains, covs, sources, extras, states, meters):
                 store.pop(key, None)
             edit = edits.get(key)
             if edit is None:
@@ -468,6 +491,8 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
                 extras[key] = picked
             if edit.get("state class") not in (None, STATE_CLASS_AUTO):
                 states[key] = edit["state class"]
+            if edit.get("meter type") not in (None, STATE_CLASS_AUTO):
+                meters[key] = edit["meter type"]
 
         return self.async_create_entry(
             title="",
@@ -478,6 +503,7 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
                 CONF_CLIMATE_TEMPERATURE_SOURCES: sources,
                 CONF_EXTRA_PROPERTIES: extras,
                 CONF_STATE_CLASSES: states,
+                CONF_METER_TYPES: meters,
                 CONF_KEPT_DOMAIN_OVERRIDES: kept,
             },
         )
