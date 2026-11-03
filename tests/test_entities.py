@@ -216,6 +216,12 @@ class TestNumberNativeValue:
         entity = _number(obj, {"1:1": {"presentValue": 42.5}})
         assert entity.native_value == pytest.approx(42.5)
 
+    def test_float32_noise_is_stripped(self):
+        # BACnet REAL 1.44 arrives as 1.43999993801117
+        obj = {"object_type": 1, "instance": 1, "commandable": True, "object_name": "N"}
+        entity = _number(obj, {"1:1": {"presentValue": 1.43999993801117}})
+        assert entity.native_value == 1.44
+
     def test_none_when_missing(self):
         obj = {"object_type": 1, "instance": 1, "commandable": True, "object_name": "N"}
         entity = _number(obj, {})
