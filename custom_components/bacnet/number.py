@@ -107,7 +107,9 @@ class BACnetNumber(BACnetEntity, NumberEntity):
         if value is None:
             return None
         try:
-            return float(value)
+            # BACnet REAL is float32: keep its ~7 significant digits and
+            # drop the float64 conversion noise (1.43999993801117).
+            return float(f"{float(value):.7g}")
         except (ValueError, TypeError):
             return None
 
