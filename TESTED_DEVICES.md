@@ -74,6 +74,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Siemens Building Technologies | DXR2.E18-1 | 01.22.273.16 |
 | Siemens Building Technologies | POS3.57 | FW04.60.01.13:BL00.01.07.0003;SVS-300.10:SBC15.01;ISC01.00; |
 | Siemens Building Technologies | PXA40-W2 | N/A |
+| Siemens Building Technologies | PXC001-E.D / HWV4.01 | FWV6.30.066L KNX S-mode / SBC15.01 / FLI06.30 / BBI13.06 |
 | Siemens Building Technologies | PXC100-E.D / HWV3.00 | FWV6.30.026 / SBC15.01 / FLI06.30 / BBI13.06 / LWI01.10 / PM |
 | Siemens Building Technologies | PXC200-E.D | V6.00.338 |
 | Siemens Building Technologies | PXC3.E75A-1 | v01.21 |
