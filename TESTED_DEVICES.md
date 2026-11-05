@@ -61,6 +61,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | OJ Electronics A/S | OJ-Air2 | 1.2 |
 | Philips Dynalite | PDDEG-S | 1.46.23156 |
 | Reliable Controls Corporation | MACH-ProSys | 8.31.501,1001,07 |
+| Reliable Controls Corporation | MACH-ProWebCom | 8.31.4 |
 | Reliable Controls Corporation | MACH-ProZone MPZ-88 | 8.05.4 |
 | RESOL - Elektronische Regelungen GmbH | RESOL DL3 | 0.5.8 |
 | SAUTER | AVM115SAF332 | V2.0.1b329 |
