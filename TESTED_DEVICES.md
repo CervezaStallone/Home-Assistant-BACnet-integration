@@ -25,6 +25,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Control Solutions | Babel Buster BB3-7101 | 3.15.18 |
 | DAMATEX | N/A | N/A |
 | Delta Controls | DSM_RTR | 189697 |
+| Delta Controls | eBMGR-2 | 8.0.0.EBUS.1.387 |
 | Delta Controls | eBMGR-TCH | 804872 |
 | Delta Controls | eZNT-Wi-T304CHM | 510082 |
 | Delta Controls | O3-DIN-SRC | 8.0.0.O3-DIN.1.387 |
@@ -60,6 +61,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | OJ Electronics A/S | OJ-Air2 | 1.2 |
 | Philips Dynalite | PDDEG-S | 1.46.23156 |
 | Reliable Controls Corporation | MACH-ProSys | 8.31.501,1001,07 |
+| Reliable Controls Corporation | MACH-ProZone MPZ-88 | 8.05.4 |
 | RESOL - Elektronische Regelungen GmbH | RESOL DL3 | 0.5.8 |
 | SAUTER | AVM115SAF332 | V2.0.1b329 |
 | SAUTER | EY-AS525F001 | V3.1.2b802<br>V3.1.6b1058 |
@@ -73,6 +75,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Siemens Building Technologies | DXR2.E18-1 | 01.22.273.16 |
 | Siemens Building Technologies | POS3.57 | FW04.60.01.13:BL00.01.07.0003;SVS-300.10:SBC15.01;ISC01.00; |
 | Siemens Building Technologies | PXA40-W2 | N/A |
+| Siemens Building Technologies | PXC001-E.D / HWV4.01 | FWV6.30.066L KNX S-mode / SBC15.01 / FLI06.30 / BBI13.06 |
 | Siemens Building Technologies | PXC100-E.D / HWV3.00 | FWV6.30.026 / SBC15.01 / FLI06.30 / BBI13.06 / LWI01.10 / PM |
 | Siemens Building Technologies | PXC200-E.D | V6.00.338 |
 | Siemens Building Technologies | PXC3.E75A-1 | v01.21 |
@@ -82,7 +85,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Siemens Building Technologies | PXC50-E.D / HWV3.00 | FWV6.30.026 / SBC15.01 / FLI06.30 / BBI13.06 / LWI01.10 / PM |
 | Siemens Building Technologies | PXC64-U + PXA30-W2 / HWV2.00 | FWV6.00.314 / SBC11.01 / FLI06.00 / BBI13.06 / PMC01.30 |
 | Siemens Building Technologies | PXC64-U + PXA30-W2 / HWV2.02 | FWV5.10.060 / SBC10.02 / FLI05.10 / BBI13.04 / PMC01.30 |
-| Siemens Building Technologies | PXC7.E400L | 02.23.273.19<br>02.24.314.2 |
+| Siemens Building Technologies | PXC7.E400L | 02.23.273.19<br>02.23.273.22<br>02.24.314.2 |
 | Siemens Building Technologies | PXC7.E400M | 02.21.194.36<br>02.23.273.16 |
 | Sierra Monitor Corporation | FPC-N54 | V2.23m |
 | Signify | Interact BACnet gateway | N/A |

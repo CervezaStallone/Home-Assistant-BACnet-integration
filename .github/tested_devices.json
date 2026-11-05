@@ -246,6 +246,20 @@
   },
   {
     "vendor": "Delta Controls",
+    "model": "eBMGR-2",
+    "firmware": "8.0.0.EBUS.1.387",
+    "version": "1.0.55",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "Delta Controls",
     "model": "eBMGR-TCH",
     "firmware": "804872",
     "version": "1.0.53",
@@ -827,6 +841,20 @@
     "source": "telemetry"
   },
   {
+    "vendor": "Reliable Controls Corporation",
+    "model": "MACH-ProZone MPZ-88",
+    "firmware": "8.05.4",
+    "version": "1.0.55",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
     "vendor": "RESOL - Elektronische Regelungen GmbH",
     "model": "RESOL DL3",
     "firmware": "0.5.8",
@@ -1036,6 +1064,20 @@
   },
   {
     "vendor": "Siemens Building Technologies",
+    "model": "PXC001-E.D / HW=V4.01",
+    "firmware": "FW=V6.30.066L KNX S-mode / SBC=15.01 / FLI=06.30 / BBI=13.06",
+    "version": "1.0.55",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "Siemens Building Technologies",
     "model": "PXC100-E.D / HW=V3.00",
     "firmware": "FW=V6.30.026 / SBC=15.01 / FLI=06.30 / BBI=13.06 / LWI=01.10 / PMC=01.30 / STF=01.20",
     "version": "1.0.53",
@@ -1190,6 +1232,20 @@
     "model": "PXC7.E400L",
     "firmware": "02.24.314.2",
     "version": "1.0.52",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "Siemens Building Technologies",
+    "model": "PXC7.E400L",
+    "firmware": "02.23.273.22",
+    "version": "1.0.55",
     "connection": "Same subnet",
     "works": [
       "Reading values",
