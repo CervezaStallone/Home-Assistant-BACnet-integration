@@ -842,6 +842,20 @@
   },
   {
     "vendor": "Reliable Controls Corporation",
+    "model": "MACH-ProWebCom",
+    "firmware": "8.31.4",
+    "version": "1.0.53",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "Reliable Controls Corporation",
     "model": "MACH-ProZone MPZ-88",
     "firmware": "8.05.4",
     "version": "1.0.55",
