@@ -44,8 +44,8 @@ Please be respectful and constructive in all interactions. This project follows 
 
 ### Requirements
 
-- **Python 3.11+**
-- **Home Assistant** 2024.1.0 or newer (for local testing)
+- **Python 3.12+**
+- **Home Assistant** 2024.4.0 or newer (for local testing)
 - A BACnet/IP device or simulator (e.g. [VTS](https://sourceforge.net/projects/vts/), [YABE](https://sourceforge.net/projects/yetanotherbacnetexplorer/), or a software BACnet server)
 
 ### Install dependencies
@@ -55,7 +55,7 @@ It is recommended to work inside a virtual environment:
 ```bash
 python -m venv venv
 source venv/bin/activate          # Windows: venv\Scripts\activate
-pip install bacpypes3 homeassistant
+pip install bacpypes3==<version from manifest.json> homeassistant ruff pytest pytest-cov voluptuous
 ```
 
 ### Linking the integration to a local Home Assistant instance
@@ -171,15 +171,14 @@ This project follows the [Home Assistant developer guidelines](https://developer
 
 - Follow **[PEP 8](https://peps.python.org/pep-0008/)**.
 - Use **type hints** for all function signatures.
-- Format code with **[Black](https://github.com/psf/black)** (default settings):
+- Lint and format with **[Ruff](https://docs.astral.sh/ruff/)**. CI runs the latest Ruff, so run the same checks before you push:
   ```bash
-  pip install black
-  black custom_components/bacnet/
+  ruff check .
+  ruff format .
   ```
-- Sort imports with **[isort](https://pycqa.github.io/isort/)**:
+- Run the tests:
   ```bash
-  pip install isort
-  isort custom_components/bacnet/
+  pytest tests/
   ```
 
 ### Home Assistant conventions
