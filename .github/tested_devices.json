@@ -1037,6 +1037,20 @@
   },
   {
     "vendor": "Siemens Building Technologies",
+    "model": "Climatix POL908",
+    "firmware": "11.48",
+    "version": "1.0.55",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "Siemens Building Technologies",
     "model": "DXR2",
     "firmware": "11.52",
     "version": "1.0.54",
