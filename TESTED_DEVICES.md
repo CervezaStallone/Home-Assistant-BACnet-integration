@@ -31,11 +31,11 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Delta Controls | O3-DIN-SRC | 8.0.0.O3-DIN.1.387 |
 | Delta Electronics | IFD-BC-01 | 0.6.0 |
 | DIGICONTROL | ems2.CP04X | ems2-BACnet 2.02 |
+| Distech Controls | ECY-303 Rev 1.0A | 1.22.22026.1 |
+| Distech Controls | ECY-S1000 Rev 1.0A | 1.22.22026.1 |
+| Distech Controls | ECY-S1000-BI | 1.22.23149.1 |
 | Distech Controls | ECY-TU203 Rev 1.0A | 1.19.23041.871<br>1.22.22026.1 |
 | Distech Controls | ECY-VAV Gen 1 NON BI | 1.19.26161 |
-| Distech Controls, Inc. | ECY-303 Rev 1.0A | 1.22.22026.1 |
-| Distech Controls, Inc. | ECY-S1000 Rev 1.0A | 1.22.22026.1 |
-| Distech-Controls, Inc. | ECY-S1000-BI | 1.22.23149.1 |
 | Eco-Adapt | Power-Elec-6 ng | 0.7.1 |
 | Exhausto A/S | ABC 1.0 | FW1.0 |
 | Global Control 5 | iSMA-B-MIX18-IP | 6.5.3 |
