@@ -330,6 +330,48 @@
   },
   {
     "vendor": "Distech Controls",
+    "model": "ECY-303 Rev 1.0A",
+    "firmware": "1.22.22026.1",
+    "version": "1.0.53",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "Distech Controls",
+    "model": "ECY-S1000 Rev 1.0A",
+    "firmware": "1.22.22026.1",
+    "version": "1.0.53",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "Distech Controls",
+    "model": "ECY-S1000-BI",
+    "firmware": "1.22.23149.1",
+    "version": "1.0.52",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "Distech Controls",
     "model": "ECY-TU203 Rev 1.0A",
     "firmware": "1.22.22026.1",
     "version": "1.0.50-beta.9",
@@ -375,48 +417,6 @@
     ],
     "notes": "Works great, all I had to type in was the static IP and the device ID then it automatically discovered instantly",
     "issue": 83
-  },
-  {
-    "vendor": "Distech Controls, Inc.",
-    "model": "ECY-303 Rev 1.0A",
-    "firmware": "1.22.22026.1",
-    "version": "1.0.53",
-    "connection": "Same subnet",
-    "works": [
-      "Reading values",
-      "COV (live updates)"
-    ],
-    "notes": "",
-    "issue": null,
-    "source": "telemetry"
-  },
-  {
-    "vendor": "Distech Controls, Inc.",
-    "model": "ECY-S1000 Rev 1.0A",
-    "firmware": "1.22.22026.1",
-    "version": "1.0.53",
-    "connection": "Same subnet",
-    "works": [
-      "Reading values",
-      "COV (live updates)"
-    ],
-    "notes": "",
-    "issue": null,
-    "source": "telemetry"
-  },
-  {
-    "vendor": "Distech-Controls, Inc.",
-    "model": "ECY-S1000-BI",
-    "firmware": "1.22.23149.1",
-    "version": "1.0.52",
-    "connection": "Same subnet",
-    "works": [
-      "Reading values",
-      "COV (live updates)"
-    ],
-    "notes": "",
-    "issue": null,
-    "source": "telemetry"
   },
   {
     "vendor": "Eco-Adapt",
