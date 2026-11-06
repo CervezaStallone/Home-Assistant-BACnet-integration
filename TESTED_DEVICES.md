@@ -29,6 +29,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Delta Controls | eBMGR-TCH | 804872 |
 | Delta Controls | eZNT-Wi-T304CHM | 510082 |
 | Delta Controls | O3-DIN-SRC | 8.0.0.O3-DIN.1.387 |
+| Delta Controls | Red5-EDGE-634 | 8.0.0.Red5.1.387 |
 | Delta Electronics | IFD-BC-01 | 0.6.0 |
 | DIGICONTROL | ems2.CP04X | ems2-BACnet 2.02 |
 | Distech Controls | ECY-303 Rev 1.0A | 1.22.22026.1 |
