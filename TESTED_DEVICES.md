@@ -46,6 +46,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Honeywell International Inc. | XLWeb2 | 12-02-04 |
 | IP Video Corp | HALO-3C | 2.20.2.5.558-3 |
 | JCI | MS-NAE3511-1 | 2.2.0.5100 |
+| Johnson Controls | M4-SNE10501-0 | 14.1.0.1788 |
 | Kieback&Peter | DDC4000 | B1.15#0<br>B1.16#0<br>B1.18#0<br>B1.20#0<br>N/A |
 | Kieback&Peter | DDC420 | 1.2<br>N/A |
 | KNXlogic | ComfoWay V3 | 0.6.0 |
