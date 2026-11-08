@@ -459,6 +459,20 @@
     "source": "telemetry"
   },
   {
+    "vendor": "Fell Technology AS",
+    "model": "Abra Linkbox+",
+    "firmware": "1.3.4",
+    "version": "1.0.55",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
     "vendor": "Global Control 5",
     "model": "iSMA-B-MIX18-IP",
     "firmware": "6.5.3",
