@@ -40,6 +40,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Eco-Adapt | Power-Elec-6 ng | 0.7.1 |
 | Exhausto A/S | ABC 1.0 | FW1.0 |
 | Fell Technology AS | Abra Linkbox+ | 1.3.4 |
+| Geberit AG | Geberit Gateway | 0.11 |
 | Global Control 5 | iSMA-B-MIX18-IP | 6.5.3 |
 | Global Control 5 S.A. | iSMA-B-MIX18-IP | 6.5.3 |
 | GOSSEN METRAWATT | EM2289 Energy Meter | 1.18 |
