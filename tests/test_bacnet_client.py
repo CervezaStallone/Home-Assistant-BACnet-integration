@@ -507,6 +507,16 @@ class TestDisconnectCovTeardown:
 
         asyncio.run(run())
 
+    def test_disconnect_bumps_connection_generation(self):
+        """Other coordinators sharing this client must see that their COV
+        tasks are gone after a reconnect triggered by one of them (#12)."""
+        client = BACnetClient(local_ip="127.0.0.1", local_port=47820)
+        before = client.connection_generation
+
+        asyncio.run(client.disconnect(graceful=False))
+
+        assert client.connection_generation == before + 1
+
 
 # ---------------------------------------------------------------------------
 # refresh_object_metadata() — issue #26 (stale metadata after discovery)

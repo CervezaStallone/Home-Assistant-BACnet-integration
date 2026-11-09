@@ -190,6 +190,9 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # after a reconnect so the next successful poll re-creates COV subs.
         self._consecutive_failures: int = 0
         self._needs_resubscribe: bool = False
+        # client.connection_generation at our last subscribe; differs once the
+        # shared client reconnected, whichever entry caused it (issue #12).
+        self._cov_generation: int = client.connection_generation
         self.last_successful_poll: datetime | None = None
         # Repair issues persist across restarts, so assume one may exist
         # until the first successful poll has cleared it.
@@ -294,7 +297,10 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             await self._refresh_alarms()
             # After a reconnect, rebuild COV subscriptions once the device is
             # confirmed reachable again.
-            if self._needs_resubscribe:
+            if (
+                self._needs_resubscribe
+                or self._cov_generation != self.client.connection_generation
+            ):
                 await self._restore_subscriptions()
 
             # Piggyback the metadata refresh on this same successful cycle
@@ -714,6 +720,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         COV and the rest go straight to polling — otherwise every object
         would wait out its own subscribe timeout during setup.
         """
+        self._cov_generation = self.client.connection_generation
         self._polled_objects = []
         semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 
