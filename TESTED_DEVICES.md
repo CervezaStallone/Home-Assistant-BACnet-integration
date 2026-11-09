@@ -15,6 +15,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Acuity Brands | FCS 7TS | 0.8.3 |
 | ALERTON TECHNOLOGIES | VLC-16160 | RL Z.01e VLC |
 | Altra | DZK bacnet-gateway | 0.8.2 |
+| ASI Controls | 9540 | 1.3.15 |
 | Atlantic | TM172XDG42X | 596.13 |
 | Bosch Building Automation GmbH | ems5.CP05E | ems5-BACnet 2.0 |
 | Calorex | Delta | 0 |
