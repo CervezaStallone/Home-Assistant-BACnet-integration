@@ -829,6 +829,35 @@ class TestCovRenewalFailure:
 
         asyncio.run(run())
 
+    def test_failed_renewal_ends_a_live_metadata_subscription(self):
+        client = BACnetClient(local_ip="127.0.0.1", local_port=47822)
+        scm = _FakeRenewingSCM()
+
+        async def run():
+            ready_event = asyncio.Event()
+            sub_key = "sub-1:units"
+            task = asyncio.create_task(
+                client._cov_property_reader_task(
+                    scm=scm,
+                    sub_key=sub_key,
+                    obj_key="0:1",
+                    property_name="units",
+                    callback=lambda *a: None,
+                    ready_event=ready_event,
+                    stop_event=asyncio.Event(),
+                )
+            )
+            await ready_event.wait()
+            client._cov_property_tasks[sub_key] = task
+            assert client.cov_subscription_active(sub_key)
+
+            scm.create_refresh_task()
+            await asyncio.wait_for(task, timeout=1)
+
+            assert not client.cov_subscription_active(sub_key)
+
+        asyncio.run(run())
+
 
 # ---------------------------------------------------------------------------
 # BACpypes3 0.0.110 upgrade — issue #52

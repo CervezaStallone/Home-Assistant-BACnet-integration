@@ -471,6 +471,32 @@ class TestRestoreSubscriptions:
         assert coord._cov_subscriptions == {"0:1": "new", "0:2": "alive"}
         coord.client.subscribe_cov.assert_awaited_once()
 
+    def test_dead_live_metadata_subscription_is_renewed(self):
+        """The opt-in live metadata subscriptions renew the same way."""
+        import asyncio
+        from unittest.mock import AsyncMock, MagicMock
+
+        coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
+        coord.live_metadata_properties = ["units"]
+        coord._cov_subscriptions = {"0:1": "alive"}
+        coord._cov_property_subscriptions = {"0:1:units": "dead"}
+        coord.client.cov_subscription_active = MagicMock(
+            side_effect=lambda sub: sub == "alive"
+        )
+        coord.client.subscribe_cov = AsyncMock()
+        coord.client.subscribe_cov_property = AsyncMock(return_value="new")
+        coord.client.poll_objects = AsyncMock(
+            return_value={"0:1": {"presentValue": 1.0, "statusFlags": [False] * 4}}
+        )
+
+        asyncio.run(coord._async_update_data())
+
+        assert coord._cov_property_subscriptions == {"0:1:units": "new"}
+        kwargs = coord.client.subscribe_cov_property.await_args.kwargs
+        assert (kwargs["object_type"], kwargs["instance"]) == (0, 1)
+        assert kwargs["property_name"] == "units"
+        coord.client.subscribe_cov.assert_not_awaited()
+
     def test_no_resubscribe_without_reconnect(self):
         """Normal successful polls must NOT rebuild subscriptions every cycle."""
         import asyncio

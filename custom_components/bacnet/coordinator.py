@@ -530,18 +530,19 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         The client ends a subscription when its renewal fails (a busy device);
         it then expired on the device, while the object stayed listed here as
-        COV-active. Objects the device now refuses go to polling for good.
+        COV-active. The same goes for live metadata subscriptions. Objects the
+        device now refuses go to polling for good.
         """
-        dead = [
-            obj_key
-            for obj_key, sub_key in self._cov_subscriptions.items()
-            if not self.client.cov_subscription_active(sub_key)
+        active = self.client.cov_subscription_active
+        dead = [k for k, sub in self._cov_subscriptions.items() if not active(sub)]
+        dead_live = [
+            k for k, sub in self._cov_property_subscriptions.items() if not active(sub)
         ]
-        if not dead:
+        if not dead and not dead_live:
             return
         _LOGGER.info(
             "Renewing %d ended COV subscriptions on %s",
-            len(dead),
+            len(dead) + len(dead_live),
             mask_address(self.device_address),
         )
         by_key = {f"{o['object_type']}:{o['instance']}": o for o in self.objects}
@@ -565,7 +566,29 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             else:
                 self._polled_objects.append(obj)
 
-        await asyncio.gather(*(resubscribe(k) for k in dead))
+        async def resubscribe_live(key: str) -> None:
+            # Without a live subscription the hourly sweep covers the property.
+            del self._cov_property_subscriptions[key]
+            obj_key, prop_key = key.rsplit(":", 1)
+            obj = by_key.get(obj_key)
+            bacnet_prop = LIVE_METADATA_PROPERTY_TO_BACNET.get(prop_key)
+            if obj is None or bacnet_prop is None:
+                return
+            async with semaphore:
+                sub_key = await self.client.subscribe_cov_property(
+                    device_address=self.device_address,
+                    object_type=obj["object_type"],
+                    instance=obj["instance"],
+                    property_name=bacnet_prop,
+                    callback=self._handle_cov_property_notification,
+                    lifetime=_cov_lifetime(),
+                )
+            if sub_key is not None:
+                self._cov_property_subscriptions[key] = sub_key
+
+        await asyncio.gather(
+            *(resubscribe(k) for k in dead), *(resubscribe_live(k) for k in dead_live)
+        )
 
     # ------------------------------------------------------------------
     # Static metadata refresh — issue #26

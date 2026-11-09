@@ -2894,8 +2894,8 @@ class BACnetClient:
                         await pending_task
 
     def cov_subscription_active(self, sub_key: str) -> bool:
-        """True while the reader task of COV subscription *sub_key* runs."""
-        task = self._cov_tasks.get(sub_key)
+        """True while the reader task of (property) subscription *sub_key* runs."""
+        task = self._cov_tasks.get(sub_key) or self._cov_property_tasks.get(sub_key)
         return task is not None and not task.done()
 
     async def unsubscribe_all_cov(self) -> None:
