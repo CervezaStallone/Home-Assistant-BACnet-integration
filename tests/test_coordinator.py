@@ -444,6 +444,59 @@ class TestRestoreSubscriptions:
 
         coord._setup_subscriptions.assert_awaited_once()
 
+    def test_dead_subscription_is_renewed_after_a_successful_poll(self):
+        """Issue #12: a subscription whose renewal failed must not stay
+        listed as active for good; the next successful poll subscribes it
+        again."""
+        import asyncio
+        from unittest.mock import AsyncMock, MagicMock
+
+        coord = _make_coordinator(
+            objects=[
+                {"object_type": 0, "instance": 1},
+                {"object_type": 0, "instance": 2},
+            ]
+        )
+        coord._cov_subscriptions = {"0:1": "dead", "0:2": "alive"}
+        coord.client.cov_subscription_active = MagicMock(
+            side_effect=lambda sub: sub == "alive"
+        )
+        coord.client.subscribe_cov = AsyncMock(return_value="new")
+        coord.client.poll_objects = AsyncMock(
+            return_value={"0:1": {"presentValue": 1.0, "statusFlags": [False] * 4}}
+        )
+
+        asyncio.run(coord._async_update_data())
+
+        assert coord._cov_subscriptions == {"0:1": "new", "0:2": "alive"}
+        coord.client.subscribe_cov.assert_awaited_once()
+
+    def test_dead_live_metadata_subscription_is_renewed(self):
+        """The opt-in live metadata subscriptions renew the same way."""
+        import asyncio
+        from unittest.mock import AsyncMock, MagicMock
+
+        coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
+        coord.live_metadata_properties = ["units"]
+        coord._cov_subscriptions = {"0:1": "alive"}
+        coord._cov_property_subscriptions = {"0:1:units": "dead"}
+        coord.client.cov_subscription_active = MagicMock(
+            side_effect=lambda sub: sub == "alive"
+        )
+        coord.client.subscribe_cov = AsyncMock()
+        coord.client.subscribe_cov_property = AsyncMock(return_value="new")
+        coord.client.poll_objects = AsyncMock(
+            return_value={"0:1": {"presentValue": 1.0, "statusFlags": [False] * 4}}
+        )
+
+        asyncio.run(coord._async_update_data())
+
+        assert coord._cov_property_subscriptions == {"0:1:units": "new"}
+        kwargs = coord.client.subscribe_cov_property.await_args.kwargs
+        assert (kwargs["object_type"], kwargs["instance"]) == (0, 1)
+        assert kwargs["property_name"] == "units"
+        coord.client.subscribe_cov.assert_not_awaited()
+
     def test_no_resubscribe_without_reconnect(self):
         """Normal successful polls must NOT rebuild subscriptions every cycle."""
         import asyncio
@@ -699,98 +752,23 @@ class TestMetadataRefreshTiming:
 # ---------------------------------------------------------------------------
 
 
-class TestCovTriggeredMetadataCheck:
-    """A COV notification is the cheapest live signal that a device is
-    talking about an object right now — use it to trigger a throttled
-    per-object metadata re-check instead of waiting on the hourly sweep."""
+def test_cov_notification_sends_no_metadata_read():
+    """Issue #12: a metadata check per COV notification meant one
+    ReadPropertyMultiple per object every 5 minutes, about 9000 per 5 minutes
+    on a 14-controller site, and the biggest CPU cost in a load test. The
+    hourly sweep reads the same metadata 25 objects per request."""
+    from unittest.mock import MagicMock
 
-    def test_notification_schedules_a_background_task(self):
-        coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
-        coord.data = {"0:1": {"presentValue": 20.0}}
+    coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
+    coord.data = {"0:1": {"presentValue": 20.0}}
+    coord.hass.async_create_task = MagicMock()
+    coord.hass.async_create_background_task = MagicMock()
 
-        captured = []
-        coord.hass.async_create_task = lambda coro: captured.append(coro) or coro
+    coord._handle_cov_notification("0:1", {"presentValue": 25.0})
 
-        coord._handle_cov_notification("0:1", {"presentValue": 25.0})
-
-        assert len(captured) == 1
-        captured[0].close()  # avoid "never awaited" warning; not run in this test
-
-    def test_second_notification_within_throttle_window_is_skipped(self):
-        coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
-        coord.data = {"0:1": {"presentValue": 20.0}}
-
-        captured = []
-        coord.hass.async_create_task = lambda coro: captured.append(coro) or coro
-
-        coord._handle_cov_notification("0:1", {"presentValue": 25.0})
-        coord._handle_cov_notification("0:1", {"presentValue": 26.0})
-
-        assert len(captured) == 1
-        captured[0].close()
-
-    def test_notification_after_throttle_window_schedules_again(self):
-        from datetime import datetime, timedelta
-
-        coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
-        coord.data = {"0:1": {"presentValue": 20.0}}
-
-        captured = []
-        coord.hass.async_create_task = lambda coro: captured.append(coro) or coro
-
-        coord._handle_cov_notification("0:1", {"presentValue": 25.0})
-        coord._last_object_metadata_check["0:1"] = datetime.now(UTC) - timedelta(
-            minutes=10
-        )
-        coord._handle_cov_notification("0:1", {"presentValue": 26.0})
-
-        assert len(captured) == 2
-        for coro in captured:
-            coro.close()
-
-    def test_noop_when_data_is_none_does_not_schedule(self):
-        """The existing 'no data yet' guard must still short-circuit first."""
-        from unittest.mock import MagicMock
-
-        coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
-        coord.data = None
-        coord.hass.async_create_task = MagicMock()
-
-        coord._handle_cov_notification("0:1", {"presentValue": 25.0})
-
-        coord.hass.async_create_task.assert_not_called()
-
-    def test_refresh_object_metadata_now_applies_and_persists_change(self):
-        import asyncio
-        from unittest.mock import AsyncMock
-
-        obj = {
-            "object_type": 0,
-            "instance": 1,
-            "object_name": "Old",
-            "units": None,
-        }
-        coord = _make_coordinator(objects=[obj])
-        coord.client.refresh_object_metadata = AsyncMock(
-            return_value={"object_name": "Old", "units": "degrees-celsius"}
-        )
-        _run_metadata_sweep_inline(coord)
-
-        asyncio.run(coord._refresh_object_metadata_now("0:1"))
-
-        assert coord.objects[0]["units"] == "degrees-celsius"
-        coord.hass.config_entries.async_update_entry.assert_called_once()
-
-    def test_refresh_object_metadata_now_unknown_key_is_noop(self):
-        import asyncio
-        from unittest.mock import AsyncMock
-
-        coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
-        coord.client.refresh_object_metadata = AsyncMock()
-
-        asyncio.run(coord._refresh_object_metadata_now("9:9"))
-
-        coord.client.refresh_object_metadata.assert_not_awaited()
+    coord.hass.async_create_task.assert_not_called()
+    coord.hass.async_create_background_task.assert_not_called()
+    assert coord.data["0:1"]["presentValue"] == 25.0
 
 
 # ---------------------------------------------------------------------------
@@ -974,27 +952,6 @@ class TestMetadataChangeTriggersRealReload:
             "before the change — real HA's `entry.data != data` check "
             "would treat this as a no-op and never fire the reload."
         )
-
-    def test_refresh_object_metadata_now_persists_genuinely_new_data(self):
-        import asyncio
-        from unittest.mock import AsyncMock
-
-        obj = {"object_type": 0, "instance": 1, "object_name": "Old", "units": None}
-        coord = _make_coordinator(objects=[obj])
-        coord.entry.data[CONF_SELECTED_OBJECTS] = coord.objects
-        pre_change_entry_data = dict(coord.entry.data)
-
-        coord.client.refresh_object_metadata = AsyncMock(
-            return_value={"object_name": "Old", "units": "degrees-celsius"}
-        )
-        _run_metadata_sweep_inline(coord)
-
-        asyncio.run(coord._refresh_object_metadata_now("0:1"))
-
-        persisted_data = coord.hass.config_entries.async_update_entry.call_args.kwargs[
-            "data"
-        ]
-        assert persisted_data != pre_change_entry_data
 
     def test_handle_cov_property_notification_persists_genuinely_new_data(self):
         obj = {"object_type": 0, "instance": 1, "units": None}
@@ -1326,44 +1283,10 @@ class TestRefreshSingleObject:
         assert coord.data["0:1"]["presentValue"] == 1.0
 
 
-def test_first_cov_metadata_change_fixes_every_object_in_one_reload():
-    """Issue #62: stored placeholders ("Object 117", commandable False) were
-    found one COV notification at a time, each costing a reload — a loop of
-    reloads on a controller with hundreds of objects. The first change now
-    runs one batched sweep over all objects and persists once."""
-    import asyncio
-    from unittest.mock import AsyncMock
-
-    a = {"object_type": 4, "instance": 117, "object_name": "Object 117"}
-    b = {"object_type": 5, "instance": 249, "object_name": "Object 249"}
-    coord = _make_coordinator(objects=[a, b])
-    coord.entry.data[CONF_SELECTED_OBJECTS] = coord.objects
-    tasks = []
-    coord.hass.async_create_background_task = lambda coro, name=None: tasks.append(coro)
-    coord.client.refresh_object_metadata = AsyncMock(
-        return_value={"object_name": "CmdOpn"}
-    )
-    coord.client.read_objects_metadata = AsyncMock(
-        return_value={
-            "4:117": {"object_name": "CmdOpn"},
-            "5:249": {"object_name": "BtnLgtOff"},
-        }
-    )
-
-    asyncio.run(coord._refresh_object_metadata_now("4:117"))
-    assert len(tasks) == 1
-    asyncio.run(tasks[0])
-
-    assert [o["object_name"] for o in coord.objects] == ["CmdOpn", "BtnLgtOff"]
-    coord.hass.config_entries.async_update_entry.assert_called_once()
-
-
-def test_cov_metadata_check_keeps_values_the_device_did_not_return():
-    """Issue #62 (second log): a COV-triggered check only passed name,
-    description, units and commandable as known values. When stateText or
-    minPresValue didn't come back, they became None — a "change" that
-    reloaded the entry — and the next sweep restored them: another reload,
-    forever."""
+def test_metadata_sweep_keeps_values_the_device_did_not_return():
+    """Issue #62 (second log): when stateText or minPresValue didn't come
+    back, they became None — a "change" that reloaded the entry — and the
+    next read restored them: another reload, forever."""
     import asyncio
 
     from custom_components.bacnet.bacnet_client import BACnetClient
@@ -1384,11 +1307,14 @@ def test_cov_metadata_check_keeps_values_the_device_did_not_return():
         async def read_property(self, addr, oid, prop, array_index=None):
             return "Mode" if prop == "objectName" else None
 
+        async def read_property_multiple(self, addr, params):
+            raise TimeoutError  # falls back to individual reads
+
     client = BACnetClient(local_ip="127.0.0.1", local_port=47860)
     client._app = _App()
     coord.client = client
 
-    asyncio.run(coord._refresh_object_metadata_now("19:22"))
+    asyncio.run(coord.async_refresh_metadata())
 
     assert coord.objects[0]["state_text"] == msv["state_text"]
     assert coord.objects[0]["number_of_states"] == 4
@@ -1401,3 +1327,26 @@ def test_cov_active_reflects_subscriptions():
     assert coord.cov_active is False
     coord._cov_subscriptions["0:1"] = "sub"
     assert coord.cov_active is True
+
+
+def test_cov_lifetimes_are_spread_so_renewals_do_not_all_come_due_at_once():
+    """Issue #12: subscriptions made in one setup renewed together every
+    5 minutes; with 640 objects per controller that burst of renewals (and
+    the notification each one triggers) pinned the CPU."""
+    import asyncio
+    from unittest.mock import AsyncMock
+
+    from custom_components.bacnet.coordinator import COV_LIFETIME_SECONDS
+
+    objects = [{"object_type": 0, "instance": n} for n in range(50)]
+    coord = _make_coordinator(objects=objects)
+    coord.client.subscribe_cov = AsyncMock(return_value="sub")
+
+    asyncio.run(coord._setup_subscriptions())
+
+    lifetimes = [
+        c.kwargs["lifetime"] for c in coord.client.subscribe_cov.await_args_list
+    ]
+    assert len(lifetimes) == 50
+    assert all(COV_LIFETIME_SECONDS <= t < 2 * COV_LIFETIME_SECONDS for t in lifetimes)
+    assert len(set(lifetimes)) > 10
