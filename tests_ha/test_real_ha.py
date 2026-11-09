@@ -196,6 +196,9 @@ class FakeClient:
     async def subscribe_cov(self, **kwargs):
         return None
 
+    def cov_subscription_active(self, sub_key):
+        return False
+
     async def subscribe_cov_property(self, **kwargs):
         return None
 
