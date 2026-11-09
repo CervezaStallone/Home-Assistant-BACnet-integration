@@ -583,6 +583,11 @@ class BACnetClient:
             else self._derive_device_instance(local_ip, local_port)
         )
         self._app: _AppType | None = None
+        # Bumped on every disconnect(): COV tasks die with the connection, and
+        # this client is shared by every entry on the port. Coordinators compare
+        # it to the value at their last subscribe to know they must resubscribe,
+        # also when another entry triggered the reconnect (issue #12).
+        self.connection_generation: int = 0
         self._cov_tasks: dict[str, asyncio.Task] = {}
         self._cov_property_tasks: dict[str, asyncio.Task] = {}
         # Signals a reader task to exit its `async with scm:` block normally
@@ -886,6 +891,7 @@ class BACnetClient:
         the device until their lifetime expires. Pass graceful=False when
         the network can't be trusted to respond (see reconnect()).
         """
+        self.connection_generation += 1
         if graceful:
             await self.unsubscribe_all_cov()
             await self.unsubscribe_all_cov_property()

@@ -130,6 +130,7 @@ class FakeClient:
         self.writes: list[dict[str, Any]] = []
         self.relinquishes: list[dict[str, Any]] = []
         self.disconnected = False
+        self.connection_generation = 0
         FakeClient.instances.append(self)
 
     async def connect(self, bbmd_address=None, bbmd_ttl=900):
