@@ -10,6 +10,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | 75F | CCU50 | Android 7.0 - CCU50_20220517 |
 | AB Regin | E283WEB | 3.4.0.8 |
 | AB Regin | HCA283DWM-4 | 3.4.0.8 |
+| AB Regin | VCA283W | 3.4.0.8 |
 | AB Regin | XCA283W-4 | 3.4.0.8 |
 | Acuity Brands | FCS 7TS | 0.8.3 |
 | ALERTON TECHNOLOGIES | VLC-16160 | RL Z.01e VLC |
