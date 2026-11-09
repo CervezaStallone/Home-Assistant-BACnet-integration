@@ -422,6 +422,28 @@ class TestRestoreSubscriptions:
         # (Setup itself is mocked, so it stays empty after the clear.)
         assert coord._cov_subscriptions == {}
 
+    def test_resubscribes_after_shared_client_reconnected_by_other_entry(self):
+        """Issue #12: another entry on the same port reconnected the shared
+        client, which cancelled our COV tasks too. The next successful poll
+        must rebuild our subscriptions, not keep stale ones."""
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
+        coord.client.connection_generation = 0
+        coord._cov_subscriptions = {"0:1": "sub"}
+        coord._polled_objects = []
+        coord._cov_generation = 0
+        coord.client.poll_objects = AsyncMock(
+            return_value={"0:1": {"presentValue": 23.5, "statusFlags": [False] * 4}}
+        )
+        coord._setup_subscriptions = AsyncMock()
+
+        coord.client.connection_generation = 1  # the other entry reconnected
+        asyncio.run(coord._async_update_data())
+
+        coord._setup_subscriptions.assert_awaited_once()
+
     def test_no_resubscribe_without_reconnect(self):
         """Normal successful polls must NOT rebuild subscriptions every cycle."""
         import asyncio
