@@ -109,6 +109,20 @@
     "source": "telemetry"
   },
   {
+    "vendor": "Atlantic",
+    "model": "TM172XDG42X",
+    "firmware": "596.13",
+    "version": "1.0.55",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
     "vendor": "Bosch Building Automation GmbH",
     "model": "ems5.CP05E",
     "firmware": "ems5-BACnet 2.0",
