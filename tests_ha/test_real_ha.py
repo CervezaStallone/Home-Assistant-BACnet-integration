@@ -196,6 +196,9 @@ class FakeClient:
     async def subscribe_cov(self, **kwargs):
         return None
 
+    def cov_subscription_active(self, sub_key):
+        return False
+
     async def subscribe_cov_property(self, **kwargs):
         return None
 
@@ -227,9 +230,6 @@ class FakeClient:
 
     async def read_objects_metadata(self, device_address, objects):
         return {f"{o['object_type']}:{o['instance']}": dict(o) for o in objects}
-
-    async def refresh_object_metadata(self, **kwargs):
-        return None
 
 
 @pytest.fixture(autouse=True)

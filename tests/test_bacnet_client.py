@@ -519,64 +519,6 @@ class TestDisconnectCovTeardown:
 
 
 # ---------------------------------------------------------------------------
-# refresh_object_metadata() — issue #26 (stale metadata after discovery)
-# ---------------------------------------------------------------------------
-
-
-class TestRefreshObjectMetadata:
-    def _client(self):
-        return BACnetClient(local_ip="127.0.0.1", local_port=47813)
-
-    def test_returns_fresh_values(self):
-        client = self._client()
-        client._app = _FakeReadApp(
-            {
-                "objectName": "Room Temp",
-                "description": "Updated on device",
-                "units": "degrees-celsius",
-                "presentValue": 21.5,
-            }
-        )
-        result = asyncio.run(
-            client.refresh_object_metadata(
-                device_address="192.168.1.1",
-                object_type=OBJECT_TYPE_ANALOG_OUTPUT,
-                instance=3,
-            )
-        )
-        assert result["object_name"] == "Room Temp"
-        assert result["description"] == "Updated on device"
-        assert result["units"] == "degrees-celsius"
-        # AO is inherently commandable regardless of priorityArray probing.
-        assert result["commandable"] is True
-
-    def test_raises_when_not_connected(self):
-        client = self._client()
-        with pytest.raises(RuntimeError):
-            asyncio.run(
-                client.refresh_object_metadata(
-                    device_address="192.168.1.1",
-                    object_type=OBJECT_TYPE_ANALOG_OUTPUT,
-                    instance=1,
-                )
-            )
-
-    def test_units_none_when_device_has_no_units(self):
-        client = self._client()
-        client._app = _FakeReadApp(
-            {"objectName": "Binary Value", "description": "", "units": None}
-        )
-        result = asyncio.run(
-            client.refresh_object_metadata(
-                device_address="192.168.1.1",
-                object_type=OBJECT_TYPE_BINARY_VALUE,
-                instance=1,
-            )
-        )
-        assert result["units"] is None
-
-
-# ---------------------------------------------------------------------------
 # SubscribeCOVProperty — issue #26 (live metadata push)
 # ---------------------------------------------------------------------------
 
@@ -696,6 +638,9 @@ class _FakeCovValueSCM:
     def __init__(self, items):
         self._items = list(items)
 
+    def create_refresh_task(self):
+        pass
+
     async def __aenter__(self):
         return self
 
@@ -768,6 +713,9 @@ class _FakeGracefulExitSCM:
     def __init__(self):
         self.cancel_sent = False
 
+    def create_refresh_task(self):
+        pass
+
     async def __aenter__(self):
         return self
 
@@ -825,6 +773,90 @@ class TestCovGracefulUnsubscribe:
     def test_unsubscribe_unknown_key_is_noop(self):
         client = BACnetClient(local_ip="127.0.0.1", local_port=47817)
         asyncio.run(client.unsubscribe_cov("does-not-exist"))  # must not raise
+
+
+class _FakeRenewingSCM(_FakeGracefulExitSCM):
+    """Like BACpypes3: renewals run as a task from create_refresh_task(),
+    and nobody awaits that task, so a failed renewal went unnoticed."""
+
+    refresh_subscription_task = None
+
+    async def refresh_subscription(self):
+        raise RuntimeError("no-response")
+
+    def create_refresh_task(self):
+        self.refresh_subscription_task = asyncio.create_task(
+            self.refresh_subscription()
+        )
+
+
+class TestCovRenewalFailure:
+    """Issue #12: when a renewal failed (busy device), the subscription
+    expired on the device while the reader task kept waiting forever, so
+    COV died silently and every failure logged an unretrieved exception."""
+
+    def test_failed_renewal_ends_the_subscription(self):
+        client = BACnetClient(local_ip="127.0.0.1", local_port=47821)
+        scm = _FakeRenewingSCM()
+        client._app = type(
+            "_FakeApp", (), {"change_of_value": lambda self, *a, **k: scm}
+        )()
+
+        async def run():
+            ready_event = asyncio.Event()
+            sub_key = "sub-1"
+            task = asyncio.create_task(
+                client._cov_reader_task(
+                    addr="192.168.1.50",
+                    oid="analog-input,1",
+                    lifetime=300,
+                    sub_key=sub_key,
+                    obj_key="0:1",
+                    callback=lambda *a: None,
+                    ready_event=ready_event,
+                    stop_event=asyncio.Event(),
+                )
+            )
+            await ready_event.wait()
+            client._cov_tasks[sub_key] = task
+            assert client.cov_subscription_active(sub_key)
+
+            scm.create_refresh_task()  # BACpypes3's call_later fires
+            await asyncio.wait_for(task, timeout=1)
+
+            assert not client.cov_subscription_active(sub_key)
+            assert scm.refresh_subscription_task.done()
+
+        asyncio.run(run())
+
+    def test_failed_renewal_ends_a_live_metadata_subscription(self):
+        client = BACnetClient(local_ip="127.0.0.1", local_port=47822)
+        scm = _FakeRenewingSCM()
+
+        async def run():
+            ready_event = asyncio.Event()
+            sub_key = "sub-1:units"
+            task = asyncio.create_task(
+                client._cov_property_reader_task(
+                    scm=scm,
+                    sub_key=sub_key,
+                    obj_key="0:1",
+                    property_name="units",
+                    callback=lambda *a: None,
+                    ready_event=ready_event,
+                    stop_event=asyncio.Event(),
+                )
+            )
+            await ready_event.wait()
+            client._cov_property_tasks[sub_key] = task
+            assert client.cov_subscription_active(sub_key)
+
+            scm.create_refresh_task()
+            await asyncio.wait_for(task, timeout=1)
+
+            assert not client.cov_subscription_active(sub_key)
+
+        asyncio.run(run())
 
 
 # ---------------------------------------------------------------------------
@@ -1227,6 +1259,9 @@ class _FakeNormalApp:
         if local_addr.addrBroadcastTuple != local_addr.addrTuple:
             self.server.broadcast_address = local_addr.addrBroadcastTuple
 
+    def request(self, apdu):
+        raise AssertionError("no network in this test")
+
 
 class TestBroadcastAutoDetect:
     """An empty local IP bound 0.0.0.0 without a broadcast address, so every
@@ -1287,3 +1322,141 @@ class TestBroadcastOnRealApplication:
                 await client.disconnect()
 
         assert asyncio.run(run()) == ("10.13.37.255", 0)
+
+
+# ---------------------------------------------------------------------------
+# Outstanding-request cap per device — issue #12
+# ---------------------------------------------------------------------------
+
+
+class _RecordingApp:
+    """Stands in for a BACpypes3 app: request() returns a future per APDU."""
+
+    def __init__(self, *_args):
+        self.sent: list = []
+
+    def request(self, apdu):
+        fut = asyncio.get_running_loop().create_future()
+        self.sent.append((apdu, fut))
+        return fut
+
+
+def _read_request(address="10.0.0.1"):
+    from bacpypes3.apdu import ReadPropertyRequest
+    from bacpypes3.pdu import Address
+    from bacpypes3.primitivedata import ObjectIdentifier
+
+    return ReadPropertyRequest(
+        objectIdentifier=ObjectIdentifier("analog-value,1"),
+        propertyIdentifier="present-value",
+        destination=Address(address),
+    )
+
+
+class TestRequestThrottle:
+    """BACpypes3 gives each device 256 invoke IDs and loops forever looking
+    for a free one when all are in use. 640 COV renewals due at once on a
+    slow device froze the whole event loop at 100% CPU (issue #12)."""
+
+    def test_caps_outstanding_requests_per_device(self):
+        import custom_components.bacnet.bacnet_client as bc
+
+        async def run():
+            app = _RecordingApp()
+            bc._throttle_requests(app, limit=2)
+            futures = [app.request(_read_request()) for _ in range(3)]
+            assert len(app.sent) == 2
+
+            app.sent[0][1].set_result("ack")
+            await asyncio.sleep(0)
+            assert len(app.sent) == 3  # the waiting request went out
+            assert await futures[0] == "ack"
+
+            app.sent[2][1].set_result("third")
+            assert await futures[2] == "third"
+
+        asyncio.run(run())
+
+    def test_other_devices_are_not_held_up(self):
+        import custom_components.bacnet.bacnet_client as bc
+
+        async def run():
+            app = _RecordingApp()
+            bc._throttle_requests(app, limit=1)
+            app.request(_read_request("10.0.0.1"))
+            app.request(_read_request("10.0.0.2"))
+            assert len(app.sent) == 2
+
+        asyncio.run(run())
+
+    def test_unconfirmed_requests_pass_straight_through(self):
+        from bacpypes3.apdu import WhoIsRequest
+        from bacpypes3.pdu import Address
+
+        import custom_components.bacnet.bacnet_client as bc
+
+        async def run():
+            app = _RecordingApp()
+            bc._throttle_requests(app, limit=1)
+            app.request(_read_request())
+            app.request(WhoIsRequest(destination=Address("10.0.0.1")))
+            assert len(app.sent) == 2
+
+        asyncio.run(run())
+
+    def test_cancelled_waiting_request_is_never_sent(self):
+        import custom_components.bacnet.bacnet_client as bc
+
+        async def run():
+            app = _RecordingApp()
+            bc._throttle_requests(app, limit=1)
+            app.request(_read_request())
+            waiting = app.request(_read_request())
+            waiting.cancel()
+            app.sent[0][1].set_result("ack")
+            await asyncio.sleep(0)
+            assert len(app.sent) == 1
+
+        asyncio.run(run())
+
+    def test_cancelling_a_forwarded_request_cancels_it_in_bacpypes3(self):
+        """BACpypes3 frees the invoke ID when its future is cancelled."""
+        import custom_components.bacnet.bacnet_client as bc
+
+        async def run():
+            app = _RecordingApp()
+            bc._throttle_requests(app, limit=1)
+            app.request(_read_request())
+            waiting = app.request(_read_request())
+            app.sent[0][1].set_result("ack")
+            await asyncio.sleep(0)
+            waiting.cancel()
+            await asyncio.sleep(0)
+            assert app.sent[1][1].cancelled()
+
+        asyncio.run(run())
+
+    def test_connect_throttles_the_application(self, monkeypatch):
+        import custom_components.bacnet.bacnet_client as bc
+
+        class App(_RecordingApp, _FakeNormalApp):
+            def __init__(self, device_object, local_addr):
+                _RecordingApp.__init__(self)
+                _FakeNormalApp.__init__(self, device_object, local_addr)
+
+        monkeypatch.setattr(bc, "NormalApplication", App)
+        client = BACnetClient(local_ip="127.0.0.1", local_port=47808)
+
+        async def no_wait(*_a, **_k):
+            return None
+
+        monkeypatch.setattr(client, "_wait_for_free_port", no_wait)
+        monkeypatch.setattr(client, "_wait_for_transport", no_wait)
+
+        async def run():
+            await client.connect()
+            for _ in range(bc.MAX_OUTSTANDING_REQUESTS + 1):
+                client._app.request(_read_request())
+            assert len(client._app.sent) == bc.MAX_OUTSTANDING_REQUESTS
+
+        asyncio.run(run())

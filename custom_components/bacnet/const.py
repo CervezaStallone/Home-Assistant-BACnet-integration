@@ -116,21 +116,19 @@ RECONNECT_THRESHOLD = 10
 # outstanding confirmed requests at a time.
 RPM_MAX_OBJECTS = 25
 MAX_CONCURRENT_REQUESTS = 4
+# MAX_OUTSTANDING_REQUESTS caps ALL confirmed requests in flight to one device,
+# including the COV renewals BACpypes3 sends on its own. BACpypes3 has 256
+# invoke IDs per device and loops forever when they are all in use (issue #12).
+MAX_OUTSTANDING_REQUESTS = 16
 
 # Static object metadata (objectName, description, units, commandable) has no
 # COV/push mechanism in BACnet — a device-side edit is only visible on a fresh
-# ReadProperty. Two refresh paths pick that up (issue #26):
-#   1. COV-triggered: a COV notification proves the device is actively talking
-#      about that object right now, so it's the cheapest moment to also check
-#      its static properties. Throttled per-object so a fast-changing analog
-#      doesn't cause a metadata re-read on every notification.
-#   2. Periodic sweep: the safety net for polling-only objects, which never
-#      produce a COV notification to trigger off of.
-# COV-triggered metadata changes arriving within this window are persisted
+# ReadProperty. An hourly batched sweep picks that up (issue #26); a check per
+# COV notification was dropped because it cost one request per object (#12).
+# Live COV-Property metadata changes arriving within this window are persisted
 # together — one config-entry reload instead of one per object.
 METADATA_PERSIST_DELAY = 5  # seconds
-COV_METADATA_CHECK_INTERVAL = 300  # seconds (5 min) — per-object COV throttle
-DEFAULT_METADATA_REFRESH_INTERVAL = 3600  # seconds (1 hour) — polled-object sweep
+DEFAULT_METADATA_REFRESH_INTERVAL = 3600  # seconds (1 hour) — metadata sweep
 
 # Properties eligible for a LIVE SubscribeCOVProperty subscription (ASHRAE
 # 135-2012 Addendum ar) instead of the ReadProperty-based refresh above.
