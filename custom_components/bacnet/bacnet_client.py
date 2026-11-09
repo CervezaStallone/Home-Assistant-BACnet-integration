@@ -26,6 +26,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any, ClassVar
 
 from bacpypes3.apdu import (
+    ConfirmedRequestPDU,
     ErrorRejectAbortNack,
     GetEventInformationRequest,
     SubscribeCOVPropertyRequest,
@@ -65,6 +66,7 @@ from bacpypes3.vendor import get_vendor_info
 from .const import (
     DEFAULT_WRITE_PRIORITY,
     MAX_CONCURRENT_REQUESTS,
+    MAX_OUTSTANDING_REQUESTS,
     OBJECT_TYPE_ANALOG_INPUT,
     OBJECT_TYPE_ANALOG_OUTPUT,
     OBJECT_TYPE_ANALOG_VALUE,
@@ -81,6 +83,69 @@ from .const import (
 from .helpers import mask_address as _mask_address
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _throttle_requests(app: Any, limit: int) -> None:
+    """Let at most *limit* confirmed requests per device be in flight on *app*.
+
+    BACpypes3 hands out 256 invoke IDs per device and, when all are in use,
+    searches for a free one forever: Home Assistant froze at 100% CPU when
+    hundreds of COV renewals came due at once on a slow device (issue #12).
+    Replacing app.request also covers the requests BACpypes3 sends itself.
+    Requests over the limit wait in order; cancelling one is passed on.
+    """
+    send = app.request
+    in_flight: dict[Any, int] = {}
+    waiting: dict[Any, list[tuple[Any, asyncio.Future]]] = {}
+
+    def forward(apdu: Any, dest: Any) -> asyncio.Future:
+        in_flight[dest] = in_flight.get(dest, 0) + 1
+        future = send(apdu)
+        future.add_done_callback(lambda _f: finished(dest))
+        return future
+
+    def finished(dest: Any) -> None:
+        in_flight[dest] -= 1
+        queue = waiting.get(dest, [])
+        while queue and in_flight[dest] < limit:
+            apdu, outer = queue.pop(0)
+            if outer.done():  # cancelled while waiting
+                continue
+            inner = forward(apdu, dest)
+            _chain(inner, outer)
+        if not queue:
+            waiting.pop(dest, None)
+        if not in_flight[dest]:
+            del in_flight[dest]
+
+    def request(apdu: Any) -> asyncio.Future:
+        if not isinstance(apdu, ConfirmedRequestPDU):
+            return send(apdu)
+        dest = apdu.pduDestination
+        if in_flight.get(dest, 0) < limit:
+            return forward(apdu, dest)
+        outer = asyncio.get_running_loop().create_future()
+        waiting.setdefault(dest, []).append((apdu, outer))
+        return outer
+
+    app.request = request
+
+
+def _chain(inner: asyncio.Future, outer: asyncio.Future) -> None:
+    """Copy *inner*'s outcome to *outer*; cancelling *outer* cancels *inner*."""
+
+    def copy(_f: asyncio.Future) -> None:
+        if outer.done():
+            return
+        if inner.cancelled():
+            outer.cancel()
+        elif inner.exception() is not None:
+            outer.set_exception(inner.exception())
+        else:
+            outer.set_result(inner.result())
+
+    inner.add_done_callback(copy)
+    outer.add_done_callback(lambda _f: inner.cancel() if outer.cancelled() else None)
 
 
 # BACnet object types we support importing as HA entities
@@ -139,6 +204,37 @@ _RPM_UNSUPPORTED_REASONS = {
 # ---------------------------------------------------------------------------
 # Schedule object <-> plain JSON data (issue #52)
 # ---------------------------------------------------------------------------
+
+
+class _CovRenewalFailed(Exception):
+    """A COV subscription renewal failed, so the device dropped it."""
+
+
+def _watch_renewals(scm: SubscriptionContextManager) -> asyncio.Event:
+    """Return an event that is set when a renewal of *scm* fails.
+
+    BACpypes3 renews a subscription in a task nobody awaits: a failed renewal
+    only logged "Task exception was never retrieved" while the subscription
+    expired on the device and the reader kept waiting forever (issue #12).
+    Must be called before entering *scm*: the first renewal is scheduled then.
+    The error is kept in the event's ``error`` attribute.
+    """
+    failed = asyncio.Event()
+    failed.error = None
+    create = scm.create_refresh_task
+
+    def check(task: asyncio.Task) -> None:
+        if task.cancelled() or task.exception() is None or failed.is_set():
+            return
+        failed.error = task.exception()
+        failed.set()
+
+    def create_refresh_task() -> None:
+        create()
+        scm.refresh_subscription_task.add_done_callback(check)
+
+    scm.create_refresh_task = create_refresh_task
+    return failed
 
 
 class ScheduleError(Exception):
@@ -716,6 +812,8 @@ class BACnetClient:
                 local_addr,
                 type(self._app).__name__,
             )
+
+        _throttle_requests(self._app, MAX_OUTSTANDING_REQUESTS)
 
         # Wait for the UDP transport to be ready.  The NormalApplication
         # constructor schedules UDP endpoint creation as background tasks.
@@ -1413,38 +1511,6 @@ class BACnetClient:
             device_id,
         )
         return objects
-
-    async def refresh_object_metadata(
-        self,
-        device_address: str,
-        object_type: int,
-        instance: int,
-        current_commandable: bool = False,
-        current_object_name: str | None = None,
-        current_description: str | None = None,
-        current_units: str | None = None,
-        known: dict[str, Any] | None = None,
-    ) -> dict[str, Any] | None:
-        """Re-read the metadata of one known object (issue #26).
-
-        *known* is the object's stored dict (or, older style, the current_*
-        values); every value in it is kept when a read comes back empty
-        (see _build_metadata). Returns the same dict shape as
-        read_object_list() entries, or None on failure.
-        """
-        if self._app is None:
-            raise RuntimeError("Client not connected")
-        known = {
-            "commandable": current_commandable,
-            "object_name": current_object_name,
-            "description": current_description,
-            "units": current_units,
-            **(known or {}),
-            "object_type": object_type,
-            "instance": instance,
-        }
-        result = await self.read_objects_metadata(device_address, [known])
-        return result.get(f"{object_type}:{instance}")
 
     async def read_objects_metadata(
         self, device_address: str, objects: list[dict[str, Any]]
@@ -2690,12 +2756,15 @@ class BACnetClient:
                 subscriber_process_identifier=subscriber_process_identifier,
                 lifetime=lifetime,
             )
+            renewal_failed = _watch_renewals(scm)
             async with scm:
                 ready_event.set()  # Subscription confirmed — unblock subscribe_cov()
                 while True:
                     # Wait for the first property change from this notification,
                     # or for a graceful-stop signal from unsubscribe_cov().
-                    result = await self._get_value_or_stop(scm, stop_event)
+                    result = await self._get_value_or_stop(
+                        scm, stop_event, renewal_failed
+                    )
                     if result is None:
                         break
                     prop_id, value = result
@@ -2724,6 +2793,15 @@ class BACnetClient:
                         _LOGGER.exception("Error in COV callback for %s", sub_key)
         except asyncio.CancelledError:
             _LOGGER.debug("COV task cancelled for %s", sub_key)
+        except _CovRenewalFailed as exc:
+            self._cov_tasks.pop(sub_key, None)
+            self._cov_stop_events.pop(sub_key, None)
+            _LOGGER.info(
+                "COV renewal failed for %s (%s); it is subscribed again after "
+                "the next successful poll",
+                sub_key,
+                exc,
+            )
         except (ErrorRejectAbortNack, Exception) as exc:
             if not ready_event.is_set():
                 ready_event.set()  # Unblock subscribe_cov() on failure
@@ -2784,7 +2862,9 @@ class BACnetClient:
 
     @staticmethod
     async def _get_value_or_stop(
-        scm: SubscriptionContextManager, stop_event: asyncio.Event
+        scm: SubscriptionContextManager,
+        stop_event: asyncio.Event,
+        renewal_failed: asyncio.Event | None = None,
     ) -> tuple[Any, Any] | None:
         """Await scm.get_value(), or return None if *stop_event* fires first.
 
@@ -2792,22 +2872,31 @@ class BACnetClient:
         its `async with scm:` block without an exception — so
         unsubscribe_cov()/unsubscribe_cov_property() can request a clean
         shutdown that BACpypes3 will actually forward to the device.
+        Raises _CovRenewalFailed when *renewal_failed* fires first.
         """
         get_task = asyncio.ensure_future(scm.get_value())
         stop_task = asyncio.ensure_future(stop_event.wait())
+        tasks = [get_task, stop_task]
+        if renewal_failed is not None:
+            tasks.append(asyncio.ensure_future(renewal_failed.wait()))
         try:
-            done, _ = await asyncio.wait(
-                {get_task, stop_task}, return_when=asyncio.FIRST_COMPLETED
-            )
+            done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
             if stop_task in done:
                 return None
+            if get_task not in done:
+                raise _CovRenewalFailed(renewal_failed.error)
             return get_task.result()
         finally:
-            for pending_task in (get_task, stop_task):
+            for pending_task in tasks:
                 if not pending_task.done():
                     pending_task.cancel()
                     with contextlib.suppress(asyncio.CancelledError):
                         await pending_task
+
+    def cov_subscription_active(self, sub_key: str) -> bool:
+        """True while the reader task of COV subscription *sub_key* runs."""
+        task = self._cov_tasks.get(sub_key)
+        return task is not None and not task.done()
 
     async def unsubscribe_all_cov(self) -> None:
         """Cancel all COV subscriptions."""
@@ -3003,10 +3092,13 @@ class BACnetClient:
         loop (issue #29).
         """
         try:
+            renewal_failed = _watch_renewals(scm)
             async with scm:
                 ready_event.set()
                 while True:
-                    result = await self._get_value_or_stop(scm, stop_event)
+                    result = await self._get_value_or_stop(
+                        scm, stop_event, renewal_failed
+                    )
                     if result is None:
                         break
                     prop_id, value = result

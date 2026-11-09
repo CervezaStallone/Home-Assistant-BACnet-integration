@@ -228,9 +228,6 @@ class FakeClient:
     async def read_objects_metadata(self, device_address, objects):
         return {f"{o['object_type']}:{o['instance']}": dict(o) for o in objects}
 
-    async def refresh_object_metadata(self, **kwargs):
-        return None
-
 
 @pytest.fixture(autouse=True)
 def _fake_client(enable_custom_integrations):
