@@ -33,3 +33,6 @@ SQLAlchemy==2.0.29
 paho-mqtt==1.6.1
 numpy==1.26.0
 josepy<2
+# The runner's system tzdata no longer has the legacy US/* names; the
+# harness of HA 2024.4 sets US/Pacific. zoneinfo falls back to this package.
+tzdata
