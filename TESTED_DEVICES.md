@@ -63,6 +63,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | LOYTEC electronics GmbH | LIOB-588 | 7.6 |
 | MBS GmbH, Krefeld | UGW | 1.22.1.1 |
 | Mercato | Climate MCP46D | 2.15 |
+| Mercato | MEI ULTRA | 2.31 BACnet |
 | Microtrol | Black Pear 2 | 0.8.6 |
 | Microtrol Ltd | Black Pear 2 | 0.8.6 |
 | Network Thermostat | J5-IP | 16.17 |
