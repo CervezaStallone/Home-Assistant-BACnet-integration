@@ -869,6 +869,19 @@
     "source": "telemetry"
   },
   {
+    "vendor": "Mercato",
+    "model": "MEI ULTRA",
+    "firmware": "2.31 BACnet",
+    "version": "1.0.55",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
     "vendor": "Microtrol",
     "model": "Black Pear 2",
     "firmware": "0.8.6",
