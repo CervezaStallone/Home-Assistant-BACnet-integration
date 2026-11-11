@@ -1005,6 +1005,15 @@ class BACnetClient:
             self._cov_property_stop_events.clear()
 
         if self._app is not None:
+            # Requests still in flight would retry on the closed socket every
+            # few seconds, forever: BACpypes3 resets the retry count before
+            # the send that then fails, so the limit is never reached (#83).
+            asap = getattr(self._app, "asap", None)
+            for ssm in [
+                *getattr(asap, "clientTransactions", ()),
+                *getattr(asap, "serverTransactions", ()),
+            ]:
+                ssm.stop_timer()
             try:
                 # ForeignApplication.close() only closes the socket: the BBMD
                 # re-registration timer keeps firing and sends on the closed

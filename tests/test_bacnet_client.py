@@ -518,6 +518,43 @@ class TestDisconnectCovTeardown:
         assert client.connection_generation == before + 1
 
 
+class TestDisconnectStopsTransactions:
+    """Issue #83: requests in flight when the client reconnected kept
+    retrying on the closed socket every few seconds, forever. BACpypes3
+    resets the retry count before the send that then fails, so the retry
+    limit is never reached; every attempt logged a traceback."""
+
+    def test_disconnect_stops_retry_timers_of_open_transactions(self):
+        stopped = []
+
+        class _SSM:
+            def __init__(self, name):
+                self.name = name
+
+            def stop_timer(self):
+                stopped.append(self.name)
+
+        class _App:
+            asap = type(
+                "ASAP",
+                (),
+                {
+                    "clientTransactions": [_SSM("c1")],
+                    "serverTransactions": [_SSM("s1")],
+                },
+            )()
+
+            def close(self):
+                stopped.append("closed")
+
+        client = BACnetClient(local_ip="127.0.0.1", local_port=47823)
+        client._app = _App()
+
+        asyncio.run(client.disconnect(graceful=False))
+
+        assert stopped == ["c1", "s1", "closed"]
+
+
 # ---------------------------------------------------------------------------
 # SubscribeCOVProperty — issue #26 (live metadata push)
 # ---------------------------------------------------------------------------
