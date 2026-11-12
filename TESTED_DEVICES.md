@@ -105,6 +105,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Trend Control Systems Ltd | IQ4E | IQ4E16 Iss4.36 Oct 18 2024<br>IQ4E96 Iss3.45 Aug 29 2017<br>IQ4E96 Iss4.36 Oct 18 2024 |
 | Tridium | Niagara JACE | N/A |
 | Tridium | Niagara4 Station | 4.12.0.156<br>4.15.3.28 |
+| Xiamen Milesight IoT Co., Ltd. | UG56-868M | 56.0.0.7 |
 | Xiamen Milesight IoT Co., Ltd. | UG65-868M-EA | 60.0.0.49-r2 |
 <!-- tested-devices:end -->
 
