@@ -1588,6 +1588,20 @@
   },
   {
     "vendor": "Xiamen Milesight IoT Co., Ltd.",
+    "model": "UG56-868M",
+    "firmware": "56.0.0.7",
+    "version": "1.0.55",
+    "connection": "Other subnet via BBMD",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "Xiamen Milesight IoT Co., Ltd.",
     "model": "UG65-868M-EA",
     "firmware": "60.0.0.49-r2",
     "version": "1.0.51",
