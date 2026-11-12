@@ -775,6 +775,19 @@
   },
   {
     "vendor": "Komfovent",
+    "model": "C5",
+    "firmware": "2.790",
+    "version": "1.0.55",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "Komfovent",
     "model": "C6",
     "firmware": "2",
     "version": "1.0.51",
@@ -1467,6 +1480,19 @@
     "model": "LMCP48",
     "firmware": "07.62",
     "version": "1.0.52",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "Trane",
+    "model": "Tracer Summit Enhanced BCU (BMTX), M2",
+    "firmware": "17.073",
+    "version": "1.0.55",
     "connection": "Same subnet",
     "works": [
       "Reading values"

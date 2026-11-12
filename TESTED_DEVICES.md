@@ -55,7 +55,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Kieback&Peter | DDC4000 | B1.15#0<br>B1.16#0<br>B1.18#0<br>B1.20#0<br>N/A |
 | Kieback&Peter | DDC420 | 1.2<br>N/A |
 | KNXlogic | ComfoWay V3 | 0.6.0 |
-| Komfovent | C5 | 2.780 |
+| Komfovent | C5 | 2.780<br>2.790 |
 | Komfovent | C6 | 2 |
 | Komfovent | C8 | 2 |
 | LOYTEC electronics GmbH | LINX-202 | 7.6 |
@@ -101,6 +101,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Sierra Monitor Corporation | FPC-N54 | V2.23m |
 | Signify | Interact BACnet gateway | N/A |
 | The Watt Stopper, Inc. | LMCP48 | 07.62 |
+| Trane | Tracer Summit Enhanced BCU BMTX, M2 | 17.073 |
 | Trend Control Systems Ltd | IQ422 | IQ422-0 Iss4.37 Oct 24 2025<br>IQ422-12 Iss4.38 Dec 12 2025 |
 | Trend Control Systems Ltd | IQ4E | IQ4E16 Iss4.36 Oct 18 2024<br>IQ4E96 Iss3.45 Aug 29 2017<br>IQ4E96 Iss4.36 Oct 18 2024 |
 | Tridium | Niagara JACE | N/A |
