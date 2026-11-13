@@ -340,6 +340,8 @@ _ATOMIC_TYPES: dict[str, type] = {
 # many calendars its exceptions refer to, so that fan-out is capped.
 _SCHEDULE_MAX_CALENDARS = 32
 _SCHEDULE_READ_TIMEOUT = 60.0
+# A write in flight when the client reconnects is never answered (#83).
+_WRITE_TIMEOUT = 10.0
 _SCHEDULE_PROPERTIES = (
     "presentValue",
     "scheduleDefault",
@@ -2281,14 +2283,13 @@ class BACnetClient:
                 commandable,
             )
 
-            if send_priority:
-                result = await self._app.write_property(
-                    addr, oid, property_name, bacnet_value, priority=priority
-                )
-            else:
-                result = await self._app.write_property(
-                    addr, oid, property_name, bacnet_value
-                )
+            kwargs = {"priority": priority} if send_priority else {}
+            result = await asyncio.wait_for(
+                self._app.write_property(
+                    addr, oid, property_name, bacnet_value, **kwargs
+                ),
+                _WRITE_TIMEOUT,
+            )
 
             # BACpypes3 returns ErrorRejectAbortNack on failure instead of
             # raising it.  We must check the return value explicitly.

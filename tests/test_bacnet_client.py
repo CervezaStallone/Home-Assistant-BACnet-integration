@@ -1145,6 +1145,38 @@ def test_write_other_property_uses_its_datatype_and_no_priority():
     assert "priority" not in call
 
 
+def test_write_without_answer_times_out(monkeypatch):
+    """A write in flight when the client reconnects is never answered (#83).
+
+    disconnect() stops its retries, so without a timeout the action waits forever.
+    """
+    import custom_components.bacnet.bacnet_client as bc
+
+    class _SilentApp:
+        async def write_property(self, *args, **kwargs):
+            await asyncio.Event().wait()
+
+    monkeypatch.setattr(bc, "_WRITE_TIMEOUT", 0.01)
+    client = BACnetClient(local_ip="127.0.0.1", local_port=47815)
+    client._app = _SilentApp()
+
+    async def run():
+        return await asyncio.wait_for(
+            client.write_property(
+                device_address="192.168.1.1",
+                object_type=OBJECT_TYPE_BINARY_VALUE,
+                instance=1,
+                property_name="presentValue",
+                value=1,
+                priority=8,
+                commandable=True,
+            ),
+            timeout=2,
+        )
+
+    assert asyncio.run(run()) is False
+
+
 def test_int_to_object_type_str_knows_every_standard_type():
     """read_property on a non-imported object (e.g. a Trend Log) needs its name."""
     assert BACnetClient._int_to_object_type_str(20) == "trend-log"
