@@ -129,6 +129,12 @@ MAX_OUTSTANDING_REQUESTS = 16
 # together — one config-entry reload instead of one per object.
 METADATA_PERSIST_DELAY = 5  # seconds
 DEFAULT_METADATA_REFRESH_INTERVAL = 3600  # seconds (1 hour) — metadata sweep
+# The first sweep runs this long after setup, so names a discovery read missed
+# (#62) are filled in within minutes instead of an hour.
+FIRST_METADATA_SWEEP_DELAY = 300  # seconds
+# Polls in a row a failed COV resubscribe is tried again before the object
+# stays on polling: one timeout on a busy device must not end COV for good.
+COV_RESUBSCRIBE_ATTEMPTS = 3
 
 # Properties eligible for a LIVE SubscribeCOVProperty subscription (ASHRAE
 # 135-2012 Addendum ar) instead of the ReadProperty-based refresh above.

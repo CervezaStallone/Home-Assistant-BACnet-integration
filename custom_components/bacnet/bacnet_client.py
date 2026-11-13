@@ -22,6 +22,7 @@ import json
 import logging
 import math
 import socket
+from collections import deque
 from collections.abc import Awaitable, Callable
 from typing import Any, ClassVar
 
@@ -30,6 +31,7 @@ from bacpypes3.apdu import (
     ErrorRejectAbortNack,
     GetEventInformationRequest,
     SubscribeCOVPropertyRequest,
+    SubscribeCOVRequest,
 )
 from bacpypes3.basetypes import (
     CalendarEntry,
@@ -85,50 +87,76 @@ from .helpers import mask_address as _mask_address
 _LOGGER = logging.getLogger(__name__)
 
 
-def _throttle_requests(app: Any, limit: int) -> None:
+def _throttle_requests(app: Any, limit: int, reserved: int = 0) -> None:
     """Let at most *limit* confirmed requests per device be in flight on *app*.
 
     BACpypes3 hands out 256 invoke IDs per device and, when all are in use,
     searches for a free one forever: Home Assistant froze at 100% CPU when
     hundreds of COV renewals came due at once on a slow device (issue #12).
     Replacing app.request also covers the requests BACpypes3 sends itself.
+    COV (un)subscriptions and renewals leave *reserved* slots free, and
+    other requests waiting go first: on a switched-off device every renewal
+    waits out its timeout, and a poll waited minutes behind hundreds of them.
     Requests over the limit wait in order; cancelling one is passed on.
+    Sets ``app.fail_queued_requests(error)`` for disconnect().
     """
     send = app.request
-    in_flight: dict[Any, int] = {}
-    waiting: dict[Any, list[tuple[Any, asyncio.Future]]] = {}
+    in_flight: dict[Any, list[int]] = {}  # dest -> [all, subscriptions]
+    # dest -> (other requests, subscriptions) waiting for a slot
+    waiting: dict[Any, tuple[deque, deque]] = {}
 
-    def forward(apdu: Any, dest: Any) -> asyncio.Future:
-        in_flight[dest] = in_flight.get(dest, 0) + 1
+    def has_room(dest: Any, subscription: bool) -> bool:
+        total, subscriptions = in_flight.get(dest, (0, 0))
+        return total < limit and (not subscription or subscriptions < limit - reserved)
+
+    def forward(apdu: Any, dest: Any, subscription: bool) -> asyncio.Future:
+        counts = in_flight.setdefault(dest, [0, 0])
+        counts[0] += 1
+        counts[1] += subscription
         future = send(apdu)
-        future.add_done_callback(lambda _f: finished(dest))
+        future.add_done_callback(lambda _f: finished(dest, subscription))
         return future
 
-    def finished(dest: Any) -> None:
-        in_flight[dest] -= 1
-        queue = waiting.get(dest, [])
-        while queue and in_flight[dest] < limit:
-            apdu, outer = queue.pop(0)
-            if outer.done():  # cancelled while waiting
-                continue
-            inner = forward(apdu, dest)
-            _chain(inner, outer)
-        if not queue:
-            waiting.pop(dest, None)
-        if not in_flight[dest]:
+    def finished(dest: Any, subscription: bool) -> None:
+        counts = in_flight[dest]
+        counts[0] -= 1
+        counts[1] -= subscription
+        queues = waiting.get(dest)
+        if queues is not None:
+            for is_subscription, queue in zip((False, True), queues, strict=True):
+                while queue and has_room(dest, is_subscription):
+                    apdu, outer = queue.popleft()
+                    if outer.done():  # cancelled while waiting
+                        continue
+                    _chain(forward(apdu, dest, is_subscription), outer)
+            if not queues[0] and not queues[1]:
+                del waiting[dest]
+        if not counts[0]:
             del in_flight[dest]
 
     def request(apdu: Any) -> asyncio.Future:
         if not isinstance(apdu, ConfirmedRequestPDU):
             return send(apdu)
         dest = apdu.pduDestination
-        if in_flight.get(dest, 0) < limit:
-            return forward(apdu, dest)
+        subscription = isinstance(
+            apdu, (SubscribeCOVRequest, SubscribeCOVPropertyRequest)
+        )
+        if has_room(dest, subscription):
+            return forward(apdu, dest, subscription)
         outer = asyncio.get_running_loop().create_future()
-        waiting.setdefault(dest, []).append((apdu, outer))
+        queues = waiting.setdefault(dest, (deque(), deque()))
+        queues[subscription].append((apdu, outer))
         return outer
 
+    def fail_queued_requests(error: Exception) -> None:
+        for queues in waiting.values():
+            for queue in queues:
+                for _apdu, outer in queue:
+                    if not outer.done():
+                        outer.set_exception(error)
+
     app.request = request
+    app.fail_queued_requests = fail_queued_requests
 
 
 def _chain(inner: asyncio.Future, outer: asyncio.Future) -> None:
@@ -217,10 +245,13 @@ def _watch_renewals(scm: SubscriptionContextManager) -> asyncio.Event:
     only logged "Task exception was never retrieved" while the subscription
     expired on the device and the reader kept waiting forever (issue #12).
     Must be called before entering *scm*: the first renewal is scheduled then.
-    The error is kept in the event's ``error`` attribute.
+    The error is kept in the event's ``error`` attribute. Set its ``closed``
+    attribute when the subscription ends: a renewal still in flight then
+    schedules the next one after the unsubscribe, which would renew forever.
     """
     failed = asyncio.Event()
     failed.error = None
+    failed.closed = False
     create = scm.create_refresh_task
 
     def check(task: asyncio.Task) -> None:
@@ -230,6 +261,8 @@ def _watch_renewals(scm: SubscriptionContextManager) -> asyncio.Event:
         failed.set()
 
     def create_refresh_task() -> None:
+        if failed.closed:
+            return
         create()
         scm.refresh_subscription_task.add_done_callback(check)
 
@@ -815,7 +848,9 @@ class BACnetClient:
                 type(self._app).__name__,
             )
 
-        _throttle_requests(self._app, MAX_OUTSTANDING_REQUESTS)
+        _throttle_requests(
+            self._app, MAX_OUTSTANDING_REQUESTS, reserved=MAX_CONCURRENT_REQUESTS
+        )
 
         # Wait for the UDP transport to be ready.  The NormalApplication
         # constructor schedules UDP endpoint creation as background tasks.
@@ -1010,12 +1045,23 @@ class BACnetClient:
             # Requests still in flight would retry on the closed socket every
             # few seconds, forever: BACpypes3 resets the retry count before
             # the send that then fails, so the limit is never reached (#83).
+            # Their futures are failed too, or whatever awaits them (renewals,
+            # writes, requests queued by the throttle) waits forever.
+            fail_queued = getattr(self._app, "fail_queued_requests", None)
+            if fail_queued is not None:
+                fail_queued(ConnectionError("BACnet client disconnected"))
             asap = getattr(self._app, "asap", None)
             for ssm in [
                 *getattr(asap, "clientTransactions", ()),
                 *getattr(asap, "serverTransactions", ()),
             ]:
                 ssm.stop_timer()
+            for requests in list(getattr(self._app, "_requests", {}).values()):
+                for _apdu, future in list(requests):
+                    if not future.done():
+                        future.set_exception(
+                            ConnectionError("BACnet client disconnected")
+                        )
             try:
                 # ForeignApplication.close() only closes the socket: the BBMD
                 # re-registration timer keeps firing and sends on the closed
@@ -2759,6 +2805,7 @@ class BACnetClient:
         so a CancelledError raised inside `async with scm:` would abandon
         the subscription on the device until its lifetime expires (#29).
         """
+        renewal_failed = None
         try:
             scm = self._app.change_of_value(
                 addr,
@@ -2837,6 +2884,9 @@ class BACnetClient:
                 _LOGGER.warning(
                     "COV task ended unexpectedly for %s", sub_key, exc_info=True
                 )
+        finally:
+            if renewal_failed is not None:
+                renewal_failed.closed = True
 
     async def unsubscribe_cov(self, sub_key: str) -> None:
         """Cancel a COV subscription, notifying the device before teardown.
@@ -3101,8 +3151,8 @@ class BACnetClient:
         for why *stop_event* (rather than task.cancel()) is used to end the
         loop (issue #29).
         """
+        renewal_failed = _watch_renewals(scm)
         try:
-            renewal_failed = _watch_renewals(scm)
             async with scm:
                 ready_event.set()
                 while True:
@@ -3124,6 +3174,15 @@ class BACnetClient:
                         )
         except asyncio.CancelledError:
             _LOGGER.debug("COV-Property task cancelled for %s", sub_key)
+        except _CovRenewalFailed as exc:
+            self._cov_property_tasks.pop(sub_key, None)
+            self._cov_property_stop_events.pop(sub_key, None)
+            _LOGGER.info(
+                "COV-Property renewal failed for %s (%s); it is subscribed "
+                "again after the next successful poll",
+                sub_key,
+                exc,
+            )
         except (ErrorRejectAbortNack, Exception) as exc:  # noqa: BLE001
             if not ready_event.is_set():
                 ready_event.set()
@@ -3135,6 +3194,8 @@ class BACnetClient:
                 sub_key,
                 exc,
             )
+        finally:
+            renewal_failed.closed = True
 
     async def unsubscribe_cov_property(self, sub_key: str) -> None:
         """Cancel a COV-Property subscription, notifying the device first.

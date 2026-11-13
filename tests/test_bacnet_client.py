@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 
 import pytest
 from bacpypes3.primitivedata import Null
@@ -554,6 +555,33 @@ class TestDisconnectStopsTransactions:
 
         assert stopped == ["c1", "s1", "closed"]
 
+    def test_disconnect_fails_requests_in_flight_and_queued(self):
+        """Their futures were never finished, so whatever awaited them
+        (renewals, writes, queued requests) hung forever."""
+        import custom_components.bacnet.bacnet_client as bc
+
+        async def run():
+            app = _RecordingApp()
+            app.close = lambda: None
+            bc._throttle_requests(app, limit=1)
+            in_flight = app.request(_read_request())
+            queued = app.request(_read_request())
+            # BACpypes3 keeps the futures of open requests here.
+            app._requests = {"10.0.0.1": [app.sent[0]]}
+            client = BACnetClient(local_ip="127.0.0.1", local_port=47826)
+            client._app = app
+
+            await client.disconnect(graceful=False)
+
+            with pytest.raises(ConnectionError):
+                await asyncio.wait_for(in_flight, 1)
+            with pytest.raises(ConnectionError):
+                await asyncio.wait_for(queued, 1)
+            await asyncio.sleep(0)
+            assert len(app.sent) == 1  # nothing sent on the closed app
+
+        asyncio.run(run())
+
 
 # ---------------------------------------------------------------------------
 # SubscribeCOVProperty — issue #26 (live metadata push)
@@ -894,6 +922,66 @@ class TestCovRenewalFailure:
             assert not client.cov_subscription_active(sub_key)
 
         asyncio.run(run())
+
+    def test_no_renewal_after_the_subscription_ended(self):
+        """A renewal still in flight when the reader exits reschedules itself
+        after the unsubscribe, and would renew the subscription forever."""
+        client = BACnetClient(local_ip="127.0.0.1", local_port=47824)
+        scm = _FakeRenewingSCM()
+        client._app = type(
+            "_FakeApp", (), {"change_of_value": lambda self, *a, **k: scm}
+        )()
+
+        async def run():
+            ready_event = asyncio.Event()
+            stop_event = asyncio.Event()
+            task = asyncio.create_task(
+                client._cov_reader_task(
+                    addr="192.168.1.50",
+                    oid="analog-input,1",
+                    lifetime=300,
+                    sub_key="sub-1",
+                    obj_key="0:1",
+                    callback=lambda *a: None,
+                    ready_event=ready_event,
+                    stop_event=stop_event,
+                )
+            )
+            await ready_event.wait()
+            stop_event.set()
+            await asyncio.wait_for(task, timeout=1)
+
+            scm.create_refresh_task()  # the late renewal's call_later fires
+
+        asyncio.run(run())
+        assert scm.refresh_subscription_task is None
+
+    def test_failed_live_renewal_is_logged_as_renewal(self, caplog):
+        """Not as 'COV-Property not supported', at debug level."""
+        client = BACnetClient(local_ip="127.0.0.1", local_port=47825)
+        scm = _FakeRenewingSCM()
+
+        async def run():
+            ready_event = asyncio.Event()
+            task = asyncio.create_task(
+                client._cov_property_reader_task(
+                    scm=scm,
+                    sub_key="sub-1:units",
+                    obj_key="0:1",
+                    property_name="units",
+                    callback=lambda *a: None,
+                    ready_event=ready_event,
+                    stop_event=asyncio.Event(),
+                )
+            )
+            await ready_event.wait()
+            scm.create_refresh_task()
+            await asyncio.wait_for(task, timeout=1)
+
+        with caplog.at_level(logging.INFO, logger="custom_components.bacnet"):
+            asyncio.run(run())
+        assert "renewal failed" in caplog.text
+        assert "not supported" not in caplog.text
 
 
 # ---------------------------------------------------------------------------
@@ -1422,6 +1510,19 @@ def _read_request(address="10.0.0.1"):
     )
 
 
+def _subscribe_request(address="10.0.0.1"):
+    from bacpypes3.apdu import SubscribeCOVRequest
+    from bacpypes3.pdu import Address
+    from bacpypes3.primitivedata import ObjectIdentifier
+
+    return SubscribeCOVRequest(
+        subscriberProcessIdentifier=1,
+        monitoredObjectIdentifier=ObjectIdentifier("analog-value,1"),
+        lifetime=300,
+        destination=Address(address),
+    )
+
+
 class TestRequestThrottle:
     """BACpypes3 gives each device 256 invoke IDs and loops forever looking
     for a free one when all are in use. 640 COV renewals due at once on a
@@ -1443,6 +1544,42 @@ class TestRequestThrottle:
 
             app.sent[2][1].set_result("third")
             assert await futures[2] == "third"
+
+        asyncio.run(run())
+
+    def test_subscriptions_leave_room_for_other_requests(self):
+        """A switched-off device: hundreds of renewals each wait out their
+        timeout and filled every slot, so a poll waited minutes behind them
+        and the outage was noticed that much later."""
+        import custom_components.bacnet.bacnet_client as bc
+
+        async def run():
+            app = _RecordingApp()
+            bc._throttle_requests(app, limit=4, reserved=1)
+            for _ in range(10):
+                app.request(_subscribe_request())
+            assert len(app.sent) == 3
+            app.request(_read_request())
+            assert len(app.sent) == 4  # the read did not wait
+
+        asyncio.run(run())
+
+    def test_queued_requests_go_before_queued_subscriptions(self):
+        import custom_components.bacnet.bacnet_client as bc
+
+        async def run():
+            app = _RecordingApp()
+            bc._throttle_requests(app, limit=2, reserved=1)
+            app.request(_subscribe_request())
+            app.request(_subscribe_request())  # waits: subscription cap
+            app.request(_read_request())
+            app.request(_read_request())  # waits: device cap
+            assert len(app.sent) == 2
+
+            app.sent[0][1].set_result("ack")
+            await asyncio.sleep(0)
+            assert len(app.sent) == 3
+            assert type(app.sent[2][0]).__name__ == "ReadPropertyRequest"
 
         asyncio.run(run())
 
