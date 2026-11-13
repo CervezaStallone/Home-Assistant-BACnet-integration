@@ -14,6 +14,7 @@ The coordinator also handles:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import math
 import random
@@ -212,10 +213,15 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._outage_issue_raised: bool = True
 
         # Metadata refresh (issue #26). Not right after setup, the config flow
-        # just read the metadata; but within minutes, see
-        # FIRST_METADATA_SWEEP_DELAY.
+        # just read the metadata. Within minutes when names are missing (#62),
+        # see FIRST_METADATA_SWEEP_DELAY; otherwise after the usual interval.
+        first_sweep = (
+            FIRST_METADATA_SWEEP_DELAY
+            if any(not o.get("object_name") for o in objects)
+            else DEFAULT_METADATA_REFRESH_INTERVAL
+        )
         self._last_metadata_refresh: datetime = datetime.now(UTC) - timedelta(
-            seconds=DEFAULT_METADATA_REFRESH_INTERVAL - FIRST_METADATA_SWEEP_DELAY
+            seconds=DEFAULT_METADATA_REFRESH_INTERVAL - first_sweep
         )
         self._metadata_task: asyncio.Task | None = None
         self._persist_handle: asyncio.TimerHandle | None = None
@@ -267,11 +273,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         data: dict[str, Any] = dict(self.data) if self.data else {}
 
         # --- First run: set up COV subscriptions ---
-        first_run = (
-            not self._cov_subscriptions
-            and not self._polled_objects
-            and not self._cov_retries
-        )
+        first_run = not self._cov_subscriptions and not self._polled_objects
         if first_run:
             await self._setup_subscriptions()
 
@@ -318,8 +320,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._needs_resubscribe
                 or self._cov_generation != self.client.connection_generation
             ):
-                if self._resubscribe_task is not None:
-                    self._resubscribe_task.cancel()
+                await self._cancel_resubscribe()
                 await self._restore_subscriptions()
             else:
                 self._start_resubscribe()
@@ -541,6 +542,14 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         await self._setup_subscriptions()
         self._needs_resubscribe = False
 
+    async def _cancel_resubscribe(self) -> None:
+        """Stop a running resubscribe and wait until the client cleaned up."""
+        task = self._resubscribe_task
+        if task is not None and not task.done():
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+
     def _start_resubscribe(self) -> None:
         """Subscribe again, in the background, to ended COV subscriptions (#12).
 
@@ -554,7 +563,6 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return
         active = self.client.cov_subscription_active
         dead = [k for k, sub in self._cov_subscriptions.items() if not active(sub)]
-        dead += [k for k in self._cov_retries if k not in dead]
         dead_live = [
             k for k, sub in self._cov_property_subscriptions.items() if not active(sub)
         ]
@@ -581,10 +589,13 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         by_key = {f"{o['object_type']}:{o['instance']}": o for o in self.objects}
         semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 
+        # The ended subscription stays listed until it is replaced or given
+        # up: emptied bookkeeping made the next poll take this for a first
+        # run and subscribe everything a second time.
         async def resubscribe(obj_key: str) -> None:
-            self._cov_subscriptions.pop(obj_key, None)
             obj = by_key.get(obj_key)
             if obj is None:
+                self._cov_subscriptions.pop(obj_key, None)
                 self._cov_retries.pop(obj_key, None)
                 return
             async with semaphore:
@@ -604,6 +615,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._cov_retries[obj_key] = attempts
             else:
                 self._cov_retries.pop(obj_key, None)
+                self._cov_subscriptions.pop(obj_key, None)
                 self._polled_objects.append(obj)
 
         async def resubscribe_live(key: str) -> None:
@@ -1032,9 +1044,9 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         shared BACnetClient (used by multiple coordinators on the same port)
         is not disrupted when one config entry is unloaded.
         """
-        for task in (self._metadata_task, self._resubscribe_task):
-            if task is not None and not task.done():
-                task.cancel()
+        if self._metadata_task is not None and not self._metadata_task.done():
+            self._metadata_task.cancel()
+        await self._cancel_resubscribe()
         # Dropped, not flushed: the device still holds the new metadata, so
         # the next coordinator picks it up on its first sweep.
         if self._persist_handle is not None:

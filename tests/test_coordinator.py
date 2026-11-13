@@ -545,6 +545,41 @@ class TestRestoreSubscriptions:
         asyncio.run(run())
         assert coord._cov_subscriptions == {"0:1": "new"}
 
+    def test_running_resubscribe_does_not_trigger_a_full_setup(self):
+        """With every object on COV, the next poll must not take the
+        resubscribe in progress for a first run and subscribe all again."""
+        import asyncio
+        from unittest.mock import AsyncMock, MagicMock
+
+        coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
+        coord._cov_subscriptions = {"0:1": "dead"}
+        coord.client.cov_subscription_active = MagicMock(return_value=False)
+        coord._setup_subscriptions = AsyncMock()
+        release = None
+
+        async def slow_subscribe(**_kwargs):
+            await release.wait()
+            return "new"
+
+        coord.client.subscribe_cov = slow_subscribe
+        coord.client.poll_objects = AsyncMock(
+            return_value={"0:1": {"presentValue": 1.0, "statusFlags": [False] * 4}}
+        )
+
+        async def run():
+            nonlocal release
+            release = asyncio.Event()
+            _run_background_tasks(coord)
+            await coord._async_update_data()
+            await asyncio.sleep(0.01)  # resubscribes are waiting on the device
+            await coord._async_update_data()
+            release.set()
+            await coord._resubscribe_task
+
+        asyncio.run(run())
+        coord._setup_subscriptions.assert_not_awaited()
+        assert coord._cov_subscriptions == {"0:1": "new"}
+
     def test_failed_resubscribe_is_retried_before_polling_for_good(self):
         """A timeout on a busy device must not move the object off COV
         for good; only repeated failures do."""
@@ -1248,7 +1283,7 @@ class TestMetadataSweepBackground:
         asyncio.run(coord.async_shutdown())
         task.cancel.assert_called_once()
 
-    def test_first_sweep_runs_soon_after_setup(self):
+    def test_first_sweep_runs_soon_when_names_are_missing(self):
         """Names missing after discovery (#62) were fixed by the first COV
         notification; now the sweep does it, so it must not wait an hour."""
         import asyncio
@@ -1256,25 +1291,30 @@ class TestMetadataSweepBackground:
 
         from custom_components.bacnet.const import FIRST_METADATA_SWEEP_DELAY
 
-        coord = self._polling_coord()
-        # A fresh coordinator, FIRST_METADATA_SWEEP_DELAY seconds later.
-        coord._last_metadata_refresh = _make_coordinator()._last_metadata_refresh
-        coord._last_metadata_refresh -= timedelta(
-            seconds=FIRST_METADATA_SWEEP_DELAY + 1
-        )
-        asyncio.run(coord._async_update_data())
-        assert coord.hass.async_create_background_task.call_count == 1
+        later = timedelta(seconds=FIRST_METADATA_SWEEP_DELAY + 1)
+        for name, sweeps in (("Supply temp", 0), (None, 1)):
+            coord = self._polling_coord()
+            fresh = _make_coordinator(
+                objects=[{"object_type": 0, "instance": 1, "object_name": name}]
+            )
+            coord.objects = fresh.objects
+            coord._last_metadata_refresh = fresh._last_metadata_refresh - later
+            asyncio.run(coord._async_update_data())
+            assert coord.hass.async_create_background_task.call_count == sweeps
 
     def test_shutdown_cancels_running_resubscribe(self):
+        """And waits for it, so the client can clean up the subscribe."""
         import asyncio
-        from unittest.mock import MagicMock
 
         coord = _make_coordinator()
-        task = MagicMock()
-        task.done.return_value = False
-        coord._resubscribe_task = task
-        asyncio.run(coord.async_shutdown())
-        task.cancel.assert_called_once()
+
+        async def run():
+            coord._resubscribe_task = asyncio.create_task(asyncio.Event().wait())
+            await asyncio.sleep(0)
+            await coord.async_shutdown()
+            assert coord._resubscribe_task.done()
+
+        asyncio.run(run())
 
     def test_sweep_reads_all_objects_in_one_batch_call(self):
         import asyncio

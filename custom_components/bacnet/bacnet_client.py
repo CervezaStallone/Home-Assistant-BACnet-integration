@@ -94,9 +94,9 @@ def _throttle_requests(app: Any, limit: int, reserved: int = 0) -> None:
     searches for a free one forever: Home Assistant froze at 100% CPU when
     hundreds of COV renewals came due at once on a slow device (issue #12).
     Replacing app.request also covers the requests BACpypes3 sends itself.
-    COV (un)subscriptions and renewals leave *reserved* slots free, and
-    other requests waiting go first: on a switched-off device every renewal
-    waits out its timeout, and a poll waited minutes behind hundreds of them.
+    COV subscriptions and renewals leave *reserved* slots free: on a
+    switched-off device every renewal waits out its timeout, and a poll
+    waited minutes behind hundreds of them.
     Requests over the limit wait in order; cancelling one is passed on.
     Sets ``app.fail_queued_requests(error)`` for disconnect().
     """
@@ -123,7 +123,10 @@ def _throttle_requests(app: Any, limit: int, reserved: int = 0) -> None:
         counts[1] -= subscription
         queues = waiting.get(dest)
         if queues is not None:
-            for is_subscription, queue in zip((False, True), queues, strict=True):
+            # Renewals are sent 2 s before the subscription expires: they go
+            # first within their share, other requests keep their reserve.
+            for is_subscription in (True, False):
+                queue = queues[is_subscription]
                 while queue and has_room(dest, is_subscription):
                     apdu, outer = queue.popleft()
                     if outer.done():  # cancelled while waiting
@@ -138,8 +141,11 @@ def _throttle_requests(app: Any, limit: int, reserved: int = 0) -> None:
         if not isinstance(apdu, ConfirmedRequestPDU):
             return send(apdu)
         dest = apdu.pduDestination
-        subscription = isinstance(
-            apdu, (SubscribeCOVRequest, SubscribeCOVPropertyRequest)
+        # A cancellation has no lifetime: it must not wait behind renewals,
+        # or unsubscribe gives up and abandons the subscription (#29).
+        subscription = (
+            isinstance(apdu, (SubscribeCOVRequest, SubscribeCOVPropertyRequest))
+            and apdu.lifetime is not None
         )
         if has_room(dest, subscription):
             return forward(apdu, dest, subscription)
@@ -154,6 +160,7 @@ def _throttle_requests(app: Any, limit: int, reserved: int = 0) -> None:
                 for _apdu, outer in queue:
                     if not outer.done():
                         outer.set_exception(error)
+                queue.clear()
 
     app.request = request
     app.fail_queued_requests = fail_queued_requests
@@ -374,7 +381,9 @@ _ATOMIC_TYPES: dict[str, type] = {
 _SCHEDULE_MAX_CALENDARS = 32
 _SCHEDULE_READ_TIMEOUT = 60.0
 # A write in flight when the client reconnects is never answered (#83).
-_WRITE_TIMEOUT = 10.0
+# Longer than BACpypes3's own retries (3 s x 4 sends), so a write the device
+# answers late is not reported as failed.
+_WRITE_TIMEOUT = 15.0
 _SCHEDULE_PROPERTIES = (
     "presentValue",
     "scheduleDefault",
@@ -1041,22 +1050,24 @@ class BACnetClient:
             self._cov_property_tasks.clear()
             self._cov_property_stop_events.clear()
 
-        if self._app is not None:
-            # Requests still in flight would retry on the closed socket every
+        app, self._app = self._app, None
+        if app is not None:
+            # Detached first, so code woken by the failures below cannot send
+            # on the app being closed. Requests still in flight would retry on the closed socket every
             # few seconds, forever: BACpypes3 resets the retry count before
             # the send that then fails, so the limit is never reached (#83).
             # Their futures are failed too, or whatever awaits them (renewals,
             # writes, requests queued by the throttle) waits forever.
-            fail_queued = getattr(self._app, "fail_queued_requests", None)
+            fail_queued = getattr(app, "fail_queued_requests", None)
             if fail_queued is not None:
                 fail_queued(ConnectionError("BACnet client disconnected"))
-            asap = getattr(self._app, "asap", None)
+            asap = getattr(app, "asap", None)
             for ssm in [
                 *getattr(asap, "clientTransactions", ()),
                 *getattr(asap, "serverTransactions", ()),
             ]:
                 ssm.stop_timer()
-            for requests in list(getattr(self._app, "_requests", {}).values()):
+            for requests in list(getattr(app, "_requests", {}).values()):
                 for _apdu, future in list(requests):
                     if not future.done():
                         future.set_exception(
@@ -1067,15 +1078,14 @@ class BACnetClient:
                 # re-registration timer keeps firing and sends on the closed
                 # transport forever (issue #54). unregister() stops it and
                 # queues a deregistration; yield once so that is sent first.
-                unregister = getattr(self._app, "unregister", None)
+                unregister = getattr(app, "unregister", None)
                 if unregister is not None:
                     unregister()
                     await asyncio.sleep(0)
                 # close() is synchronous in BACpypes3
-                self._app.close()
+                app.close()
             except Exception:  # noqa: BLE001
                 _LOGGER.debug("Exception during app close (ignored)")
-            self._app = None
             _LOGGER.info("BACnet client disconnected")
 
     # ------------------------------------------------------------------
@@ -2601,7 +2611,7 @@ class BACnetClient:
             try:
                 result = await asyncio.wait_for(
                     self._app.write_property(addr, oid, prop, value, index),
-                    timeout=10,
+                    timeout=_WRITE_TIMEOUT,
                 )
             except TimeoutError:
                 raise ScheduleError(f"timeout writing {prop}") from None
@@ -2724,6 +2734,13 @@ class BACnetClient:
             # so ready_event being set means the subscription is truly active.
             try:
                 await asyncio.wait_for(ready_event.wait(), timeout=10.0)
+            except asyncio.CancelledError:
+                # Cancelled (unload, reconnect): the reader would otherwise
+                # complete the subscription without anyone tracking it.
+                task.cancel()
+                self._cov_tasks.pop(sub_key, None)
+                self._cov_stop_events.pop(sub_key, None)
+                raise
             except TimeoutError:
                 _LOGGER.warning(
                     "COV subscription timed out for %s:%d at %s. Falling back to polling.",
@@ -2887,6 +2904,9 @@ class BACnetClient:
         finally:
             if renewal_failed is not None:
                 renewal_failed.closed = True
+                # A renewal in flight would subscribe again after the cancel.
+                if scm.refresh_subscription_task is not None:
+                    scm.refresh_subscription_task.cancel()
 
     async def unsubscribe_cov(self, sub_key: str) -> None:
         """Cancel a COV subscription, notifying the device before teardown.
@@ -3078,6 +3098,11 @@ class BACnetClient:
 
             try:
                 await asyncio.wait_for(ready_event.wait(), timeout=10.0)
+            except asyncio.CancelledError:
+                task.cancel()
+                self._cov_property_tasks.pop(sub_key, None)
+                self._cov_property_stop_events.pop(sub_key, None)
+                raise
             except TimeoutError:
                 _LOGGER.warning(
                     "COV-Property subscription (%s) timed out for %s:%d at %s.",
@@ -3196,6 +3221,8 @@ class BACnetClient:
             )
         finally:
             renewal_failed.closed = True
+            if scm.refresh_subscription_task is not None:
+                scm.refresh_subscription_task.cancel()
 
     async def unsubscribe_cov_property(self, sub_key: str) -> None:
         """Cancel a COV-Property subscription, notifying the device first.
