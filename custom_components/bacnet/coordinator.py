@@ -215,9 +215,13 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Metadata refresh (issue #26). Not right after setup, the config flow
         # just read the metadata. Within minutes when names are missing (#62),
         # see FIRST_METADATA_SWEEP_DELAY; otherwise after the usual interval.
+        # Discovery stores "Object <instance>" when it could not read the name.
         first_sweep = (
             FIRST_METADATA_SWEEP_DELAY
-            if any(not o.get("object_name") for o in objects)
+            if any(
+                o.get("object_name") in (None, "", f"Object {o['instance']}")
+                for o in objects
+            )
             else DEFAULT_METADATA_REFRESH_INTERVAL
         )
         self._last_metadata_refresh: datetime = datetime.now(UTC) - timedelta(
@@ -638,8 +642,13 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if sub_key is not None:
                 self._cov_property_subscriptions[key] = sub_key
 
+        # An error (client reconnecting) must not end this task while the
+        # other resubscribes run on, out of reach of _cancel_resubscribe();
+        # those objects are tried again after the next poll.
         await asyncio.gather(
-            *(resubscribe(k) for k in dead), *(resubscribe_live(k) for k in dead_live)
+            *(resubscribe(k) for k in dead),
+            *(resubscribe_live(k) for k in dead_live),
+            return_exceptions=True,
         )
 
     # ------------------------------------------------------------------

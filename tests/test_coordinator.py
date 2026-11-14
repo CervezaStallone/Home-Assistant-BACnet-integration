@@ -602,6 +602,31 @@ class TestRestoreSubscriptions:
         assert coord._cov_subscriptions == {"0:1": "new"}
         assert obj not in coord._polled_objects
 
+    def test_resubscribe_error_does_not_leave_others_running(self):
+        """A subscribe that raises (client reconnecting) ended the resubscribe
+        while the others kept running unowned, beyond _cancel_resubscribe."""
+        import asyncio
+        from unittest.mock import MagicMock
+
+        objs = [{"object_type": 0, "instance": n} for n in (1, 2)]
+        coord = _make_coordinator(objects=objs)
+        coord._cov_subscriptions = {"0:1": "dead", "0:2": "dead"}
+        coord.client.cov_subscription_active = MagicMock(return_value=False)
+
+        async def subscribe_cov(instance, **_kw):
+            if instance == 1:
+                raise RuntimeError("Client not connected")
+            await asyncio.sleep(0.01)
+            return "new"
+
+        coord.client.subscribe_cov = subscribe_cov
+
+        async def run():
+            await coord._resubscribe_dead_cov(["0:1", "0:2"], [])
+            assert coord._cov_subscriptions["0:2"] == "new"
+
+        asyncio.run(run())
+
     def test_resubscribe_gives_up_after_repeated_failures(self):
         import asyncio
         from unittest.mock import AsyncMock, MagicMock
@@ -1292,7 +1317,7 @@ class TestMetadataSweepBackground:
         from custom_components.bacnet.const import FIRST_METADATA_SWEEP_DELAY
 
         later = timedelta(seconds=FIRST_METADATA_SWEEP_DELAY + 1)
-        for name, sweeps in (("Supply temp", 0), (None, 1)):
+        for name, sweeps in (("Supply temp", 0), (None, 1), ("Object 1", 1)):
             coord = self._polling_coord()
             fresh = _make_coordinator(
                 objects=[{"object_type": 0, "instance": 1, "object_name": name}]

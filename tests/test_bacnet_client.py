@@ -1020,6 +1020,83 @@ class TestCovRenewalFailure:
 
         asyncio.run(run())
 
+    def test_renewal_is_stopped_before_the_cancel_goes_out(self):
+        """A renewal queued in the throttle went out after the cancel and
+        re-created the subscription on the device (#29)."""
+        client = BACnetClient(local_ip="127.0.0.1", local_port=47830)
+
+        class _SCM(_FakeRenewingSCM):
+            renewal_stopped = None
+
+            async def refresh_subscription(self):
+                await asyncio.Event().wait()
+
+            async def __aexit__(self, exc_type, exc, tb):
+                task = self.refresh_subscription_task
+                self.renewal_stopped = task.done() or task.cancelling() > 0
+                return False
+
+        scm = _SCM()
+        client._app = type(
+            "_FakeApp", (), {"change_of_value": lambda self, *a, **k: scm}
+        )()
+
+        async def run():
+            ready_event = asyncio.Event()
+            stop_event = asyncio.Event()
+            task = asyncio.create_task(
+                client._cov_reader_task(
+                    addr="192.168.1.50",
+                    oid="analog-input,1",
+                    lifetime=300,
+                    sub_key="sub-1",
+                    obj_key="0:1",
+                    callback=lambda *a: None,
+                    ready_event=ready_event,
+                    stop_event=stop_event,
+                )
+            )
+            await ready_event.wait()
+            scm.create_refresh_task()
+            await asyncio.sleep(0)
+            stop_event.set()
+            await asyncio.wait_for(task, timeout=1)
+
+        asyncio.run(run())
+        assert scm.renewal_stopped is True
+
+    def test_second_subscribe_keeps_the_running_subscription(self):
+        """Subscribing an object again replaced its reader task without
+        stopping it: two subscriptions on the device, one never cancelled."""
+        client = BACnetClient(local_ip="127.0.0.1", local_port=47831)
+        scms = []
+
+        def change_of_value(self, *a, **k):
+            scms.append(_FakeGracefulExitSCM())
+            return scms[-1]
+
+        client._app = type(
+            "_FakeApp",
+            (),
+            {"change_of_value": change_of_value, "_cov_contexts": {}},
+        )()
+
+        async def run():
+            kwargs = {
+                "device_address": "192.168.1.50",
+                "object_type": 0,
+                "instance": 1,
+                "callback": lambda *a: None,
+            }
+            first = await client.subscribe_cov(**kwargs)
+            reader = client._cov_tasks[first]
+            assert await client.subscribe_cov(**kwargs) == first
+            assert client._cov_tasks[first] is reader
+            assert len(scms) == 1
+            await client.unsubscribe_cov(first)
+
+        asyncio.run(run())
+
     def test_cancelled_subscribe_leaves_no_reader_behind(self):
         """A cancelled resubscribe (unload, reconnect) left a reader task
         that completed the subscription without anyone tracking it."""
@@ -1343,7 +1420,7 @@ def test_write_other_property_uses_its_datatype_and_no_priority():
     assert "priority" not in call
 
 
-def test_write_without_answer_times_out(monkeypatch):
+def test_write_without_answer_times_out(monkeypatch, caplog):
     """A write in flight when the client reconnects is never answered (#83).
 
     disconnect() stops its retries, so without a timeout the action waits forever.
@@ -1372,7 +1449,9 @@ def test_write_without_answer_times_out(monkeypatch):
             timeout=2,
         )
 
-    assert asyncio.run(run()) is False
+    with caplog.at_level(logging.ERROR, logger="custom_components.bacnet"):
+        assert asyncio.run(run()) is False
+    assert "TimeoutError" in caplog.text
 
 
 def test_int_to_object_type_str_knows_every_standard_type():

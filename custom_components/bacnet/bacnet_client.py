@@ -277,6 +277,17 @@ def _watch_renewals(scm: SubscriptionContextManager) -> asyncio.Event:
     return failed
 
 
+def _stop_renewals(scm: SubscriptionContextManager, failed: asyncio.Event) -> None:
+    """Stop renewing *scm*; a renewal in flight would subscribe it again.
+
+    Called before leaving ``async with scm``: __aexit__ sends the cancel, and
+    a renewal still queued in the request throttle went out after it (#29).
+    """
+    failed.closed = True
+    if scm.refresh_subscription_task is not None:
+        scm.refresh_subscription_task.cancel()
+
+
 class ScheduleError(Exception):
     """A Schedule object could not be read, or a write to it failed."""
 
@@ -2370,7 +2381,7 @@ class BACnetClient:
                 instance,
                 property_name,
                 value,
-                exc,
+                str(exc) or type(exc).__name__,  # a timeout has no message
             )
             return False
 
@@ -2700,6 +2711,10 @@ class BACnetClient:
         oid = ObjectIdentifier((type_str, instance))
         sub_key = f"{device_address}:{object_type}:{instance}"
         obj_key = f"{object_type}:{instance}"
+        if self.cov_subscription_active(sub_key):
+            # A second reader would replace this one without stopping it: two
+            # subscriptions on the device, one never cancelled.
+            return sub_key
 
         # Event set by _cov_reader_task once the subscription context manager
         # has entered (i.e. the device acknowledged the SubscribeCOV request).
@@ -2840,6 +2855,7 @@ class BACnetClient:
                         scm, stop_event, renewal_failed
                     )
                     if result is None:
+                        _stop_renewals(scm, renewal_failed)
                         break
                     prop_id, value = result
                     prop_key = self._HYPHEN_TO_CAMEL.get(str(prop_id), str(prop_id))
@@ -2903,10 +2919,7 @@ class BACnetClient:
                 )
         finally:
             if renewal_failed is not None:
-                renewal_failed.closed = True
-                # A renewal in flight would subscribe again after the cancel.
-                if scm.refresh_subscription_task is not None:
-                    scm.refresh_subscription_task.cancel()
+                _stop_renewals(scm, renewal_failed)
 
     async def unsubscribe_cov(self, sub_key: str) -> None:
         """Cancel a COV subscription, notifying the device before teardown.
@@ -3064,6 +3077,8 @@ class BACnetClient:
         oid = ObjectIdentifier((type_str, instance))
         sub_key = f"{device_address}:{object_type}:{instance}:{property_name}"
         obj_key = f"{object_type}:{instance}"
+        if self.cov_subscription_active(sub_key):
+            return sub_key  # see subscribe_cov()
 
         ready_event: asyncio.Event = asyncio.Event()
         stop_event: asyncio.Event = asyncio.Event()
@@ -3185,6 +3200,7 @@ class BACnetClient:
                         scm, stop_event, renewal_failed
                     )
                     if result is None:
+                        _stop_renewals(scm, renewal_failed)
                         break
                     prop_id, value = result
                     coerced = self._coerce_cov_property_value(property_name, value)
@@ -3220,9 +3236,7 @@ class BACnetClient:
                 exc,
             )
         finally:
-            renewal_failed.closed = True
-            if scm.refresh_subscription_task is not None:
-                scm.refresh_subscription_task.cancel()
+            _stop_renewals(scm, renewal_failed)
 
     async def unsubscribe_cov_property(self, sub_key: str) -> None:
         """Cancel a COV-Property subscription, notifying the device first.
