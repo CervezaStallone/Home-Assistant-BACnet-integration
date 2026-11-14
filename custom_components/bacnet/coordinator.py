@@ -14,6 +14,7 @@ The coordinator also handles:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import math
 import random
@@ -30,6 +31,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from .bacnet_client import BACnetClient
 from .const import (
     CONF_SELECTED_OBJECTS,
+    COV_RESUBSCRIBE_ATTEMPTS,
     DEFAULT_COV_INCREMENT,
     DEFAULT_ENABLE_COV,
     DEFAULT_METADATA_REFRESH_INTERVAL,
@@ -37,6 +39,7 @@ from .const import (
     DEFAULT_USE_DESCRIPTION,
     DEFAULT_WRITE_PRIORITY,
     DOMAIN,
+    FIRST_METADATA_SWEEP_DELAY,
     LIVE_METADATA_BACNET_TO_PROPERTY,
     LIVE_METADATA_PROPERTY_TO_BACNET,
     MAX_CONCURRENT_REQUESTS,
@@ -200,14 +203,30 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # client.connection_generation at our last subscribe; differs once the
         # shared client reconnected, whichever entry caused it (issue #12).
         self._cov_generation: int = client.connection_generation
+        # Resubscribes of ended COV subscriptions run in the background; a
+        # failed one is tried again on the next polls (obj_key -> attempts).
+        self._resubscribe_task: asyncio.Task | None = None
+        self._cov_retries: dict[str, int] = {}
         self.last_successful_poll: datetime | None = None
         # Repair issues persist across restarts, so assume one may exist
         # until the first successful poll has cleared it.
         self._outage_issue_raised: bool = True
 
-        # Metadata refresh (issue #26). Skip an immediate refresh right after
-        # setup — the config flow just read fresh metadata during discovery.
-        self._last_metadata_refresh: datetime = datetime.now(UTC)
+        # Metadata refresh (issue #26). Not right after setup, the config flow
+        # just read the metadata. Within minutes when names are missing (#62),
+        # see FIRST_METADATA_SWEEP_DELAY; otherwise after the usual interval.
+        # Discovery stores "Object <instance>" when it could not read the name.
+        first_sweep = (
+            FIRST_METADATA_SWEEP_DELAY
+            if any(
+                o.get("object_name") in (None, "", f"Object {o['instance']}")
+                for o in objects
+            )
+            else DEFAULT_METADATA_REFRESH_INTERVAL
+        )
+        self._last_metadata_refresh: datetime = datetime.now(UTC) - timedelta(
+            seconds=DEFAULT_METADATA_REFRESH_INTERVAL - first_sweep
+        )
         self._metadata_task: asyncio.Task | None = None
         self._persist_handle: asyncio.TimerHandle | None = None
 
@@ -305,9 +324,10 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._needs_resubscribe
                 or self._cov_generation != self.client.connection_generation
             ):
+                await self._cancel_resubscribe()
                 await self._restore_subscriptions()
             else:
-                await self._resubscribe_dead_cov()
+                self._start_resubscribe()
 
             # Piggyback the metadata refresh on this same successful cycle
             # rather than a dedicated timer — the device is already confirmed
@@ -522,17 +542,29 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._cov_subscriptions.clear()
         self._cov_property_subscriptions.clear()
         self._polled_objects.clear()
+        self._cov_retries.clear()
         await self._setup_subscriptions()
         self._needs_resubscribe = False
 
-    async def _resubscribe_dead_cov(self) -> None:
-        """Subscribe again to objects whose COV subscription ended (#12).
+    async def _cancel_resubscribe(self) -> None:
+        """Stop a running resubscribe and wait until the client cleaned up."""
+        task = self._resubscribe_task
+        if task is not None and not task.done():
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+
+    def _start_resubscribe(self) -> None:
+        """Subscribe again, in the background, to ended COV subscriptions (#12).
 
         The client ends a subscription when its renewal fails (a busy device);
         it then expired on the device, while the object stayed listed here as
-        COV-active. The same goes for live metadata subscriptions. Objects the
-        device now refuses go to polling for good.
+        COV-active. The same goes for live metadata subscriptions. In the
+        background, because hundreds of them at up to 10 s each would hold up
+        this poll for minutes.
         """
+        if self._resubscribe_task is not None and not self._resubscribe_task.done():
+            return
         active = self.client.cov_subscription_active
         dead = [k for k, sub in self._cov_subscriptions.items() if not active(sub)]
         dead_live = [
@@ -540,6 +572,19 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         ]
         if not dead and not dead_live:
             return
+        self._resubscribe_task = self.hass.async_create_background_task(
+            self._resubscribe_dead_cov(dead, dead_live),
+            name=f"{self.name} COV resubscribe",
+        )
+
+    async def _resubscribe_dead_cov(
+        self, dead: list[str], dead_live: list[str]
+    ) -> None:
+        """Subscribe again to the objects in *dead* and *dead_live*.
+
+        An object whose resubscribe fails COV_RESUBSCRIBE_ATTEMPTS polls in a
+        row goes to polling for good.
+        """
         _LOGGER.info(
             "Renewing %d ended COV subscriptions on %s",
             len(dead) + len(dead_live),
@@ -548,10 +593,14 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         by_key = {f"{o['object_type']}:{o['instance']}": o for o in self.objects}
         semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 
+        # The ended subscription stays listed until it is replaced or given
+        # up: emptied bookkeeping made the next poll take this for a first
+        # run and subscribe everything a second time.
         async def resubscribe(obj_key: str) -> None:
-            del self._cov_subscriptions[obj_key]
             obj = by_key.get(obj_key)
             if obj is None:
+                self._cov_subscriptions.pop(obj_key, None)
+                self._cov_retries.pop(obj_key, None)
                 return
             async with semaphore:
                 sub_key = await self.client.subscribe_cov(
@@ -562,8 +611,15 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     lifetime=_cov_lifetime(),
                 )
             if sub_key is not None:
+                self._cov_retries.pop(obj_key, None)
                 self._cov_subscriptions[obj_key] = sub_key
+                return
+            attempts = self._cov_retries.get(obj_key, 0) + 1
+            if attempts < COV_RESUBSCRIBE_ATTEMPTS:
+                self._cov_retries[obj_key] = attempts
             else:
+                self._cov_retries.pop(obj_key, None)
+                self._cov_subscriptions.pop(obj_key, None)
                 self._polled_objects.append(obj)
 
         async def resubscribe_live(key: str) -> None:
@@ -586,8 +642,13 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if sub_key is not None:
                 self._cov_property_subscriptions[key] = sub_key
 
+        # An error (client reconnecting) must not end this task while the
+        # other resubscribes run on, out of reach of _cancel_resubscribe();
+        # those objects are tried again after the next poll.
         await asyncio.gather(
-            *(resubscribe(k) for k in dead), *(resubscribe_live(k) for k in dead_live)
+            *(resubscribe(k) for k in dead),
+            *(resubscribe_live(k) for k in dead_live),
+            return_exceptions=True,
         )
 
     # ------------------------------------------------------------------
@@ -994,8 +1055,9 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """
         if self._metadata_task is not None and not self._metadata_task.done():
             self._metadata_task.cancel()
+        await self._cancel_resubscribe()
         # Dropped, not flushed: the device still holds the new metadata, so
-        # the next coordinator picks it up on its first check.
+        # the next coordinator picks it up on its first sweep.
         if self._persist_handle is not None:
             self._persist_handle.cancel()
             self._persist_handle = None

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 
 import pytest
 from bacpypes3.primitivedata import Null
@@ -554,6 +555,55 @@ class TestDisconnectStopsTransactions:
 
         assert stopped == ["c1", "s1", "closed"]
 
+    def test_disconnect_fails_requests_in_flight_and_queued(self):
+        """Their futures were never finished, so whatever awaited them
+        (renewals, writes, queued requests) hung forever."""
+        import custom_components.bacnet.bacnet_client as bc
+
+        async def run():
+            app = _RecordingApp()
+            app.close = lambda: None
+            bc._throttle_requests(app, limit=1)
+            in_flight = app.request(_read_request())
+            queued = app.request(_read_request())
+            # BACpypes3 keeps the futures of open requests here.
+            app._requests = {"10.0.0.1": [app.sent[0]]}
+            client = BACnetClient(local_ip="127.0.0.1", local_port=47826)
+            client._app = app
+
+            await client.disconnect(graceful=False)
+
+            with pytest.raises(ConnectionError):
+                await asyncio.wait_for(in_flight, 1)
+            with pytest.raises(ConnectionError):
+                await asyncio.wait_for(queued, 1)
+            await asyncio.sleep(0)
+            assert len(app.sent) == 1  # nothing sent on the closed app
+
+        asyncio.run(run())
+
+    def test_disconnect_detaches_the_app_before_failing_requests(self):
+        """Code woken by the failure must not send on the app being closed."""
+        import custom_components.bacnet.bacnet_client as bc
+
+        async def run():
+            app = _RecordingApp()
+            app.close = lambda: None
+            app.unregister = lambda: None  # BBMD: disconnect() yields once
+            bc._throttle_requests(app, limit=1)
+            future = app.request(_read_request())
+            app._requests = {"10.0.0.1": [app.sent[0]]}
+            client = BACnetClient(local_ip="127.0.0.1", local_port=47827)
+            client._app = app
+            seen = []
+            future.add_done_callback(lambda _f: seen.append(client._app))
+
+            await client.disconnect(graceful=False)
+            await asyncio.sleep(0)
+            assert seen == [None]
+
+        asyncio.run(run())
+
 
 # ---------------------------------------------------------------------------
 # SubscribeCOVProperty — issue #26 (live metadata push)
@@ -675,6 +725,8 @@ class _FakeCovValueSCM:
     def __init__(self, items):
         self._items = list(items)
 
+    refresh_subscription_task = None
+
     def create_refresh_task(self):
         pass
 
@@ -749,6 +801,8 @@ class _FakeGracefulExitSCM:
 
     def __init__(self):
         self.cancel_sent = False
+
+    refresh_subscription_task = None
 
     def create_refresh_task(self):
         pass
@@ -894,6 +948,227 @@ class TestCovRenewalFailure:
             assert not client.cov_subscription_active(sub_key)
 
         asyncio.run(run())
+
+    def test_no_renewal_after_the_subscription_ended(self):
+        """A renewal still in flight when the reader exits reschedules itself
+        after the unsubscribe, and would renew the subscription forever."""
+        client = BACnetClient(local_ip="127.0.0.1", local_port=47824)
+        scm = _FakeRenewingSCM()
+        client._app = type(
+            "_FakeApp", (), {"change_of_value": lambda self, *a, **k: scm}
+        )()
+
+        async def run():
+            ready_event = asyncio.Event()
+            stop_event = asyncio.Event()
+            task = asyncio.create_task(
+                client._cov_reader_task(
+                    addr="192.168.1.50",
+                    oid="analog-input,1",
+                    lifetime=300,
+                    sub_key="sub-1",
+                    obj_key="0:1",
+                    callback=lambda *a: None,
+                    ready_event=ready_event,
+                    stop_event=stop_event,
+                )
+            )
+            await ready_event.wait()
+            stop_event.set()
+            await asyncio.wait_for(task, timeout=1)
+
+            scm.create_refresh_task()  # the late renewal's call_later fires
+
+        asyncio.run(run())
+        assert scm.refresh_subscription_task is None
+
+    def test_renewal_in_flight_is_cancelled_when_the_subscription_ends(self):
+        """Otherwise it subscribes again on the device after the cancel."""
+        client = BACnetClient(local_ip="127.0.0.1", local_port=47828)
+
+        class _SlowRenewalSCM(_FakeRenewingSCM):
+            async def refresh_subscription(self):
+                await asyncio.Event().wait()
+
+        scm = _SlowRenewalSCM()
+        client._app = type(
+            "_FakeApp", (), {"change_of_value": lambda self, *a, **k: scm}
+        )()
+
+        async def run():
+            ready_event = asyncio.Event()
+            stop_event = asyncio.Event()
+            task = asyncio.create_task(
+                client._cov_reader_task(
+                    addr="192.168.1.50",
+                    oid="analog-input,1",
+                    lifetime=300,
+                    sub_key="sub-1",
+                    obj_key="0:1",
+                    callback=lambda *a: None,
+                    ready_event=ready_event,
+                    stop_event=stop_event,
+                )
+            )
+            await ready_event.wait()
+            scm.create_refresh_task()  # renewal goes out, no answer yet
+            await asyncio.sleep(0)
+            stop_event.set()
+            await asyncio.wait_for(task, timeout=1)
+            await asyncio.sleep(0)
+            assert scm.refresh_subscription_task.cancelled()
+
+        asyncio.run(run())
+
+    def test_renewal_is_stopped_before_the_cancel_goes_out(self):
+        """A renewal queued in the throttle went out after the cancel and
+        re-created the subscription on the device (#29)."""
+        client = BACnetClient(local_ip="127.0.0.1", local_port=47830)
+
+        class _SCM(_FakeRenewingSCM):
+            renewal_stopped = None
+
+            async def refresh_subscription(self):
+                await asyncio.Event().wait()
+
+            async def __aexit__(self, exc_type, exc, tb):
+                task = self.refresh_subscription_task
+                self.renewal_stopped = task.done() or task.cancelling() > 0
+                return False
+
+        scm = _SCM()
+        client._app = type(
+            "_FakeApp", (), {"change_of_value": lambda self, *a, **k: scm}
+        )()
+
+        async def run():
+            ready_event = asyncio.Event()
+            stop_event = asyncio.Event()
+            task = asyncio.create_task(
+                client._cov_reader_task(
+                    addr="192.168.1.50",
+                    oid="analog-input,1",
+                    lifetime=300,
+                    sub_key="sub-1",
+                    obj_key="0:1",
+                    callback=lambda *a: None,
+                    ready_event=ready_event,
+                    stop_event=stop_event,
+                )
+            )
+            await ready_event.wait()
+            scm.create_refresh_task()
+            await asyncio.sleep(0)
+            stop_event.set()
+            await asyncio.wait_for(task, timeout=1)
+
+        asyncio.run(run())
+        assert scm.renewal_stopped is True
+
+    def test_second_subscribe_keeps_the_running_subscription(self):
+        """Subscribing an object again replaced its reader task without
+        stopping it: two subscriptions on the device, one never cancelled."""
+        client = BACnetClient(local_ip="127.0.0.1", local_port=47831)
+        scms = []
+
+        def change_of_value(self, *a, **k):
+            scms.append(_FakeGracefulExitSCM())
+            return scms[-1]
+
+        client._app = type(
+            "_FakeApp",
+            (),
+            {"change_of_value": change_of_value, "_cov_contexts": {}},
+        )()
+
+        async def run():
+            kwargs = {
+                "device_address": "192.168.1.50",
+                "object_type": 0,
+                "instance": 1,
+                "callback": lambda *a: None,
+            }
+            first = await client.subscribe_cov(**kwargs)
+            reader = client._cov_tasks[first]
+            assert await client.subscribe_cov(**kwargs) == first
+            assert client._cov_tasks[first] is reader
+            assert len(scms) == 1
+            await client.unsubscribe_cov(first)
+
+        asyncio.run(run())
+
+    def test_cancelled_subscribe_leaves_no_reader_behind(self):
+        """A cancelled resubscribe (unload, reconnect) left a reader task
+        that completed the subscription without anyone tracking it."""
+
+        class _HangingSCM:
+            refresh_subscription_task = None
+
+            def create_refresh_task(self):
+                pass
+
+            async def __aenter__(self):
+                await asyncio.Event().wait()
+
+            async def __aexit__(self, *exc):
+                return False
+
+        client = BACnetClient(local_ip="127.0.0.1", local_port=47829)
+        client._app = type(
+            "_FakeApp",
+            (),
+            {
+                "change_of_value": lambda self, *a, **k: _HangingSCM(),
+                "_cov_contexts": {},
+            },
+        )()
+
+        async def run():
+            subscribe = asyncio.create_task(
+                client.subscribe_cov(
+                    device_address="192.168.1.50",
+                    object_type=0,
+                    instance=1,
+                    callback=lambda *a: None,
+                )
+            )
+            await asyncio.sleep(0.05)
+            reader = next(iter(client._cov_tasks.values()))
+            subscribe.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await subscribe
+            await asyncio.sleep(0)
+            assert client._cov_tasks == {}
+            assert reader.done()
+
+        asyncio.run(run())
+
+    def test_failed_live_renewal_is_logged_as_renewal(self, caplog):
+        """Not as 'COV-Property not supported', at debug level."""
+        client = BACnetClient(local_ip="127.0.0.1", local_port=47825)
+        scm = _FakeRenewingSCM()
+
+        async def run():
+            ready_event = asyncio.Event()
+            task = asyncio.create_task(
+                client._cov_property_reader_task(
+                    scm=scm,
+                    sub_key="sub-1:units",
+                    obj_key="0:1",
+                    property_name="units",
+                    callback=lambda *a: None,
+                    ready_event=ready_event,
+                    stop_event=asyncio.Event(),
+                )
+            )
+            await ready_event.wait()
+            scm.create_refresh_task()
+            await asyncio.wait_for(task, timeout=1)
+
+        with caplog.at_level(logging.INFO, logger="custom_components.bacnet"):
+            asyncio.run(run())
+        assert "renewal failed" in caplog.text
+        assert "not supported" not in caplog.text
 
 
 # ---------------------------------------------------------------------------
@@ -1145,6 +1420,40 @@ def test_write_other_property_uses_its_datatype_and_no_priority():
     assert "priority" not in call
 
 
+def test_write_without_answer_times_out(monkeypatch, caplog):
+    """A write in flight when the client reconnects is never answered (#83).
+
+    disconnect() stops its retries, so without a timeout the action waits forever.
+    """
+    import custom_components.bacnet.bacnet_client as bc
+
+    class _SilentApp:
+        async def write_property(self, *args, **kwargs):
+            await asyncio.Event().wait()
+
+    monkeypatch.setattr(bc, "_WRITE_TIMEOUT", 0.01)
+    client = BACnetClient(local_ip="127.0.0.1", local_port=47815)
+    client._app = _SilentApp()
+
+    async def run():
+        return await asyncio.wait_for(
+            client.write_property(
+                device_address="192.168.1.1",
+                object_type=OBJECT_TYPE_BINARY_VALUE,
+                instance=1,
+                property_name="presentValue",
+                value=1,
+                priority=8,
+                commandable=True,
+            ),
+            timeout=2,
+        )
+
+    with caplog.at_level(logging.ERROR, logger="custom_components.bacnet"):
+        assert asyncio.run(run()) is False
+    assert "TimeoutError" in caplog.text
+
+
 def test_int_to_object_type_str_knows_every_standard_type():
     """read_property on a non-imported object (e.g. a Trend Log) needs its name."""
     assert BACnetClient._int_to_object_type_str(20) == "trend-log"
@@ -1390,6 +1699,19 @@ def _read_request(address="10.0.0.1"):
     )
 
 
+def _subscribe_request(address="10.0.0.1", lifetime=300):
+    from bacpypes3.apdu import SubscribeCOVRequest
+    from bacpypes3.pdu import Address
+    from bacpypes3.primitivedata import ObjectIdentifier
+
+    return SubscribeCOVRequest(
+        subscriberProcessIdentifier=1,
+        monitoredObjectIdentifier=ObjectIdentifier("analog-value,1"),
+        lifetime=lifetime,
+        destination=Address(address),
+    )
+
+
 class TestRequestThrottle:
     """BACpypes3 gives each device 256 invoke IDs and loops forever looking
     for a free one when all are in use. 640 COV renewals due at once on a
@@ -1411,6 +1733,57 @@ class TestRequestThrottle:
 
             app.sent[2][1].set_result("third")
             assert await futures[2] == "third"
+
+        asyncio.run(run())
+
+    def test_subscriptions_leave_room_for_other_requests(self):
+        """A switched-off device: hundreds of renewals each wait out their
+        timeout and filled every slot, so a poll waited minutes behind them
+        and the outage was noticed that much later."""
+        import custom_components.bacnet.bacnet_client as bc
+
+        async def run():
+            app = _RecordingApp()
+            bc._throttle_requests(app, limit=4, reserved=1)
+            for _ in range(10):
+                app.request(_subscribe_request())
+            assert len(app.sent) == 3
+            app.request(_read_request())
+            assert len(app.sent) == 4  # the read did not wait
+
+        asyncio.run(run())
+
+    def test_queued_subscriptions_go_first_within_their_share(self):
+        """Renewals are sent 2 s before the subscription expires, so they must
+        not starve behind reads; reads keep their reserved slots."""
+        import custom_components.bacnet.bacnet_client as bc
+
+        async def run():
+            app = _RecordingApp()
+            bc._throttle_requests(app, limit=2, reserved=1)
+            app.request(_subscribe_request())
+            app.request(_subscribe_request())  # waits: subscription share
+            app.request(_read_request())
+            app.request(_read_request())  # waits: device cap
+            assert len(app.sent) == 2
+
+            app.sent[0][1].set_result("ack")
+            await asyncio.sleep(0)
+            assert len(app.sent) == 3
+            assert type(app.sent[2][0]).__name__ == "SubscribeCOVRequest"
+
+        asyncio.run(run())
+
+    def test_cancelling_a_subscription_is_not_held_up_by_renewals(self):
+        """A cancellation that waits too long is abandoned (#29)."""
+        import custom_components.bacnet.bacnet_client as bc
+
+        async def run():
+            app = _RecordingApp()
+            bc._throttle_requests(app, limit=2, reserved=1)
+            app.request(_subscribe_request())
+            app.request(_subscribe_request(lifetime=None))
+            assert len(app.sent) == 2
 
         asyncio.run(run())
 

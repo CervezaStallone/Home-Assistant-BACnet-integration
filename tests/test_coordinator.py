@@ -70,6 +70,23 @@ def _make_coordinator(
     return coord
 
 
+def _run_background_tasks(coord):
+    """Run background tasks (resubscribes, sweeps) on the running loop."""
+    import asyncio
+
+    coord.hass.async_create_background_task = lambda coro, name=None: (
+        asyncio.get_running_loop().create_task(coro)
+    )
+
+
+async def _poll_and_resubscribe(coord):
+    """One update cycle, then wait for the resubscribes it started."""
+    _run_background_tasks(coord)
+    await coord._async_update_data()
+    if coord._resubscribe_task is not None:
+        await coord._resubscribe_task
+
+
 def _run_metadata_sweep_inline(coord):
     """A COV-found change starts a full sweep (issue #62); run it right away.
 
@@ -466,7 +483,7 @@ class TestRestoreSubscriptions:
             return_value={"0:1": {"presentValue": 1.0, "statusFlags": [False] * 4}}
         )
 
-        asyncio.run(coord._async_update_data())
+        asyncio.run(_poll_and_resubscribe(coord))
 
         assert coord._cov_subscriptions == {"0:1": "new", "0:2": "alive"}
         coord.client.subscribe_cov.assert_awaited_once()
@@ -489,13 +506,147 @@ class TestRestoreSubscriptions:
             return_value={"0:1": {"presentValue": 1.0, "statusFlags": [False] * 4}}
         )
 
-        asyncio.run(coord._async_update_data())
+        asyncio.run(_poll_and_resubscribe(coord))
 
         assert coord._cov_property_subscriptions == {"0:1:units": "new"}
         kwargs = coord.client.subscribe_cov_property.await_args.kwargs
         assert (kwargs["object_type"], kwargs["instance"]) == (0, 1)
         assert kwargs["property_name"] == "units"
         coord.client.subscribe_cov.assert_not_awaited()
+
+    def test_resubscribe_does_not_hold_up_the_poll(self):
+        """Hundreds of failed renewals at 10 s each would block the update
+        for minutes; the resubscribes run in the background."""
+        import asyncio
+        from unittest.mock import AsyncMock, MagicMock
+
+        coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
+        coord._cov_subscriptions = {"0:1": "dead"}
+        coord.client.cov_subscription_active = MagicMock(return_value=False)
+        release = None
+
+        async def slow_subscribe(**_kwargs):
+            await release.wait()
+            return "new"
+
+        coord.client.subscribe_cov = slow_subscribe
+        coord.client.poll_objects = AsyncMock(
+            return_value={"0:1": {"presentValue": 1.0, "statusFlags": [False] * 4}}
+        )
+
+        async def run():
+            nonlocal release
+            release = asyncio.Event()
+            _run_background_tasks(coord)
+            await asyncio.wait_for(coord._async_update_data(), timeout=1)
+            release.set()
+            await coord._resubscribe_task
+
+        asyncio.run(run())
+        assert coord._cov_subscriptions == {"0:1": "new"}
+
+    def test_running_resubscribe_does_not_trigger_a_full_setup(self):
+        """With every object on COV, the next poll must not take the
+        resubscribe in progress for a first run and subscribe all again."""
+        import asyncio
+        from unittest.mock import AsyncMock, MagicMock
+
+        coord = _make_coordinator(objects=[{"object_type": 0, "instance": 1}])
+        coord._cov_subscriptions = {"0:1": "dead"}
+        coord.client.cov_subscription_active = MagicMock(return_value=False)
+        coord._setup_subscriptions = AsyncMock()
+        release = None
+
+        async def slow_subscribe(**_kwargs):
+            await release.wait()
+            return "new"
+
+        coord.client.subscribe_cov = slow_subscribe
+        coord.client.poll_objects = AsyncMock(
+            return_value={"0:1": {"presentValue": 1.0, "statusFlags": [False] * 4}}
+        )
+
+        async def run():
+            nonlocal release
+            release = asyncio.Event()
+            _run_background_tasks(coord)
+            await coord._async_update_data()
+            await asyncio.sleep(0.01)  # resubscribes are waiting on the device
+            await coord._async_update_data()
+            release.set()
+            await coord._resubscribe_task
+
+        asyncio.run(run())
+        coord._setup_subscriptions.assert_not_awaited()
+        assert coord._cov_subscriptions == {"0:1": "new"}
+
+    def test_failed_resubscribe_is_retried_before_polling_for_good(self):
+        """A timeout on a busy device must not move the object off COV
+        for good; only repeated failures do."""
+        import asyncio
+        from unittest.mock import AsyncMock, MagicMock
+
+        obj = {"object_type": 0, "instance": 1}
+        coord = _make_coordinator(objects=[obj])
+        coord._cov_subscriptions = {"0:1": "dead"}
+        coord.client.cov_subscription_active = MagicMock(return_value=False)
+        coord.client.subscribe_cov = AsyncMock(side_effect=[None, "new"])
+        coord.client.poll_objects = AsyncMock(
+            return_value={"0:1": {"presentValue": 1.0, "statusFlags": [False] * 4}}
+        )
+
+        asyncio.run(_poll_and_resubscribe(coord))
+        assert obj not in coord._polled_objects
+
+        asyncio.run(_poll_and_resubscribe(coord))
+        assert coord._cov_subscriptions == {"0:1": "new"}
+        assert obj not in coord._polled_objects
+
+    def test_resubscribe_error_does_not_leave_others_running(self):
+        """A subscribe that raises (client reconnecting) ended the resubscribe
+        while the others kept running unowned, beyond _cancel_resubscribe."""
+        import asyncio
+        from unittest.mock import MagicMock
+
+        objs = [{"object_type": 0, "instance": n} for n in (1, 2)]
+        coord = _make_coordinator(objects=objs)
+        coord._cov_subscriptions = {"0:1": "dead", "0:2": "dead"}
+        coord.client.cov_subscription_active = MagicMock(return_value=False)
+
+        async def subscribe_cov(instance, **_kw):
+            if instance == 1:
+                raise RuntimeError("Client not connected")
+            await asyncio.sleep(0.01)
+            return "new"
+
+        coord.client.subscribe_cov = subscribe_cov
+
+        async def run():
+            await coord._resubscribe_dead_cov(["0:1", "0:2"], [])
+            assert coord._cov_subscriptions["0:2"] == "new"
+
+        asyncio.run(run())
+
+    def test_resubscribe_gives_up_after_repeated_failures(self):
+        import asyncio
+        from unittest.mock import AsyncMock, MagicMock
+
+        from custom_components.bacnet.const import COV_RESUBSCRIBE_ATTEMPTS
+
+        obj = {"object_type": 0, "instance": 1}
+        coord = _make_coordinator(objects=[obj])
+        coord._cov_subscriptions = {"0:1": "dead"}
+        coord.client.cov_subscription_active = MagicMock(return_value=False)
+        coord.client.subscribe_cov = AsyncMock(return_value=None)
+        coord.client.poll_objects = AsyncMock(
+            return_value={"0:1": {"presentValue": 1.0, "statusFlags": [False] * 4}}
+        )
+
+        for _ in range(COV_RESUBSCRIBE_ATTEMPTS + 2):
+            asyncio.run(_poll_and_resubscribe(coord))
+
+        assert coord._polled_objects == [obj]
+        assert coord.client.subscribe_cov.await_count == COV_RESUBSCRIBE_ATTEMPTS
 
     def test_no_resubscribe_without_reconnect(self):
         """Normal successful polls must NOT rebuild subscriptions every cycle."""
@@ -1156,6 +1307,39 @@ class TestMetadataSweepBackground:
         coord._metadata_task = task
         asyncio.run(coord.async_shutdown())
         task.cancel.assert_called_once()
+
+    def test_first_sweep_runs_soon_when_names_are_missing(self):
+        """Names missing after discovery (#62) were fixed by the first COV
+        notification; now the sweep does it, so it must not wait an hour."""
+        import asyncio
+        from datetime import timedelta
+
+        from custom_components.bacnet.const import FIRST_METADATA_SWEEP_DELAY
+
+        later = timedelta(seconds=FIRST_METADATA_SWEEP_DELAY + 1)
+        for name, sweeps in (("Supply temp", 0), (None, 1), ("Object 1", 1)):
+            coord = self._polling_coord()
+            fresh = _make_coordinator(
+                objects=[{"object_type": 0, "instance": 1, "object_name": name}]
+            )
+            coord.objects = fresh.objects
+            coord._last_metadata_refresh = fresh._last_metadata_refresh - later
+            asyncio.run(coord._async_update_data())
+            assert coord.hass.async_create_background_task.call_count == sweeps
+
+    def test_shutdown_cancels_running_resubscribe(self):
+        """And waits for it, so the client can clean up the subscribe."""
+        import asyncio
+
+        coord = _make_coordinator()
+
+        async def run():
+            coord._resubscribe_task = asyncio.create_task(asyncio.Event().wait())
+            await asyncio.sleep(0)
+            await coord.async_shutdown()
+            assert coord._resubscribe_task.done()
+
+        asyncio.run(run())
 
     def test_sweep_reads_all_objects_in_one_batch_call(self):
         import asyncio
