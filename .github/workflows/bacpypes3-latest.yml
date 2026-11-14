@@ -1,0 +1,89 @@
+name: BACpypes3 update check
+
+# Dependabot can't read the BACpypes3 pin in manifest.json, so nothing told us
+# about a new release. Once a week: if PyPI has a newer BACpypes3 than the pin,
+# run the unit tests (including tests/test_bacpypes3_contract.py) against it
+# and open one issue with the result.
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Run the tests against the latest BACpypes3 even if it is not newer (no issue)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Compare the pin with the latest release
+        id: versions
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, re, urllib.request
+          reqs = json.load(open("custom_components/bacnet/manifest.json"))["requirements"]
+          pinned = next(r for r in reqs if r.lower().startswith("bacpypes3")).split("==")[1]
+          with urllib.request.urlopen("https://pypi.org/pypi/bacpypes3/json", timeout=30) as resp:
+              latest = json.load(resp)["info"]["version"]
+          if not re.fullmatch(r"[0-9][0-9A-Za-z.]*", latest):
+              raise SystemExit(f"unexpected version from PyPI: {latest!r}")
+          def key(version):
+              return [int(p) if p.isdigit() else -1 for p in version.split(".")]
+          print(f"pinned={pinned}")
+          print(f"latest={latest}")
+          print(f"newer={'true' if key(latest) > key(pinned) else 'false'}")
+          PY
+
+      - name: Run the unit tests against BACpypes3 ${{ steps.versions.outputs.latest }}
+        id: tests
+        if: steps.versions.outputs.newer == 'true' || inputs.force
+        continue-on-error: true
+        run: |
+          python -m pip install --upgrade pip
+          pip install "bacpypes3==${{ steps.versions.outputs.latest }}" pytest voluptuous aiohttp
+          pytest tests/ -q
+
+      - name: Open an issue
+        if: steps.versions.outputs.newer == 'true' && !inputs.force
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PINNED: ${{ steps.versions.outputs.pinned }}
+          LATEST: ${{ steps.versions.outputs.latest }}
+          OUTCOME: ${{ steps.tests.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="BACpypes3 $LATEST is available"
+          if gh issue list --state all --search "\"$title\" in:title" --json title \
+              --jq '.[].title' | grep -qxF "$title"; then
+            echo "Issue already exists"
+            exit 0
+          fi
+          if [ "$OUTCOME" = "success" ]; then
+            result="All unit tests pass against $LATEST, including the BACpypes3 contract tests. Bumping the pin in \`manifest.json\` should be safe; the bump PR runs the full CI, including the Home Assistant smoke tests."
+          else
+            result="The unit tests **fail** against $LATEST. Check \`tests/test_bacpypes3_contract.py\` first: it lists the BACpypes3 internals the client relies on. Adapt the client, not the test."
+          fi
+          gh issue create --title "$title" --label dependencies --body "BACpypes3 [$LATEST](https://pypi.org/project/bacpypes3/$LATEST/) is on PyPI; \`manifest.json\` pins $PINNED.
+
+          $result
+
+          Release notes: https://github.com/JoelBender/BACpypes3/releases
+          Test run: $RUN_URL"
