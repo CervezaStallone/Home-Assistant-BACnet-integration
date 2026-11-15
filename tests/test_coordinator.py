@@ -683,6 +683,45 @@ class TestRestoreSubscriptions:
         assert coord._polled_objects == [obj]
         assert coord.client.subscribe_cov.await_count == COV_RESUBSCRIBE_ATTEMPTS
 
+    def test_resubscribe_updates_listeners_when_renewed(self):
+        """Issue #223: once a background resubscribe succeeds, notify listeners
+        so entities switch back from polling to COV without waiting for the
+        next poll."""
+        import asyncio
+        from unittest.mock import AsyncMock, MagicMock
+
+        from custom_components.bacnet.sensor import BACnetSensor
+        from tests.conftest import _make_entry
+
+        objs = [
+            {"object_type": 0, "instance": n, "object_name": f"T{n}"} for n in (1, 2)
+        ]
+        coord = _make_coordinator(objects=objs)
+        coord.data = {"0:1": {"presentValue": 21.0}, "0:2": {"presentValue": 22.0}}
+        coord._cov_subscriptions = {"0:1": "dead", "0:2": "dead"}
+        coord.client.cov_subscription_active = MagicMock(
+            side_effect=lambda sub: sub == "new"
+        )
+        entity = BACnetSensor(coord, _make_entry(), objs[0])
+
+        coord.async_update_listeners = MagicMock()
+        coord.client.subscribe_cov = AsyncMock(return_value=None)
+        asyncio.run(coord._resubscribe_dead_cov(["0:1", "0:2"], []))
+        coord.async_update_listeners.assert_not_called()
+        assert entity.extra_state_attributes["bacnet_update_method"] == "polling"
+
+        seen_on_notify = []
+        coord.async_update_listeners = MagicMock(
+            side_effect=lambda: seen_on_notify.append(
+                entity.extra_state_attributes["bacnet_update_method"]
+            )
+        )
+        coord.client.subscribe_cov = AsyncMock(return_value="new")
+        asyncio.run(coord._resubscribe_dead_cov(["0:1", "0:2"], []))
+
+        coord.async_update_listeners.assert_called_once()
+        assert seen_on_notify == ["COV"]
+
     def test_no_resubscribe_without_reconnect(self):
         """Normal successful polls must NOT rebuild subscriptions every cycle."""
         import asyncio
@@ -1549,9 +1588,10 @@ def test_cov_active_reflects_subscriptions():
     coord._cov_subscriptions["0:1"] = "sub"
     assert coord.cov_active is True
 
-    # Issue #223: ended subscriptions awaiting resubscribe do not count.
+    # Stays True while an ended subscription awaits resubscribe, so telemetry
+    # still reports that the device supports COV.
     coord.client.cov_subscription_active = MagicMock(return_value=False)
-    assert coord.cov_active is False
+    assert coord.cov_active is True
     assert coord.cov_subscription_count == 0
 
 

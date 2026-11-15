@@ -39,11 +39,7 @@ async def async_get_config_entry_diagnostics(
             **coordinator.diagnostics_summary(),
             "rpm_supported": client._rpm_supported.get(address, True),
             "rpm_chunk_size": client._rpm_chunk_size.get(address),
-            "cov_subscribed_objects": sorted(
-                k
-                for k in coordinator._cov_subscriptions
-                if coordinator.is_cov_subscribed(k)
-            ),
+            "cov_subscribed_objects": sorted(coordinator._active_cov_keys()),
         },
         "data": coordinator.data,
     }
