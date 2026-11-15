@@ -452,8 +452,12 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Health figures for the diagnostics download and diagnostic sensors."""
         return {
             "objects": len(self.objects),
-            "cov_subscriptions": len(self._cov_subscriptions),
-            "cov_property_subscriptions": len(self._cov_property_subscriptions),
+            "cov_subscriptions": self.cov_subscription_count,
+            "cov_property_subscriptions": sum(
+                1
+                for sub in self._cov_property_subscriptions.values()
+                if self.client and self.client.cov_subscription_active(sub)
+            ),
             "polled_objects": len(self._polled_objects),
             "consecutive_failed_polls": self._consecutive_failures,
             "last_update_success": self.last_update_success,
@@ -1112,13 +1116,21 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return obj.get("object_name", f"BACnet {obj['object_type']}:{obj['instance']}")
 
     @property
+    def cov_subscription_count(self) -> int:
+        """Return the number of objects with an active COV subscription."""
+        return sum(1 for k in self._cov_subscriptions if self.is_cov_subscribed(k))
+
+    @property
     def cov_active(self) -> bool:
-        """Return True if any object of this device has a COV subscription."""
-        return bool(self._cov_subscriptions)
+        """Return True if any object of this device has an active COV subscription."""
+        return any(self.is_cov_subscribed(k) for k in self._cov_subscriptions)
 
     def is_cov_subscribed(self, obj_key: str) -> bool:
         """Return True if this object has an active COV subscription."""
-        return obj_key in self._cov_subscriptions
+        sub = self._cov_subscriptions.get(obj_key)
+        return sub is not None and bool(
+            self.client and self.client.cov_subscription_active(sub)
+        )
 
     def get_update_method(self, obj_key: str) -> str:
         """Return 'COV' or 'polling' for how this object is updated."""

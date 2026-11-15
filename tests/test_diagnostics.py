@@ -121,6 +121,32 @@ class TestDiagnosticSensors:
         coord.last_update_success = False
         assert all(s.available for s in self._sensors(coord).values())
 
+    def test_cov_subscriptions_excludes_ended_subscriptions(self):
+        """Issue #223: ended subscriptions kept for retry are not counted."""
+        from custom_components.bacnet.diagnostics import (
+            async_get_config_entry_diagnostics,
+        )
+        from tests.conftest import _make_entry
+
+        coord = _polling_coordinator(1.0)
+        coord._cov_subscriptions = {"0:1": "dead", "0:2": "alive"}
+        coord._cov_property_subscriptions = {"0:1:units": "dead", "0:2:units": "alive"}
+        coord.client.cov_subscription_active = MagicMock(
+            side_effect=lambda sub: sub == "alive"
+        )
+
+        sensors = self._sensors(coord)
+        assert sensors["cov_subscriptions"].native_value == 1
+
+        summary = coord.diagnostics_summary()
+        assert summary["cov_subscriptions"] == 1
+        assert summary["cov_property_subscriptions"] == 1
+
+        entry = _make_entry()
+        entry.runtime_data.coordinator = coord
+        result = asyncio.run(async_get_config_entry_diagnostics(MagicMock(), entry))
+        assert result["coordinator"]["cov_subscribed_objects"] == ["0:2"]
+
 
 def test_failed_polls_sensor_enabled_by_default():
     """Feedback in #50: the count makes a struggling gateway visible early."""
