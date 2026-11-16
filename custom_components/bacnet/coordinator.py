@@ -452,8 +452,10 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Health figures for the diagnostics download and diagnostic sensors."""
         return {
             "objects": len(self.objects),
-            "cov_subscriptions": len(self._cov_subscriptions),
-            "cov_property_subscriptions": len(self._cov_property_subscriptions),
+            "cov_subscriptions": self.cov_subscription_count,
+            "cov_property_subscriptions": len(
+                self._active_cov_keys(self._cov_property_subscriptions)
+            ),
             "polled_objects": len(self._polled_objects),
             "consecutive_failed_polls": self._consecutive_failures,
             "last_update_success": self.last_update_success,
@@ -565,10 +567,11 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """
         if self._resubscribe_task is not None and not self._resubscribe_task.done():
             return
-        active = self.client.cov_subscription_active
-        dead = [k for k, sub in self._cov_subscriptions.items() if not active(sub)]
+        active = self._active_cov_keys()
+        dead = [k for k in self._cov_subscriptions if k not in active]
+        active_live = self._active_cov_keys(self._cov_property_subscriptions)
         dead_live = [
-            k for k, sub in self._cov_property_subscriptions.items() if not active(sub)
+            k for k in self._cov_property_subscriptions if k not in active_live
         ]
         if not dead and not dead_live:
             return
@@ -592,11 +595,13 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         by_key = {f"{o['object_type']}:{o['instance']}": o for o in self.objects}
         semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
+        renewed = False
 
         # The ended subscription stays listed until it is replaced or given
         # up: emptied bookkeeping made the next poll take this for a first
         # run and subscribe everything a second time.
         async def resubscribe(obj_key: str) -> None:
+            nonlocal renewed
             obj = by_key.get(obj_key)
             if obj is None:
                 self._cov_subscriptions.pop(obj_key, None)
@@ -613,6 +618,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if sub_key is not None:
                 self._cov_retries.pop(obj_key, None)
                 self._cov_subscriptions[obj_key] = sub_key
+                renewed = True
                 return
             attempts = self._cov_retries.get(obj_key, 0) + 1
             if attempts < COV_RESUBSCRIBE_ATTEMPTS:
@@ -650,6 +656,8 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             *(resubscribe_live(k) for k in dead_live),
             return_exceptions=True,
         )
+        if renewed:
+            self.async_update_listeners()
 
     # ------------------------------------------------------------------
     # Static metadata refresh — issue #26
@@ -1111,6 +1119,17 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return obj["description"]
         return obj.get("object_name", f"BACnet {obj['object_type']}:{obj['instance']}")
 
+    def _active_cov_keys(self, subscriptions: dict[str, str] | None = None) -> set[str]:
+        """Return the keys in *subscriptions* whose COV subscription is still active."""
+        subs = self._cov_subscriptions if subscriptions is None else subscriptions
+        active = self.client.cov_subscription_active
+        return {k for k, sub in subs.items() if active(sub)}
+
+    @property
+    def cov_subscription_count(self) -> int:
+        """Return the number of objects with an active COV subscription."""
+        return len(self._active_cov_keys())
+
     @property
     def cov_active(self) -> bool:
         """Return True if any object of this device has a COV subscription."""
@@ -1118,7 +1137,8 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def is_cov_subscribed(self, obj_key: str) -> bool:
         """Return True if this object has an active COV subscription."""
-        return obj_key in self._cov_subscriptions
+        sub = self._cov_subscriptions.get(obj_key)
+        return sub is not None and bool(self.client.cov_subscription_active(sub))
 
     def get_update_method(self, obj_key: str) -> str:
         """Return 'COV' or 'polling' for how this object is updated."""

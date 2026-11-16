@@ -70,7 +70,9 @@ DIAGNOSTIC_SENSORS: tuple[_DiagnosticSensor, ...] = (
         device_class=SensorDeviceClass.TIMESTAMP,
     ),
     _DiagnosticSensor(
-        "cov_subscriptions", lambda c: len(c._cov_subscriptions), enabled_default=False
+        "cov_subscriptions",
+        lambda c: c.cov_subscription_count,
+        enabled_default=False,
     ),
     _DiagnosticSensor("consecutive_failed_polls", lambda c: c._consecutive_failures),
 )

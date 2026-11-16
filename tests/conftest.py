@@ -449,6 +449,7 @@ def _make_coordinator(data: dict | None = None) -> MagicMock:
     coord.get_update_method.return_value = "polling"
     coord.get_cov_increment_for.return_value = None
     coord.is_cov_subscribed.return_value = False
+    coord.cov_subscription_count = 0
     return coord
 
 
