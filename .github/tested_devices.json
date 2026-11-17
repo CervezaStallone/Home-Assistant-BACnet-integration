@@ -136,6 +136,20 @@
     "source": "telemetry"
   },
   {
+    "vendor": "BELIMO Automation AG",
+    "model": "22 FP Flow Meter",
+    "firmware": "BTL:0001 B:0002",
+    "version": "1.0.56",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
     "vendor": "Bosch Building Automation GmbH",
     "model": "ems5.CP05E",
     "firmware": "ems5-BACnet 2.0",
@@ -597,6 +611,19 @@
   },
   {
     "vendor": "Honeywell International Inc.",
+    "model": "Spyder",
+    "firmware": "1.00 (build 7)",
+    "version": "1.0.56",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "Honeywell International Inc.",
     "model": "XLWeb2",
     "firmware": "12-02-04",
     "version": "1.0.53",
@@ -632,6 +659,19 @@
     "works": [
       "Reading values",
       "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "iSMA CONTROLLI S.p.A.",
+    "model": "RAC18-IP",
+    "firmware": "1.10.0.10315",
+    "version": "1.0.56",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values"
     ],
     "notes": "",
     "issue": null,
@@ -1007,6 +1047,20 @@
   },
   {
     "vendor": "Reliable Controls Corporation",
+    "model": "MACH-ProWebSys",
+    "firmware": "8.30|01,10",
+    "version": "1.0.56",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "Reliable Controls Corporation",
     "model": "MACH-ProZone MPZ-88",
     "firmware": "8.05.4",
     "version": "1.0.55",
@@ -1219,6 +1273,20 @@
     "model": "POS3.57",
     "firmware": "FW=04.60.01.13:BL=00.01.07.0003;SVS-300.10:SBC=15.01;ISC=01.00;",
     "version": "1.0.51",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "Siemens Building Technologies",
+    "model": "POS3.67",
+    "firmware": "FW=03.39.03.30:BL=00.05.02.0003;SVS-300.4:SBC=13.24;",
+    "version": "1.0.56",
     "connection": "Same subnet",
     "works": [
       "Reading values",
@@ -1463,6 +1531,19 @@
     "source": "telemetry"
   },
   {
+    "vendor": "Siemens Switzerland Ltd.",
+    "model": "OMNI1",
+    "firmware": "1.4.3.siemens",
+    "version": "1.0.55",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
     "vendor": "Sierra Monitor Corporation",
     "model": "FPC-N54",
     "firmware": "V2.23m",
@@ -1617,6 +1698,20 @@
     "model": "Niagara4 Station",
     "firmware": "4.15.3.28",
     "version": "1.0.53",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "Tridium",
+    "model": "Niagara4 Station",
+    "firmware": "4.15.1.16",
+    "version": "1.0.56",
     "connection": "Same subnet",
     "works": [
       "Reading values",

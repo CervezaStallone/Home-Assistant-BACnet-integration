@@ -17,6 +17,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Altra | DZK bacnet-gateway | 0.8.2 |
 | ASI Controls | 9540 | 1.3.15 |
 | Atlantic | TM172XDG42X | 596.13 |
+| BELIMO Automation AG | 22 FP Flow Meter | BTL:0001 B:0002 |
 | Bosch Building Automation GmbH | ems5.CP05E | ems5-BACnet 2.0 |
 | Calorex | Delta | 0 |
 | Carel S.p.A. | PCO1 | A2.1.2 - B2.1.2 |
@@ -49,8 +50,10 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Global Control 5 S.A. | iSMA-B-MIX18-IP | 6.5.3 |
 | GOSSEN METRAWATT | EM2289 Energy Meter | 1.18 |
 | HMS Industrial Networks SLU | PA-AC-BAC | 14.1.2.0 |
+| Honeywell International Inc. | Spyder | 1.00 build 7 |
 | Honeywell International Inc. | XLWeb2 | 12-02-04 |
 | IP Video Corp | HALO-3C | 2.20.2.5.558-3 |
+| iSMA CONTROLLI S.p.A. | RAC18-IP | 1.10.0.10315 |
 | JCI | MS-NAE3511-1 | 2.2.0.5100 |
 | Johnson Controls | M4-SNE10501-0 | 14.1.0.1788 |
 | Kieback&Peter | DDC4000 | B1.15#0<br>B1.16#0<br>B1.18#0<br>B1.20#0<br>N/A |
@@ -72,6 +75,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Philips Dynalite | PDDEG-S | 1.46.23156 |
 | Reliable Controls Corporation | MACH-ProSys | 8.31.501,1001,07 |
 | Reliable Controls Corporation | MACH-ProWebCom | 8.31.4 |
+| Reliable Controls Corporation | MACH-ProWebSys | 8.3001,10 |
 | Reliable Controls Corporation | MACH-ProZone MPZ-88 | 8.05.4 |
 | RESOL - Elektronische Regelungen GmbH | RESOL DL3 | 0.5.8 |
 | SAUTER | AVM115SAF332 | V2.0.1b329 |
@@ -86,6 +90,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Siemens Building Technologies | DXR2 | 11.52 |
 | Siemens Building Technologies | DXR2.E18-1 | 01.22.273.16 |
 | Siemens Building Technologies | POS3.57 | FW04.60.01.13:BL00.01.07.0003;SVS-300.10:SBC15.01;ISC01.00; |
+| Siemens Building Technologies | POS3.67 | FW03.39.03.30:BL00.05.02.0003;SVS-300.4:SBC13.24; |
 | Siemens Building Technologies | PXA40-W2 | N/A |
 | Siemens Building Technologies | PXC001-E.D / HWV4.01 | FWV6.30.066L KNX S-mode / SBC15.01 / FLI06.30 / BBI13.06 |
 | Siemens Building Technologies | PXC100-E.D / HWV3.00 | FWV6.30.026 / SBC15.01 / FLI06.30 / BBI13.06 / LWI01.10 / PM |
@@ -99,6 +104,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Siemens Building Technologies | PXC64-U + PXA30-W2 / HWV2.02 | FWV5.10.060 / SBC10.02 / FLI05.10 / BBI13.04 / PMC01.30 |
 | Siemens Building Technologies | PXC7.E400L | 02.23.273.19<br>02.23.273.22<br>02.24.314.2 |
 | Siemens Building Technologies | PXC7.E400M | 02.21.194.36<br>02.23.273.16 |
+| Siemens Switzerland Ltd. | OMNI1 | 1.4.3.siemens |
 | Sierra Monitor Corporation | FPC-N54 | V2.23m |
 | Signify | Interact BACnet gateway | N/A |
 | The Watt Stopper, Inc. | LMCP48 | 07.62 |
@@ -106,7 +112,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Trend Control Systems Ltd | IQ422 | IQ422-0 Iss4.37 Oct 24 2025<br>IQ422-12 Iss4.38 Dec 12 2025 |
 | Trend Control Systems Ltd | IQ4E | IQ4E16 Iss4.36 Oct 18 2024<br>IQ4E96 Iss3.45 Aug 29 2017<br>IQ4E96 Iss4.36 Oct 18 2024 |
 | Tridium | Niagara JACE | N/A |
-| Tridium | Niagara4 Station | 4.12.0.156<br>4.15.3.28 |
+| Tridium | Niagara4 Station | 4.12.0.156<br>4.15.1.16<br>4.15.3.28 |
 | Xiamen Milesight IoT Co., Ltd. | UG56-868M | 56.0.0.7 |
 | Xiamen Milesight IoT Co., Ltd. | UG65-868M-EA | 60.0.0.49-r2 |
 <!-- tested-devices:end -->
