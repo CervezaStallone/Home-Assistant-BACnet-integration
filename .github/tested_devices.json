@@ -385,6 +385,20 @@
   },
   {
     "vendor": "Distech Controls",
+    "model": "ECY-253-BI",
+    "firmware": "1.22.23149.1",
+    "version": "1.0.56",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "Distech Controls",
     "model": "ECY-303 Rev 1.0A",
     "firmware": "1.22.22026.1",
     "version": "1.0.53",
