@@ -789,6 +789,20 @@
   },
   {
     "vendor": "Kieback&Peter",
+    "model": "DDC4000",
+    "firmware": "B1.12#3",
+    "version": "1.0.56",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "Kieback&Peter",
     "model": "DDC420",
     "firmware": "N/A",
     "version": "1.0.50-beta.2",
