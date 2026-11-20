@@ -51,6 +51,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Global Control 5 S.A. | iSMA-B-MIX18-IP | 6.5.3 |
 | GOSSEN METRAWATT | EM2289 Energy Meter | 1.18 |
 | HMS Industrial Networks SLU | PA-AC-BAC | 14.1.2.0 |
+| Honeywell International Inc. | CP-IPC | CP-IPC 2.1.10 |
 | Honeywell International Inc. | Spyder | 1.00 build 7 |
 | Honeywell International Inc. | XLWeb2 | 12-02-04 |
 | IP Video Corp | HALO-3C | 2.20.2.5.558-3 |
