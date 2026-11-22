@@ -951,6 +951,20 @@
     "source": "telemetry"
   },
   {
+    "vendor": "Lutron Electronics Co., Inc.",
+    "model": "Premium Vive Hub",
+    "firmware": "1.07",
+    "version": "1.0.56",
+    "connection": "Other subnet via BBMD",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
     "vendor": "MBS GmbH, Krefeld",
     "model": "UGW",
     "firmware": "1.22.1.1",
@@ -1161,6 +1175,20 @@
     "model": "EY-AS525F001",
     "firmware": "V3.1.6b1058",
     "version": "1.0.52",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
+    "vendor": "SAUTER",
+    "model": "EY-AS525F001",
+    "firmware": "V3.1.4b861",
+    "version": "1.0.56",
     "connection": "Same subnet",
     "works": [
       "Reading values",
