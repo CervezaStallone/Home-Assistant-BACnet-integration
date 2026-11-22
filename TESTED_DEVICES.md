@@ -67,6 +67,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | LOYTEC electronics GmbH | LINX-202 | 7.6 |
 | LOYTEC electronics GmbH | LINX-210 | 6.0 |
 | LOYTEC electronics GmbH | LIOB-588 | 7.6 |
+| Lutron Electronics Co., Inc. | Premium Vive Hub | 1.07 |
 | MBS GmbH, Krefeld | UGW | 1.22.1.1 |
 | Mercato | Climate MCP46D | 2.15 |
 | Mercato | MEI ULTRA | 2.31 BACnet |
@@ -81,7 +82,7 @@ Search and filter this list on [brdc.nl](https://www.brdc.nl/en/home-assistant-b
 | Reliable Controls Corporation | MACH-ProZone MPZ-88 | 8.05.4 |
 | RESOL - Elektronische Regelungen GmbH | RESOL DL3 | 0.5.8 |
 | SAUTER | AVM115SAF332 | V2.0.1b329 |
-| SAUTER | EY-AS525F001 | V3.1.2b802<br>V3.1.6b1058 |
+| SAUTER | EY-AS525F001 | V3.1.2b802<br>V3.1.4b861<br>V3.1.6b1058 |
 | SAUTER | EY-RC504F001 | V3.2.0b964 |
 | SAUTER | EY6AS80F021 | V4.0.0b7006 |
 | Schneider Electric | RP-C-16A-F-230V | 3.03.01.02101 |
