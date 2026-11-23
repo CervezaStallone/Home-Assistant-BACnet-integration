@@ -1615,6 +1615,20 @@
     "source": "telemetry"
   },
   {
+    "vendor": "Siemens Building Technologies",
+    "model": "PXC7.E400M",
+    "firmware": "02.22.233.20",
+    "version": "1.0.56",
+    "connection": "Same subnet",
+    "works": [
+      "Reading values",
+      "COV (live updates)"
+    ],
+    "notes": "",
+    "issue": null,
+    "source": "telemetry"
+  },
+  {
     "vendor": "Siemens Switzerland Ltd.",
     "model": "OMNI1",
     "firmware": "1.4.3.siemens",
