@@ -321,10 +321,11 @@ CONF_WRITE_TARGETS = "write_targets"
 WRITE_TARGET_DEFAULT = "default"
 WRITE_TARGET_RELINQUISH = "relinquish-default"
 WRITABLE_DOMAINS: frozenset[str] = frozenset({"switch", "number", "climate", "select"})
-WRITE_TARGET_CHOICES: list[dict[str, str]] = [
-    {"value": WRITE_TARGET_DEFAULT, "label": "Device default"},
-    {"value": WRITE_TARGET_RELINQUISH, "label": "Relinquish Default (priority 17)"},
-    *[{"value": str(p), "label": f"Priority {p}"} for p in range(1, 17)],
+# Option values only; labels come from translations (selector.write_target).
+WRITE_TARGET_CHOICES: list[str] = [
+    WRITE_TARGET_DEFAULT,
+    WRITE_TARGET_RELINQUISH,
+    *[str(p) for p in range(1, 17)],
 ]
 
 # ---------------------------------------------------------------------------

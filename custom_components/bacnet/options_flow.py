@@ -400,6 +400,7 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
                     SelectSelectorConfig(
                         options=WRITE_TARGET_CHOICES,
                         mode=SelectSelectorMode.DROPDOWN,
+                        translation_key="write_target",
                     )
                 )
             if domain == "climate":

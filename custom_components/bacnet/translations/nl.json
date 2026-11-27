@@ -398,6 +398,28 @@
         "water": "Watermeter",
         "gas": "Gasmeter"
       }
+    },
+    "write_target": {
+      "options": {
+        "default": "Standaard van apparaat",
+        "relinquish-default": "Relinquish Default (prioriteit 17)",
+        "1": "Prioriteit 1",
+        "2": "Prioriteit 2",
+        "3": "Prioriteit 3",
+        "4": "Prioriteit 4",
+        "5": "Prioriteit 5",
+        "6": "Prioriteit 6",
+        "7": "Prioriteit 7",
+        "8": "Prioriteit 8",
+        "9": "Prioriteit 9",
+        "10": "Prioriteit 10",
+        "11": "Prioriteit 11",
+        "12": "Prioriteit 12",
+        "13": "Prioriteit 13",
+        "14": "Prioriteit 14",
+        "15": "Prioriteit 15",
+        "16": "Prioriteit 16"
+      }
     }
   }
 }
