@@ -398,6 +398,28 @@
         "water": "Water meter",
         "gas": "Gas meter"
       }
+    },
+    "write_target": {
+      "options": {
+        "default": "Device default",
+        "relinquish-default": "Relinquish Default (priority 17)",
+        "1": "Priority 1",
+        "2": "Priority 2",
+        "3": "Priority 3",
+        "4": "Priority 4",
+        "5": "Priority 5",
+        "6": "Priority 6",
+        "7": "Priority 7",
+        "8": "Priority 8",
+        "9": "Priority 9",
+        "10": "Priority 10",
+        "11": "Priority 11",
+        "12": "Priority 12",
+        "13": "Priority 13",
+        "14": "Priority 14",
+        "15": "Priority 15",
+        "16": "Priority 16"
+      }
     }
   }
 }
