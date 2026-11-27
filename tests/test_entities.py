@@ -499,6 +499,51 @@ class TestWriteRefreshesOnlyThatObject:
         entity.coordinator.async_request_refresh.assert_not_awaited()
 
 
+class TestWriteTarget:
+    """Per-object write target (#236): priority N, Relinquish_Default, or default."""
+
+    def _set(self, target, value=24.0):
+        import asyncio
+        from unittest.mock import AsyncMock, MagicMock
+
+        obj = {
+            "object_type": 2,
+            "instance": 1,
+            "commandable": True,
+            "object_name": "SP",
+        }
+        entity = _number(obj)
+        entity.coordinator.write_priority = 16
+        entity.coordinator.write_targets = {"2:1": target} if target else {}
+        client = MagicMock()
+        client.write_property = AsyncMock(return_value=True)
+        client.relinquish = AsyncMock(return_value=True)
+        entity.coordinator.client = client
+        entity.coordinator.async_refresh_object = AsyncMock()
+        entity.coordinator.async_refresh_properties = AsyncMock()
+        asyncio.run(entity.async_set_native_value(value))
+        return client
+
+    def test_relinquish_default_writes_prop_104(self):
+        client = self._set("relinquish-default")
+        assert (
+            client.write_property.await_args.kwargs["property_name"]
+            == "relinquishDefault"
+        )
+
+    def test_specific_priority_is_used(self):
+        client = self._set("5")
+        kw = client.write_property.await_args.kwargs
+        assert kw["priority"] == 5
+        assert kw["property_name"] == "presentValue"
+
+    def test_default_uses_device_priority_and_present_value(self):
+        client = self._set(None)
+        kw = client.write_property.await_args.kwargs
+        assert kw["property_name"] == "presentValue"
+        assert kw["priority"] == 16
+
+
 class TestSensorPrecision:
     def _value(self, pv):
         obj = {"object_type": 0, "instance": 1, "object_name": "T"}

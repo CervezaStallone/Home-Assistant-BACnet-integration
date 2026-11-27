@@ -133,6 +133,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         extra_properties: dict[str, list[str]] | None = None,
         state_classes: dict[str, str] | None = None,
         meter_types: dict[str, str] | None = None,
+        write_targets: dict[str, str] | None = None,
     ) -> None:
         """Initialise the coordinator.
 
@@ -160,6 +161,9 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 (options flow); objects with no entry use the default.
             meter_types: obj_key → "water" or "gas" for a volume sensor
                 (options flow), the device class the energy dashboard needs.
+            write_targets: obj_key → per-object write target (#236): a priority
+                "1".."16", "relinquish-default", or absent/"default" for the
+                device write priority on presentValue.
         """
         self.client = client
         self.objects = objects
@@ -175,6 +179,7 @@ class BACnetCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.extra_properties = extra_properties or {}
         self.state_classes = state_classes or {}
         self.meter_types = meter_types or {}
+        self.write_targets = write_targets or {}
         # Active alarms from GetEventInformation; None until the first fetch
         # (and for devices without the service).
         self.active_alarms: list[dict[str, Any]] | None = None

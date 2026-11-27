@@ -442,6 +442,8 @@ def _make_coordinator(data: dict | None = None) -> MagicMock:
     coord.climate_temperature_sources = {}
     coord.state_classes = {}
     coord.meter_types = {}
+    coord.write_targets = {}
+    coord.write_priority = 16
     coord.get_object_value.side_effect = lambda key, prop="presentValue": (
         coord.data.get(key, {}).get(prop)
     )

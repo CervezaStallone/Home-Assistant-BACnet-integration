@@ -312,6 +312,21 @@ DEFAULT_WRITE_PRIORITY = 16  # Lowest priority — safe default
 CONF_WRITE_PRIORITY = "write_priority"
 WRITE_PRIORITY_OPTIONS: list[int] = [8, 9, 12, 13, 14, 15, 16]  # BACnet: 1-16
 
+# Per-object write target (#236): how the entity's normal write reaches a
+# writable object. "default" uses the device write priority on presentValue
+# (current behaviour); "relinquish-default" writes the Relinquish_Default
+# property (BACnet prop 104, what some controllers call "priority 17") so the
+# object's local HMI keeps control; "1".."16" pins a specific priority slot.
+CONF_WRITE_TARGETS = "write_targets"
+WRITE_TARGET_DEFAULT = "default"
+WRITE_TARGET_RELINQUISH = "relinquish-default"
+WRITABLE_DOMAINS: frozenset[str] = frozenset({"switch", "number", "climate", "select"})
+WRITE_TARGET_CHOICES: list[dict[str, str]] = [
+    {"value": WRITE_TARGET_DEFAULT, "label": "Device default"},
+    {"value": WRITE_TARGET_RELINQUISH, "label": "Relinquish Default (priority 17)"},
+    *[{"value": str(p), "label": f"Priority {p}"} for p in range(1, 17)],
+]
+
 # ---------------------------------------------------------------------------
 # Usage report (telemetry.py)
 # ---------------------------------------------------------------------------

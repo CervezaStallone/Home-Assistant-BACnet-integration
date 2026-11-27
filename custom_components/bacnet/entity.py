@@ -19,7 +19,12 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .bacnet_client import BACnetPropertyError
-from .const import DOMAIN, OBJECT_TYPE_NAMES
+from .const import (
+    DOMAIN,
+    OBJECT_TYPE_NAMES,
+    WRITE_TARGET_DEFAULT,
+    WRITE_TARGET_RELINQUISH,
+)
 from .coordinator import BACnetCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -217,9 +222,27 @@ class BACnetEntity(CoordinatorEntity[BACnetCoordinator]):
     # ------------------------------------------------------------------
 
     async def async_write_present_value(self, value: Any) -> None:
-        """Write presentValue at the device's write priority (None = relinquish)."""
+        """Write the object's value, honouring its per-object write target (#236).
+
+        Default target: presentValue at the device write priority. A numeric
+        target pins that priority. "relinquish-default" writes the object's
+        Relinquish_Default property instead, so a controller's local HMI keeps
+        control. Relinquish (value None) always goes through a priority slot.
+        """
+        target = self.coordinator.write_targets.get(self.obj_key, WRITE_TARGET_DEFAULT)
+        property_name = "presentValue"
+        priority: int | None = None
+        if value is not None and target == WRITE_TARGET_RELINQUISH:
+            property_name = "relinquishDefault"
+        elif target not in (WRITE_TARGET_DEFAULT, WRITE_TARGET_RELINQUISH):
+            priority = int(target)
         await async_write_object_value(
-            self.coordinator, self._obj, value, label=self._attr_name
+            self.coordinator,
+            self._obj,
+            value,
+            priority=priority,
+            label=self._attr_name,
+            property_name=property_name,
         )
 
     def state_text_for(self, value: Any) -> str | None:

@@ -45,6 +45,7 @@ from .const import (
     CONF_STATE_CLASSES,
     CONF_USE_BBMD,
     CONF_USE_DESCRIPTION,
+    CONF_WRITE_TARGETS,
     DEFAULT_COV_INCREMENT,
     DEFAULT_ENABLE_COV,
     DEFAULT_LIVE_METADATA_PROPERTIES,
@@ -347,6 +348,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     state_classes: dict[str, str] = entry.options.get(CONF_STATE_CLASSES, {})
     meter_types: dict[str, str] = entry.options.get(CONF_METER_TYPES, {})
+    write_targets: dict[str, str] = entry.options.get(CONF_WRITE_TARGETS, {})
 
     # ---- 2. Get or create a shared BACnet client for this port ----
     # A single UDP socket (one BACnetClient) can communicate with any number
@@ -404,6 +406,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         extra_properties=extra_properties,
         state_classes=state_classes,
         meter_types=meter_types,
+        write_targets=write_targets,
     )
 
     # Perform the first data refresh so entities have initial state. On

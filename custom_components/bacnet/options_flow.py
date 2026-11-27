@@ -49,6 +49,7 @@ from .const import (
     CONF_SHARE_USAGE,
     CONF_STATE_CLASSES,
     CONF_USE_DESCRIPTION,
+    CONF_WRITE_TARGETS,
     DEFAULT_COV_INCREMENT,
     DEFAULT_ENABLE_COV,
     DEFAULT_LIVE_METADATA_PROPERTIES,
@@ -65,6 +66,9 @@ from .const import (
     STATE_CLASS_AUTO,
     STATE_CLASS_CHOICES,
     SUPPORTED_DOMAINS,
+    WRITABLE_DOMAINS,
+    WRITE_TARGET_CHOICES,
+    WRITE_TARGET_DEFAULT,
 )
 from .helpers import default_domain_for, property_label
 from .helpers import object_key as _object_key
@@ -344,6 +348,7 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
                         "other properties",
                         "state class",
                         "meter type",
+                        "write target",
                     )
                 }
                 for obj in self._customize
@@ -366,6 +371,7 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
         extras = self._current(CONF_EXTRA_PROPERTIES)
         state_classes = self._current(CONF_STATE_CLASSES)
         meter_types = self._current(CONF_METER_TYPES)
+        write_targets = self._current(CONF_WRITE_TARGETS)
         temperature_choices = {"": "—"} | {
             _object_key(o): _object_label(o)
             for o in self._selected_objects
@@ -383,6 +389,19 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
                     self._field(obj, "COV"), default=covs.get(key, self._global_cov)
                 )
             ] = bool
+            # Per-object write target (#236): priority slot or Relinquish_Default.
+            if domain in WRITABLE_DOMAINS:
+                fields[
+                    vol.Optional(
+                        self._field(obj, "write target"),
+                        default=write_targets.get(key, WRITE_TARGET_DEFAULT),
+                    )
+                ] = SelectSelector(
+                    SelectSelectorConfig(
+                        options=WRITE_TARGET_CHOICES,
+                        mode=SelectSelectorMode.DROPDOWN,
+                    )
+                )
             if domain == "climate":
                 fields[
                     vol.Optional(
@@ -461,6 +480,7 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
         extras = dict(self._current(CONF_EXTRA_PROPERTIES))
         states = dict(self._current(CONF_STATE_CLASSES))
         meters = dict(self._current(CONF_METER_TYPES))
+        targets = dict(self._current(CONF_WRITE_TARGETS))
         selected = {_object_key(o) for o in self._selected_objects}
         kept = [
             k
@@ -469,7 +489,7 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
         ]
         for obj in self._selected_objects:
             key = _object_key(obj)
-            for store in (domains, covs, sources, extras, states, meters):
+            for store in (domains, covs, sources, extras, states, meters, targets):
                 store.pop(key, None)
             edit = edits.get(key)
             if edit is None:
@@ -494,6 +514,8 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
                 states[key] = edit["state class"]
             if edit.get("meter type") not in (None, STATE_CLASS_AUTO):
                 meters[key] = edit["meter type"]
+            if edit.get("write target") not in (None, WRITE_TARGET_DEFAULT):
+                targets[key] = edit["write target"]
 
         return self.async_create_entry(
             title="",
@@ -505,6 +527,7 @@ class BACnetOptionsFlow(config_entries.OptionsFlow):
                 CONF_EXTRA_PROPERTIES: extras,
                 CONF_STATE_CLASSES: states,
                 CONF_METER_TYPES: meters,
+                CONF_WRITE_TARGETS: targets,
                 CONF_KEPT_DOMAIN_OVERRIDES: kept,
             },
         )
